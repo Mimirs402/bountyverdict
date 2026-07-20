@@ -1,3 +1,5 @@
+import { the402MarketplaceManifest } from "./the402-catalog.ts";
+
 export interface AgentManifest {
   schema_version: string;
   product: string;
@@ -37,6 +39,12 @@ export function activateManifest(
 
   return {
     ...manifest,
+    marketplaces: {
+      ...(manifest.marketplaces && typeof manifest.marketplaces === "object" && !Array.isArray(manifest.marketplaces)
+        ? manifest.marketplaces as Record<string, unknown>
+        : {}),
+      the402: the402MarketplaceManifest(),
+    },
     status: "active",
     production_api: origin.origin,
     updated_at: now.toISOString(),

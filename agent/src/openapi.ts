@@ -10,6 +10,10 @@ import {
   mcpDriftInputSchema,
   mcpDriftOutputSchema,
 } from "./mcp-drift-discovery.ts";
+import {
+  THE402_LISTINGS,
+  THE402_PROVIDER_CATALOG_URL,
+} from "./the402-catalog.ts";
 
 function paymentInfo(price: string) {
   const amount = price.replace(/^\$/, "");
@@ -487,6 +491,9 @@ export function createOpenApi(
 }
 
 export function createLlmsText(origin: string): string {
+  const the402Services = THE402_LISTINGS.map((listing) =>
+    `- ${listing.name}: POST https://api.the402.ai/v1/services/${listing.service_id}/purchase — agent price ${listing.agent_price} USDC; instant fulfillment`,
+  ).join("\n");
   return `# BountyVerdict Agent Decision APIs
 
 > Seven bounded checks for public GitHub decisions and MCP tool-catalog upgrade safety.
@@ -527,6 +534,13 @@ export function createLlmsText(origin: string): string {
 - MCPDriftVerdict validates and computes before payment; unsupported or invalid catalogs receive no 402 challenge
 - Failed or invalid checks are not settled
 - Every successful result includes explicit service_reuse guidance so agents know when to call the same reliable bounded check again
+
+## Escrow marketplace
+
+- Public the402 provider catalog: ${THE402_PROVIDER_CATALOG_URL}
+- These six routes offer the same tested products through the402 escrow; inspect each exact input and deliverable schema in the public catalog before purchase.
+- SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
+${the402Services}
 
 ## Differentiation
 

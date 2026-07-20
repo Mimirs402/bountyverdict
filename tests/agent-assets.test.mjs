@@ -38,6 +38,14 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.match(manifest.skills.diagnose_github_actions, /diagnose-github-actions\/SKILL\.md$/);
   assert.match(manifest.skills.classify_github_flakes, /classify-github-flakes\/SKILL\.md$/);
   assert.match(manifest.skills.check_mcp_tool_drift, /check-mcp-tool-drift\/SKILL\.md$/);
+  assert.equal(manifest.marketplaces.the402.provider_id, "p_d4b4ece39162409b");
+  assert.match(manifest.marketplaces.the402.public_catalog, /^https:\/\/api\.the402\.ai\/v1\/services\/catalog\?/);
+  assert.equal(manifest.marketplaces.the402.services.length, 6);
+  assert.equal(manifest.marketplaces.the402.services.some((service) => service.name === "SkillVerdict"), false);
+  assert.ok(manifest.marketplaces.the402.services.every((service) =>
+    service.method === "POST" && service.fulfillment_type === "instant" &&
+    /^https:\/\/api\.the402\.ai\/v1\/services\/svc_[A-Za-z0-9_-]+\/purchase$/.test(service.purchase_endpoint)
+  ));
   for (const product of manifest.products) {
     assert.match(product.use_when, /\.$/);
     assert.match(product.skill_url, /^https:\/\/.+\/SKILL\.md$/);

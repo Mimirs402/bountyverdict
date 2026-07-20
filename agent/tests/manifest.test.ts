@@ -19,6 +19,11 @@ test("manifest activation records a verified HTTPS production origin", () => {
   assert.equal(result.status, "active");
   assert.equal(result.production_api, "https://bountyverdict-agent.example.workers.dev");
   assert.equal(result.updated_at, "2026-07-20T12:00:00.000Z");
+  const marketplaces = result.marketplaces as Record<string, any>;
+  assert.equal(marketplaces.the402.provider_id, "p_d4b4ece39162409b");
+  assert.equal(marketplaces.the402.services.length, 6);
+  assert.equal(marketplaces.the402.services.some((service: any) => service.name === "SkillVerdict"), false);
+  assert.match(marketplaces.the402.services[0].purchase_endpoint, /^https:\/\/api\.the402\.ai\/v1\/services\/svc_/);
 });
 
 test("manifest activation rejects non-origin and non-HTTPS URLs", () => {

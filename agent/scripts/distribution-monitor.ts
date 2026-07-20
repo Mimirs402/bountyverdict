@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
+import { isDeepStrictEqual } from "node:util";
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { base } from "viem/chains";
 import { validatePaymentChallenge } from "../src/payment-safety.ts";
@@ -12,12 +13,12 @@ import {
 import { PRODUCT_CATALOG, productForAtomicAmount, type ProductKey } from "../src/product-catalog.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import { evaluateEarnedPlacementExperiment } from "../src/acquisition.ts";
+import { THE402_API, THE402_LISTINGS } from "../src/the402-catalog.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
 const DEFAULT_START_BLOCK = "48876000";
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
-const THE402_API = "https://api.the402.ai/v1";
 const MAINNET_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NETWORK = "eip155:8453";
 const TIMEOUT_MS = 30_000;
@@ -51,15 +52,6 @@ const BUYER_INTENTS: ReadonlyArray<{ product: ProductKey; query: string }> = [
   { product: "flake", query: "is this GitHub Actions failure flaky should I retry or fix it" },
   { product: "mcpdrift", query: "will this MCP tools/list schema change break my agent after a server upgrade" },
 ];
-const THE402_SERVICES = Object.freeze({
-  single: "svc_5e36dabc8b434e95",
-  portfolio: "svc_780bf04bd8204b2f",
-  harness: "svc_df4baf282b7d48d5",
-  run: "svc_cdd16073d02c4429",
-  flake: "svc_565a2a5c8e154b6e",
-  mcpdrift: "svc_40e97a390c5b4d71",
-});
-
 if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
   throw new Error("REVENUE_WALLET must be a public 20-byte EVM address.");
 }
@@ -357,7 +349,8 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const catalog = await catalogResponse.json() as { services?: Array<Record<string, any>> };
   const earnings = await earningsResponse.json() as Record<string, any>;
   const services = Array.isArray(catalog.services) ? catalog.services : [];
-  const expectedIds = new Set<string>(Object.values(THE402_SERVICES));
+  const expectedById = new Map(THE402_LISTINGS.map((listing) => [listing.service_id, listing]));
+  const expectedIds = new Set<string>(expectedById.keys());
   const owned = services.filter(({ id }) => expectedIds.has(String(id)));
   if (owned.length !== expectedIds.size || new Set(owned.map(({ id }) => id)).size !== expectedIds.size) {
     throw new Error("the402 catalog does not contain the exact six expected services.");
@@ -367,6 +360,21 @@ async function the402Status(): Promise<Record<string, unknown>> {
   }
   if (!owned.every(({ webhook_healthy }) => webhook_healthy === true)) {
     throw new Error("the402 reports an unhealthy BountyVerdict webhook.");
+  }
+  for (const service of owned) {
+    const expected = expectedById.get(String(service.id));
+    if (!expected) throw new Error("the402 returned an unexpected service.");
+    if (
+      service.name !== expected.name || service.description !== expected.description ||
+      service.price?.fixed !== expected.price || service.agent_price?.fixed !== expected.agent_price ||
+      service.service_type !== "data_api" || service.fulfillment_type !== "instant" ||
+      service.estimated_delivery !== "30s" || service.category !== "developer-tools" ||
+      !isDeepStrictEqual(service.tags, expected.tags) ||
+      !isDeepStrictEqual(service.input_schema, expected.input_schema) ||
+      !isDeepStrictEqual(service.deliverable_schema, expected.deliverable_schema)
+    ) {
+      throw new Error(`the402 listing contract drifted for ${expected.name}.`);
+    }
   }
   const completedCounts = [...new Set(owned.map(({ provider_completed_jobs }) => provider_completed_jobs))];
   if (completedCounts.length !== 1 || !Number.isSafeInteger(completedCounts[0]) || completedCounts[0] < 0) {
@@ -394,6 +402,7 @@ async function the402Status(): Promise<Record<string, unknown>> {
     service_count: owned.length,
     skillverdict_excluded: true,
     webhook_healthy: true,
+    listing_contracts_verified: true,
     completed_jobs: completedCounts[0],
     settled_usd: settledUsd,
     held_usd: heldUsd,
@@ -532,6 +541,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
 - **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 escrow)
+- **the402 listing contracts:** ${report.marketplaces?.the402?.listing_contracts_verified ? "6 / 6 exact input and deliverable schemas verified" : "unavailable or drifted"}
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -541,13 +551,13 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. The agent-first v1.0.1 release and dedicated catalog page are public, and direct version-pinned GitHub Skill preview and installation are verified. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products now expose exact canonical deliverable contracts on the402, and the owned agent manifest plus llms.txt publish their escrow purchase routes. SkillVerdict remains isolated. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
 
 ## What is next
 
 1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
 2. Monitor GitHub Skill, AgentTool, AgentSkill, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
-3. Monitor the six signed the402 listings and Coinbase Bazaar while keeping SkillVerdict out of the new channel until its isolated experiment ends.
+3. Monitor the six signed the402 listings, exact marketplace contract integrity, and Coinbase Bazaar while keeping SkillVerdict out of the new channel until its isolated experiment ends.
 4. Improve positioning from observed discovery and genuine calls until ten external purchases are recognized. Do not build an eighth product before that gate.
 
 ## Production health

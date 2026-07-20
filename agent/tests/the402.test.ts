@@ -6,6 +6,12 @@ import {
   reportThe402Result,
   verifyThe402Webhook,
 } from "../src/the402.ts";
+import { THE402_LISTINGS, THE402_PROVIDER_CATALOG_URL } from "../src/the402-catalog.ts";
+import { outputSchema, portfolioOutputSchema } from "../src/discovery.ts";
+import { harnessOutputSchema } from "../src/harness-discovery.ts";
+import { runOutputSchema } from "../src/run-discovery.ts";
+import { flakeOutputSchema } from "../src/flake-discovery.ts";
+import { mcpDriftOutputSchema } from "../src/mcp-drift-discovery.ts";
 
 const apiKey = "sk_test_bountyverdict_provider";
 const webhookSecret = "whsec_test_bountyverdict_webhook";
@@ -40,6 +46,27 @@ test("the402 service map permits only independently distributed existing product
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ bad: "single" })), /service ID/);
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ svc_skill_123: "skill" })), /unsupported product/);
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ svc_one: "run", svc_two: "run" })), /duplicate product/);
+});
+
+test("the402 publishes six exact existing-product contracts and excludes SkillVerdict", () => {
+  assert.equal(THE402_LISTINGS.length, 6);
+  assert.equal(new Set(THE402_LISTINGS.map(({ service_id }) => service_id)).size, 6);
+  assert.deepEqual(THE402_LISTINGS.map(({ product }) => product).sort(), [
+    "flake", "harness", "mcpdrift", "portfolio", "run", "single",
+  ]);
+  assert.equal(THE402_LISTINGS.some(({ name }) => name === "SkillVerdict"), false);
+  assert.match(THE402_PROVIDER_CATALOG_URL, /provider=p_d4b4ece39162409b/);
+  const schemas = new Map(THE402_LISTINGS.map(({ product, deliverable_schema }) => [product, deliverable_schema]));
+  assert.deepEqual(schemas.get("single"), { type: "object", ...outputSchema });
+  assert.deepEqual(schemas.get("portfolio"), { type: "object", ...portfolioOutputSchema });
+  assert.deepEqual(schemas.get("harness"), { type: "object", ...harnessOutputSchema });
+  assert.deepEqual(schemas.get("run"), { type: "object", ...runOutputSchema });
+  assert.deepEqual(schemas.get("flake"), { type: "object", ...flakeOutputSchema });
+  assert.deepEqual(schemas.get("mcpdrift"), { type: "object", ...mcpDriftOutputSchema });
+  for (const listing of THE402_LISTINGS) {
+    assert.notDeepEqual(listing.deliverable_schema, { type: "object", additionalProperties: true });
+    assert.ok(Array.isArray(listing.deliverable_schema.required));
+  }
 });
 
 test("the402 webhook verification pins API key, HMAC body, and five-minute replay window", async () => {

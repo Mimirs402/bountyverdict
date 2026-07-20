@@ -765,13 +765,13 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products now expose exact canonical deliverable contracts on the402, and the owned agent manifest plus llms.txt publish their escrow purchase routes. SkillVerdict remains isolated. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products are independently buyable through the402, NEAR Agent Market, and PayanAgent with exact machine-readable contracts; SkillVerdict remains isolated. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
 
 ## What is next
 
 1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
 2. Monitor GitHub Skill, AgentTool, AgentSkill, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
-3. Monitor the six signed the402 listings, exact marketplace contract integrity, guarded buyer-request feed, and Coinbase Bazaar while keeping SkillVerdict out of the new channel until its isolated experiment ends.
+3. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, guarded buyer-request feed, exact receipt attribution, and Coinbase Bazaar while keeping SkillVerdict out of the new channels until its isolated experiment ends.
 4. Improve positioning from observed discovery and genuine calls until ten external purchases are recognized. Do not build an eighth product before that gate.
 
 ## Production health

@@ -12,6 +12,7 @@
     "wallet:test": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cdp-test-wallet.ts",
     "wallet:fund": "REQUEST_FUNDS=YES node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cdp-test-wallet.ts",
     "revenue": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/revenue-monitor.ts",
+    "distribution:monitor": "node --experimental-strip-types scripts/distribution-monitor.ts",
     "manifest:activate": "node --experimental-strip-types scripts/activate-manifest.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"

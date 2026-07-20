@@ -82,6 +82,16 @@ npm run revenue
 
 Use `NETWORK=sepolia` for testnet. The report recognizes exact $0.05 and $0.40 product settlements, separates unrelated incoming transfers, and shows purchase counts and progress toward $1,000.
 
+## Continuous distribution monitoring
+
+The credential-free production monitor verifies all free routes, both exact mainnet payment challenges, Coinbase Bazaar merchant and semantic-search visibility, and on-chain Base USDC revenue in one pass:
+
+```bash
+npm run distribution:monitor
+```
+
+It writes the latest machine-readable snapshot to `~/.local/state/bountyverdict/distribution-status.json`. The versioned user-service templates in `ops/systemd/` run it every 15 minutes; marketplace absence before the first CDP settlement is reported as `indexed: false`, not as a health failure.
+
 ## Deployment inputs
 
 Only a **public EVM receiving address** is required from the owner for testnet. Never provide a seed phrase or private key to this service.

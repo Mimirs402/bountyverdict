@@ -1,0 +1,19 @@
+[Unit]
+Description=BountyVerdict production distribution and revenue monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=PRODUCTION_API_URL=https://bountyverdict-agent-production.mimirslab.workers.dev
+Environment=REVENUE_WALLET=0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614
+Environment=START_BLOCK=48876000
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/distribution-monitor.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

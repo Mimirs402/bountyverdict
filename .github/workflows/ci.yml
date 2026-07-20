@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+
+      - name: Test shared analysis
+        run: npm test
+
+      - name: Install agent API dependencies
+        working-directory: agent
+        run: npm ci
+
+      - name: Test agent API and discovery contracts
+        working-directory: agent
+        run: npm test
+
+      - name: Typecheck
+        working-directory: agent
+        run: npm run typecheck
+
+      - name: Build Worker bundle
+        working-directory: agent
+        run: npm run deploy:dry
+
+      - name: Audit production and development dependencies
+        working-directory: agent
+        run: npm audit --audit-level=low

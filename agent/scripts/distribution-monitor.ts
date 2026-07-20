@@ -23,6 +23,7 @@ import {
   NEAR_MARKET_LISTINGS,
   NEAR_MARKET_PROVIDER_ID,
 } from "../src/near-market.ts";
+import { PAYAN_API, PAYAN_OFFERS, PAYAN_PROVIDER_ID } from "../src/payan.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -52,6 +53,9 @@ const the402ApiKey = process.env.THE402_API_KEY;
 const the402ParticipantId = process.env.THE402_PARTICIPANT_ID;
 const nearMarketApiKey = process.env.NEAR_MARKET_API_KEY;
 const nearMarketAgentId = process.env.NEAR_MARKET_AGENT_ID;
+const payanApiKey = process.env.PAYAN_API_KEY;
+const payanAgentId = process.env.PAYAN_AGENT_ID;
+const payanOfferMapInput = process.env.PAYAN_OFFER_MAP;
 const MAX_CANARY_AGE_MS = 8 * 60 * 60 * 1000;
 const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"] as const;
 const BUYER_INTENTS: ReadonlyArray<{ product: ProductKey; query: string }> = [
@@ -91,6 +95,15 @@ async function atomicWrite(path: string, contents: string): Promise<void> {
 
 async function monitoredFetch(input: string, init?: RequestInit): Promise<Response> {
   return fetch(input, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+}
+
+async function monitoredFetchWithServerRetry(input: string, init?: RequestInit): Promise<Response> {
+  let response = await monitoredFetch(input, init);
+  for (let attempt = 1; attempt < 3 && response.status >= 500; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    response = await monitoredFetch(input, init);
+  }
+  return response;
 }
 
 async function requireStatus(path: string, expected = 200): Promise<number> {
@@ -520,7 +533,7 @@ async function nearMarketStatus(): Promise<Record<string, unknown>> {
   const [servicesResponse, jobsResponse, walletResponse] = await Promise.all([
     monitoredFetch(`${NEAR_MARKET_API}/agents/me/services`, { headers }),
     monitoredFetch(`${NEAR_MARKET_API}/jobs?worker=${encodeURIComponent(NEAR_MARKET_PROVIDER_ID)}&limit=100`, { headers }),
-    monitoredFetch(`${NEAR_MARKET_API}/wallet/balance`, { headers }),
+    monitoredFetchWithServerRetry(`${NEAR_MARKET_API}/wallet/balance`, { headers }),
   ]);
   if (!servicesResponse.ok) throw new Error(`service lookup returned HTTP ${servicesResponse.status}.`);
   if (!jobsResponse.ok) throw new Error(`job lookup returned HTTP ${jobsResponse.status}.`);
@@ -566,6 +579,61 @@ async function nearMarketStatus(): Promise<Record<string, unknown>> {
     completed_external_job_ids: completed.map(({ job_id }) => job_id),
     earned_usdc_balance: earnedUsdc,
     custody_account: walletState.is_custody_account === true,
+  };
+}
+
+async function payanStatus(): Promise<Record<string, unknown>> {
+  if (!payanApiKey || !/^pk_live_[A-Za-z0-9_-]+$/.test(payanApiKey)) throw new Error("PAYAN_API_KEY is missing or invalid.");
+  if (payanAgentId !== PAYAN_PROVIDER_ID) throw new Error("PAYAN_AGENT_ID does not match the pinned provider.");
+  let offerMap: Record<string, string>;
+  try {
+    offerMap = JSON.parse(payanOfferMapInput || "");
+  } catch {
+    throw new Error("PAYAN_OFFER_MAP is missing or invalid.");
+  }
+  const expectedProducts = new Set(PAYAN_OFFERS.map(({ product }) => product));
+  if (Object.keys(offerMap).length !== expectedProducts.size ||
+    [...expectedProducts].some((product) => !/^[a-z0-9]{20,64}$/.test(offerMap[product] || ""))) {
+    throw new Error("PAYAN_OFFER_MAP does not contain the exact six expected offers.");
+  }
+  const [receiptResponse, ...offerResponses] = await Promise.all([
+    monitoredFetch(`${PAYAN_API}/agents/${PAYAN_PROVIDER_ID}/receipts`),
+    ...PAYAN_OFFERS.map(({ product }) => monitoredFetch(`${PAYAN_API}/offers/${offerMap[product]}`)),
+  ]);
+  if (!receiptResponse.ok) throw new Error(`receipt lookup returned HTTP ${receiptResponse.status}.`);
+  if (offerResponses.some((response) => !response.ok)) throw new Error("one or more offer lookups failed.");
+  const receiptPayload = await receiptResponse.json() as Record<string, any>;
+  const offers = await Promise.all(offerResponses.map((response) => response.json() as Promise<Record<string, any>>));
+  for (let index = 0; index < PAYAN_OFFERS.length; index += 1) {
+    const expected = PAYAN_OFFERS[index];
+    const offer = offers[index]?.offer;
+    if (!offer || offer._id !== offerMap[expected.product] || offer.sellerId !== PAYAN_PROVIDER_ID ||
+      offer.title !== expected.title || offer.description !== expected.description ||
+      offer.category !== expected.category || offer.offerType !== expected.offerType ||
+      offer.httpMethod !== expected.httpMethod || offer.inputSchema !== expected.inputSchema ||
+      offer.outputSchema !== expected.outputSchema || Number(offer.priceCents) !== expected.priceCents ||
+      offer.isActive !== true || !isDeepStrictEqual(offer.tags, expected.tags)) {
+      throw new Error(`offer contract drifted for ${expected.title}.`);
+    }
+  }
+  const receipts = Array.isArray(receiptPayload.receipts) ? receiptPayload.receipts as Array<Record<string, any>> : [];
+  const offerIds = new Set(Object.values(offerMap));
+  const delivered = receipts.filter((receipt) =>
+    receipt.sellerId === PAYAN_PROVIDER_ID && receipt.buyerId !== PAYAN_PROVIDER_ID &&
+    offerIds.has(String(receipt.offerId)) && receipt.status === "confirmed" && receipt.delivered === true
+  );
+  const receiptRevenueCents = delivered.reduce((sum, receipt) => sum + Number(receipt.amountCents || 0), 0);
+  if (!Number.isSafeInteger(receiptRevenueCents) || receiptRevenueCents < 0) throw new Error("receipt revenue is invalid.");
+  return {
+    listed: true,
+    provider_id: PAYAN_PROVIDER_ID,
+    offer_count: offers.length,
+    listing_contracts_verified: true,
+    delivered_external_sales: delivered.length,
+    delivered_receipt_ids: delivered.map(({ _id }) => _id),
+    delivered_transaction_hashes: delivered.map(({ txHash }) => txHash),
+    receipt_revenue_usdc: receiptRevenueCents / 100,
+    accounting_note: "PayanAgent settles directly to the Base revenue wallet; these receipts are attribution metadata and are already counted by direct onchain settlement accounting.",
   };
 }
 
@@ -662,6 +730,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const marketplacePurchases = Number(report.marketplaces?.the402?.completed_jobs || 0);
   const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
   const nearPurchases = Number(report.marketplaces?.near?.completed_external_jobs || 0);
+  const payanAttributedSales = Number(report.marketplaces?.payan?.delivered_external_sales || 0);
   const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases + nearPurchases;
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
@@ -686,6 +755,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **the402 buyer-request feed:** ${report.marketplaces?.the402?.request_notifications_enabled ? "enabled; exact-match autonomous bids only" : "unavailable"}
 - **the402 monthly bundle:** ${report.marketplaces?.the402?.subscription_plan?.active ? `$${Number(report.marketplaces.the402.subscription_plan.agent_price_usd).toFixed(2)} for up to ${report.marketplaces.the402.subscription_plan.maximum_monthly_requests} requests` : "unavailable"}
 - **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"}
+- **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -738,6 +808,7 @@ ${errors}
 - x402Scout GET listings: ${report.acquisition?.x402scout?.listed_entries ?? "unavailable"} / ${report.acquisition?.x402scout?.expected_entries ?? 5} (${report.acquisition?.x402scout?.status || "unavailable"}; positions ${Array.isArray(report.acquisition?.x402scout?.catalog_positions) ? report.acquisition.x402scout.catalog_positions.join(", ") : "unavailable"} of ${report.acquisition?.x402scout?.catalog_entries ?? "unavailable"}; ${typeof report.acquisition?.x402scout?.total_query_count === "number" ? report.acquisition.x402scout.total_query_count : "unavailable"} catalog queries)
 - the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
+- PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded)
 - Experiment status: ${experiment.status || "unavailable"}
 - Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
 - Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
@@ -754,6 +825,7 @@ skills.sh counts are anonymous CLI telemetry with unknown provenance. They are t
 - the402 held/pending: ${money(report.marketplaces?.the402?.held_usd || 0)} / ${money(report.marketplaces?.the402?.pending_usd || 0)}
 - NEAR Agent Market completed external jobs: ${nearPurchases}
 - NEAR Agent Market earned USDC balance: ${money(nearRevenueValue)}
+- PayanAgent delivered receipts: ${payanAttributedSales} (${money(report.marketplaces?.payan?.receipt_revenue_usdc || 0)} already included in direct Base settlements, never added twice)
 
 - Single verdict purchases: ${Number(purchases.single || 0)}
 - Portfolio purchases: ${Number(purchases.portfolio || 0)}
@@ -779,6 +851,7 @@ let functional: Record<string, unknown> = {};
 let acquisition: Record<string, unknown> = {};
 let the402: Record<string, unknown> = {};
 let nearMarket: Record<string, unknown> = {};
+let payan: Record<string, unknown> = {};
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms] = await Promise.all([
@@ -923,6 +996,12 @@ try {
   errors.push(`NEAR Agent Market: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+try {
+  payan = await payanStatus();
+} catch (error) {
+  errors.push(`PayanAgent: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 const report = {
   product: "BountyVerdict",
   checked_at: checkedAt,
@@ -933,7 +1012,7 @@ const report = {
   health,
   discovery,
   revenue,
-  marketplaces: { the402, near: nearMarket },
+  marketplaces: { the402, near: nearMarket, payan },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
       Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0) +

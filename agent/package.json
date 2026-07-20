@@ -18,6 +18,8 @@
     "the402:subscribe": "node --experimental-strip-types scripts/the402-subscribe.ts",
     "near-market:register": "node --experimental-strip-types scripts/near-market-register.ts",
     "near-market:onboard": "node --experimental-strip-types scripts/near-market-onboard.ts",
+    "payan:register": "node --experimental-strip-types scripts/payan-register.ts",
+    "payan:onboard": "node --experimental-strip-types scripts/payan-onboard.ts",
     "the402:register": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/the402-register.ts",
     "canary:production": "node --experimental-strip-types scripts/functional-canary.ts",
     "settlement:provision": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/provision-settlement-buyer.ts",

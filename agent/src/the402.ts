@@ -184,29 +184,37 @@ export async function fulfillThe402Product(
   job: The402JobDispatch,
   env: The402Environment,
 ): Promise<unknown> {
-  if (job.product === "single") {
-    return checkGithubIssue(briefString(job.brief, "issue_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
+  return fulfillProduct(job.product, job.brief, env);
+}
+
+export async function fulfillProduct(
+  product: The402Product,
+  brief: Record<string, unknown>,
+  env: The402Environment,
+): Promise<unknown> {
+  if (product === "single") {
+    return checkGithubIssue(briefString(brief, "issue_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
   }
-  if (job.product === "portfolio") {
-    return checkBountyPortfolio(job.brief.issue_urls, { GITHUB_TOKEN: env.GITHUB_TOKEN });
+  if (product === "portfolio") {
+    return checkBountyPortfolio(brief.issue_urls, { GITHUB_TOKEN: env.GITHUB_TOKEN });
   }
-  if (job.product === "harness") {
-    return checkGithubHarness(briefString(job.brief, "repo_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
+  if (product === "harness") {
+    return checkGithubHarness(briefString(brief, "repo_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
   }
-  if (job.product === "run") {
-    return diagnoseGithubRun(briefString(job.brief, "run_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
+  if (product === "run") {
+    return diagnoseGithubRun(briefString(brief, "run_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
   }
-  if (job.product === "flake") {
+  if (product === "flake") {
     if (!env.FLAKE_RATE_LIMITER) throw new Error("FlakeVerdict capacity protection is unavailable.");
     const rateLimit = await env.FLAKE_RATE_LIMITER.limit({ key: "flake:verified-global" });
     if (!rateLimit.success) throw new Error("FlakeVerdict is temporarily at its bounded upstream capacity.");
     return diagnoseGithubFlake(
-      briefString(job.brief, "run_url"),
-      job.brief.attempt as string | number | null | undefined,
+      briefString(brief, "run_url"),
+      brief.attempt as string | number | null | undefined,
       { GITHUB_TOKEN: env.GITHUB_TOKEN },
     );
   }
-  return parseAndAnalyzeMcpDrift(JSON.stringify(job.brief));
+  return parseAndAnalyzeMcpDrift(JSON.stringify(brief));
 }
 
 export async function reportThe402Result(input: {

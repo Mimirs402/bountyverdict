@@ -43,12 +43,18 @@ import {
   verifyCanaryAuthorization,
 } from "./canary.ts";
 import {
+  fulfillProduct,
   fulfillThe402Product,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
   verifyThe402Webhook,
 } from "./the402.ts";
+import {
+  NEAR_MARKET_MAX_BODY_BYTES,
+  parseNearMarketInput,
+  parseNearMarketProduct,
+} from "./near-market.ts";
 import {
   evaluateAndBidThe402Request,
   parseThe402RequestCreated,
@@ -67,6 +73,7 @@ interface Env {
   THE402_SERVICE_MAP?: string;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
+  NEAR_MARKET_RATE_LIMITER?: RateLimit;
 }
 
 type AppBindings = {
@@ -770,6 +777,47 @@ app.get(FLAKE_ENDPOINT, async (c) => {
 });
 
 app.post(MCP_DRIFT_ENDPOINT, (c) => c.json(c.get("mcpDriftResult")));
+
+app.post("/api/near-market/:product", async (c) => {
+  c.header("Cache-Control", "no-store");
+  c.header("X-Robots-Tag", "noindex, nofollow");
+  const product = parseNearMarketProduct(c.req.param("product"));
+  if (!product) return c.json({ error: "NOT_FOUND" }, 404);
+  const contentType = c.req.header("Content-Type") || "";
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    return c.json({ error: "INVALID_INPUT", message: "Content-Type must be application/json." }, 400);
+  }
+  const declaredLength = c.req.header("Content-Length");
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > NEAR_MARKET_MAX_BODY_BYTES) {
+    return c.json({ error: "INPUT_TOO_LARGE", message: "Request body exceeds 524,288 bytes." }, 413);
+  }
+  if (!c.env.NEAR_MARKET_RATE_LIMITER) {
+    console.error("NEAR Market rate limiter is not configured.");
+    return c.json({ error: "SERVICE_CONFIGURATION_ERROR" }, 503);
+  }
+  const rateLimit = await c.env.NEAR_MARKET_RATE_LIMITER.limit({ key: `near-market:${product}` });
+  if (!rateLimit.success) {
+    c.header("Retry-After", "60");
+    return c.json({ error: "RATE_LIMITED" }, 429);
+  }
+  try {
+    const input = parseNearMarketInput(await c.req.text());
+    const output = await fulfillProduct(product, input, {
+      GITHUB_TOKEN: c.env.GITHUB_TOKEN,
+      FLAKE_RATE_LIMITER: c.env.FLAKE_RATE_LIMITER,
+    });
+    return c.json(output);
+  } catch (error) {
+    if (error instanceof CheckError || error instanceof HarnessError || error instanceof FlakeError || error instanceof McpDriftError) {
+      return c.json({ error: error.code, message: error.message }, error.status as 400);
+    }
+    if (error instanceof Error && /must|invalid|too large|empty/i.test(error.message)) {
+      return c.json({ error: "INVALID_INPUT", message: error.message }, 400);
+    }
+    console.error(`NEAR Market ${product} fulfillment failed:`, error instanceof Error ? error.message : "unknown error");
+    return c.json({ error: "INTERNAL_ERROR", message: "The marketplace request could not be fulfilled." }, 500);
+  }
+});
 
 app.notFound((c) => c.json({ error: "NOT_FOUND" }, 404));
 

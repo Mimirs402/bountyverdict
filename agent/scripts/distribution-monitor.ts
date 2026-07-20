@@ -18,6 +18,11 @@ import {
   THE402_LISTINGS,
   THE402_SUBSCRIPTION_PLAN,
 } from "../src/the402-catalog.ts";
+import {
+  NEAR_MARKET_API,
+  NEAR_MARKET_LISTINGS,
+  NEAR_MARKET_PROVIDER_ID,
+} from "../src/near-market.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -45,6 +50,8 @@ const settlementBuyer = process.env.SETTLEMENT_BUYER_ADDRESS;
 const settlementCanaryEnabled = process.env.SETTLEMENT_CANARY_ENABLED === "YES";
 const the402ApiKey = process.env.THE402_API_KEY;
 const the402ParticipantId = process.env.THE402_PARTICIPANT_ID;
+const nearMarketApiKey = process.env.NEAR_MARKET_API_KEY;
+const nearMarketAgentId = process.env.NEAR_MARKET_AGENT_ID;
 const MAX_CANARY_AGE_MS = 8 * 60 * 60 * 1000;
 const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"] as const;
 const BUYER_INTENTS: ReadonlyArray<{ product: ProductKey; query: string }> = [
@@ -502,6 +509,66 @@ async function the402Status(): Promise<Record<string, unknown>> {
   };
 }
 
+async function nearMarketStatus(): Promise<Record<string, unknown>> {
+  if (!nearMarketApiKey || !/^sk_live_[A-Za-z0-9_-]+$/.test(nearMarketApiKey)) {
+    throw new Error("NEAR_MARKET_API_KEY is missing or invalid.");
+  }
+  if (nearMarketAgentId !== NEAR_MARKET_PROVIDER_ID) {
+    throw new Error("NEAR_MARKET_AGENT_ID does not match the pinned provider.");
+  }
+  const headers = { Authorization: `Bearer ${nearMarketApiKey}` };
+  const [servicesResponse, jobsResponse, walletResponse] = await Promise.all([
+    monitoredFetch(`${NEAR_MARKET_API}/agents/me/services`, { headers }),
+    monitoredFetch(`${NEAR_MARKET_API}/jobs?worker=${encodeURIComponent(NEAR_MARKET_PROVIDER_ID)}&limit=100`, { headers }),
+    monitoredFetch(`${NEAR_MARKET_API}/wallet/balance`, { headers }),
+  ]);
+  if (!servicesResponse.ok) throw new Error(`service lookup returned HTTP ${servicesResponse.status}.`);
+  if (!jobsResponse.ok) throw new Error(`job lookup returned HTTP ${jobsResponse.status}.`);
+  if (!walletResponse.ok) throw new Error(`wallet lookup returned HTTP ${walletResponse.status}.`);
+  const services = await servicesResponse.json() as Array<Record<string, any>>;
+  const jobs = await jobsResponse.json() as Array<Record<string, any>>;
+  const walletState = await walletResponse.json() as Record<string, any>;
+  if (!Array.isArray(services) || !Array.isArray(jobs)) throw new Error("marketplace returned invalid telemetry.");
+  const expected = new Map(NEAR_MARKET_LISTINGS.map((listing) => [listing.name, listing]));
+  const owned = services.filter(({ name }) => expected.has(String(name)));
+  if (owned.length !== expected.size || new Set(owned.map(({ service_id }) => service_id)).size !== expected.size) {
+    throw new Error("catalog does not contain the exact six expected services.");
+  }
+  for (const service of owned) {
+    const listing = expected.get(String(service.name));
+    if (!listing || service.agent_id !== NEAR_MARKET_PROVIDER_ID ||
+      service.description !== listing.description || service.category !== listing.category ||
+      service.pricing_model !== listing.pricing_model || service.endpoint_url !== listing.endpoint_url ||
+      service.price_amount !== listing.price_amount || service.price_token !== listing.price_token ||
+      service.response_time_seconds !== listing.response_time_seconds || service.enabled !== true ||
+      !isDeepStrictEqual(service.tags, listing.tags) ||
+      !isDeepStrictEqual(service.input_schema, listing.input_schema) ||
+      !isDeepStrictEqual(service.output_schema, listing.output_schema)) {
+      throw new Error(`listing contract drifted for ${listing?.name || "unknown service"}.`);
+    }
+  }
+  const completed = jobs.filter((job) =>
+    job.worker_agent_id === NEAR_MARKET_PROVIDER_ID &&
+    job.creator_agent_id !== NEAR_MARKET_PROVIDER_ID &&
+    job.status === "completed"
+  );
+  const usdc = Array.isArray(walletState.balances)
+    ? walletState.balances.find((entry: Record<string, unknown>) => entry.symbol === "USDC")
+    : null;
+  const earnedUsdc = Number(usdc?.balance || 0);
+  if (!Number.isFinite(earnedUsdc) || earnedUsdc < 0) throw new Error("wallet USDC telemetry is invalid.");
+  return {
+    listed: true,
+    provider_id: NEAR_MARKET_PROVIDER_ID,
+    service_count: owned.length,
+    listing_contracts_verified: true,
+    completed_external_jobs: completed.length,
+    completed_external_job_ids: completed.map(({ job_id }) => job_id),
+    earned_usdc_balance: earnedUsdc,
+    custody_account: walletState.is_custody_account === true,
+  };
+}
+
 async function functionalStatus(): Promise<Record<string, unknown>> {
   const raw = await readFile(canaryStateFile, "utf8");
   const state = JSON.parse(raw) as {
@@ -587,13 +654,15 @@ function optionalCount(value: unknown): number | undefined {
 function renderMonitorNote(report: Record<string, any>): string {
   const directRevenueValue = Number(report.revenue?.recognized_usdc || 0);
   const marketplaceRevenueValue = Number(report.marketplaces?.the402?.settled_usd || 0);
-  const revenueValue = directRevenueValue + marketplaceRevenueValue;
+  const nearRevenueValue = Number(report.marketplaces?.near?.earned_usdc_balance || 0);
+  const revenueValue = directRevenueValue + marketplaceRevenueValue + nearRevenueValue;
   const costsValue = Number(trackedCostsInput);
   const profitValue = revenueValue - costsValue;
   const purchases = report.revenue?.purchases || {};
   const marketplacePurchases = Number(report.marketplaces?.the402?.completed_jobs || 0);
   const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
-  const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases;
+  const nearPurchases = Number(report.marketplaces?.near?.completed_external_jobs || 0);
+  const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases + nearPurchases;
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
   const experiment = report.acquisition?.experiment || {};
@@ -612,10 +681,11 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
-- **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 one-off jobs; ${subscriptionPurchases} the402 subscriptions)
+- **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 one-off jobs; ${subscriptionPurchases} the402 subscriptions; ${nearPurchases} NEAR Agent Market jobs)
 - **the402 listing contracts:** ${report.marketplaces?.the402?.listing_contracts_verified ? "6 / 6 exact input and deliverable schemas verified" : "unavailable or drifted"}
 - **the402 buyer-request feed:** ${report.marketplaces?.the402?.request_notifications_enabled ? "enabled; exact-match autonomous bids only" : "unavailable"}
 - **the402 monthly bundle:** ${report.marketplaces?.the402?.subscription_plan?.active ? `$${Number(report.marketplaces.the402.subscription_plan.agent_price_usd).toFixed(2)} for up to ${report.marketplaces.the402.subscription_plan.maximum_monthly_requests} requests` : "unavailable"}
+- **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"}
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -667,6 +737,7 @@ ${errors}
 - x402 ecosystem directory PR: ${report.acquisition?.x402_directory_pr?.status || "unavailable"} (${report.acquisition?.x402_directory_pr?.url || "not recorded"})
 - x402Scout GET listings: ${report.acquisition?.x402scout?.listed_entries ?? "unavailable"} / ${report.acquisition?.x402scout?.expected_entries ?? 5} (${report.acquisition?.x402scout?.status || "unavailable"}; positions ${Array.isArray(report.acquisition?.x402scout?.catalog_positions) ? report.acquisition.x402scout.catalog_positions.join(", ") : "unavailable"} of ${report.acquisition?.x402scout?.catalog_entries ?? "unavailable"}; ${typeof report.acquisition?.x402scout?.total_query_count === "number" ? report.acquisition.x402scout.total_query_count : "unavailable"} catalog queries)
 - the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
+- NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - Experiment status: ${experiment.status || "unavailable"}
 - Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
 - Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
@@ -681,6 +752,8 @@ skills.sh counts are anonymous CLI telemetry with unknown provenance. They are t
 - the402 genuine subscription purchases: ${subscriptionPurchases}
 - the402 settled provider revenue: ${money(marketplaceRevenueValue)}
 - the402 held/pending: ${money(report.marketplaces?.the402?.held_usd || 0)} / ${money(report.marketplaces?.the402?.pending_usd || 0)}
+- NEAR Agent Market completed external jobs: ${nearPurchases}
+- NEAR Agent Market earned USDC balance: ${money(nearRevenueValue)}
 
 - Single verdict purchases: ${Number(purchases.single || 0)}
 - Portfolio purchases: ${Number(purchases.portfolio || 0)}
@@ -705,6 +778,7 @@ let revenue: Record<string, unknown> = {};
 let functional: Record<string, unknown> = {};
 let acquisition: Record<string, unknown> = {};
 let the402: Record<string, unknown> = {};
+let nearMarket: Record<string, unknown> = {};
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms] = await Promise.all([
@@ -843,6 +917,12 @@ try {
   errors.push(`the402: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+try {
+  nearMarket = await nearMarketStatus();
+} catch (error) {
+  errors.push(`NEAR Agent Market: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 const report = {
   product: "BountyVerdict",
   checked_at: checkedAt,
@@ -853,12 +933,14 @@ const report = {
   health,
   discovery,
   revenue,
-  marketplaces: { the402 },
+  marketplaces: { the402, near: nearMarket },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
-      Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0),
+      Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0) +
+      Number(nearMarket.completed_external_jobs || 0),
     customer_revenue_usdc: (
-      Number(revenue.recognized_usdc || 0) + Number(the402.settled_usd || 0)
+      Number(revenue.recognized_usdc || 0) + Number(the402.settled_usd || 0) +
+      Number(nearMarket.earned_usdc_balance || 0)
     ).toFixed(6).replace(/\.?0+$/, ""),
     tracked_costs_usdc: trackedCostsInput,
   },

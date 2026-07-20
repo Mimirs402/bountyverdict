@@ -14,6 +14,7 @@ Environment=SETTLEMENT_CANARY_ENABLED=NO
 Environment=TRACKED_COSTS_USDC=1.01
 EnvironmentFile=-%h/.config/bountyverdict/settlement-buyer.env
 EnvironmentFile=%h/.config/bountyverdict/the402.env
+EnvironmentFile=%h/.config/bountyverdict/near-market.env
 ExecStart=/usr/bin/env node --experimental-strip-types scripts/distribution-monitor.ts
 NoNewPrivileges=yes
 PrivateTmp=yes

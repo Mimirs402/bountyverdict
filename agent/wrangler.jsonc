@@ -21,6 +21,11 @@
       "name": "FLAKE_RATE_LIMITER",
       "namespace_id": "402703",
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "NEAR_MARKET_RATE_LIMITER",
+      "namespace_id": "402705",
+      "simple": { "limit": 30, "period": 60 }
     }
   ],
   "env": {
@@ -41,6 +46,11 @@
           "name": "FLAKE_RATE_LIMITER",
           "namespace_id": "402704",
           "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "NEAR_MARKET_RATE_LIMITER",
+          "namespace_id": "402706",
+          "simple": { "limit": 30, "period": 60 }
         }
       ]
     }

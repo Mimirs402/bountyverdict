@@ -42,6 +42,8 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.match(manifest.marketplaces.the402.public_catalog, /^https:\/\/api\.the402\.ai\/v1\/services\/catalog\?/);
   assert.equal(manifest.marketplaces.the402.services.length, 6);
   assert.equal(manifest.marketplaces.the402.services.some((service) => service.name === "SkillVerdict"), false);
+  assert.equal(manifest.marketplaces.the402.subscription_plan.plan_id, "plan_ec6c49878dc34636");
+  assert.equal(manifest.marketplaces.the402.subscription_plan.maximum_requests_per_period, 20);
   assert.ok(manifest.marketplaces.the402.services.every((service) =>
     service.method === "POST" && service.fulfillment_type === "instant" &&
     /^https:\/\/api\.the402\.ai\/v1\/services\/svc_[A-Za-z0-9_-]+\/purchase$/.test(service.purchase_endpoint)

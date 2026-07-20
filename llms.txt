@@ -44,11 +44,12 @@
 - Public the402 provider catalog: https://api.the402.ai/v1/services/catalog?provider=p_d4b4ece39162409b&limit=100
 - These six routes offer the same tested products through the402 escrow; inspect each exact input and deliverable schema in the public catalog before purchase.
 - SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
+- Monthly bundle: POST https://api.the402.ai/v1/plans/plan_ec6c49878dc34636/subscribe — $1.05 USDC for up to 20 combined requests across the six listed services.
 - BountyVerdict: POST https://api.the402.ai/v1/services/svc_5e36dabc8b434e95/purchase — agent price $0.053 USDC; instant fulfillment
 - BountyVerdict Portfolio: POST https://api.the402.ai/v1/services/svc_780bf04bd8204b2f/purchase — agent price $0.42 USDC; instant fulfillment
 - HarnessVerdict: POST https://api.the402.ai/v1/services/svc_df4baf282b7d48d5/purchase — agent price $0.032 USDC; instant fulfillment
 - RunVerdict: POST https://api.the402.ai/v1/services/svc_cdd16073d02c4429/purchase — agent price $0.042 USDC; instant fulfillment
-- FlakeVerdict: POST https://api.the402.ai/v1/services/svc_565a2a5c8e154b6e/purchase — agent price $0.074 USDC; instant fulfillment
+- CI Flake Verdict: POST https://api.the402.ai/v1/services/svc_565a2a5c8e154b6e/purchase — agent price $0.074 USDC; instant fulfillment
 - MCPDriftVerdict: POST https://api.the402.ai/v1/services/svc_40e97a390c5b4d71/purchase — agent price $0.021 USDC; instant fulfillment
 
 ## Differentiation

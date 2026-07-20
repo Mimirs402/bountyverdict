@@ -106,11 +106,11 @@ export const THE402_LISTINGS: ReadonlyArray<{
   {
     product: "flake",
     service_id: "svc_565a2a5c8e154b6e",
-    name: "FlakeVerdict",
-    description: "Decide whether a completed public GitHub Actions failure is flaky and merits exactly one retry, or is recurring or new and needs a fix. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
+    name: "CI Flake Verdict",
+    description: "Is this GitHub Actions CI failure a flake or flaky test, and should I retry or rerun this GitHub Action? Compare workflow attempts and logs to distinguish flaky CI from a real regression and return a retry-or-fix decision. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
     price: "$0.07",
     agent_price: "$0.074",
-    tags: ["github-actions", "flaky-ci", "retry-or-fix", "developer-tools"],
+    tags: ["github-actions", "github-action", "ci-failure", "flake", "flaky-test", "retry-ci", "rerun-workflow", "retry-or-fix"],
     input_schema: {
       type: "object",
       required: ["run_url"],
@@ -146,11 +146,33 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
 ]);
 
+export const THE402_SUBSCRIPTION_PLAN = Object.freeze({
+  plan_id: "plan_ec6c49878dc34636",
+  name: "BountyVerdict Agent Engineering Monthly",
+  description: "Twenty combined monthly requests across six existing automated agent-engineering checks: public GitHub bounty due diligence and ranking, repository instruction audits, GitHub Actions diagnosis and flake decisions, and MCP tools/list compatibility gates. Exact typed deliverables, public evidence where applicable, instant fulfillment, no buyer API key, and no manual provider step. SkillVerdict is not included during its isolated experiment.",
+  interval: "monthly" as const,
+  provider_price_usd: 1,
+  agent_price_usd: 1.05,
+  max_requests: 20,
+  service_ids: THE402_LISTINGS.map(({ service_id }) => service_id),
+});
+
 export function the402MarketplaceManifest(): Record<string, unknown> {
   return {
     provider_id: THE402_PROVIDER_ID,
     public_catalog: THE402_PROVIDER_CATALOG_URL,
     skillverdict_excluded_during_frozen_experiment: true,
+    subscription_plan: {
+      name: THE402_SUBSCRIPTION_PLAN.name,
+      plan_id: THE402_SUBSCRIPTION_PLAN.plan_id,
+      subscribe_endpoint: `${THE402_API}/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe`,
+      method: "POST",
+      interval: THE402_SUBSCRIPTION_PLAN.interval,
+      agent_price_usdc: THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2),
+      provider_net_usdc: THE402_SUBSCRIPTION_PLAN.provider_price_usd.toFixed(2),
+      maximum_requests_per_period: THE402_SUBSCRIPTION_PLAN.max_requests,
+      service_ids: THE402_SUBSCRIPTION_PLAN.service_ids,
+    },
     services: THE402_LISTINGS.map((listing) => ({
       name: listing.name,
       service_id: listing.service_id,

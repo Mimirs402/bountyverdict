@@ -14,6 +14,7 @@
     "revenue": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/revenue-monitor.ts",
     "distribution:monitor": "node --experimental-strip-types scripts/distribution-monitor.ts",
     "the402:onboard": "node --experimental-strip-types scripts/the402-onboard.ts",
+    "the402:plan": "node --experimental-strip-types scripts/the402-plan.ts",
     "the402:subscribe": "node --experimental-strip-types scripts/the402-subscribe.ts",
     "the402:register": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/the402-register.ts",
     "canary:production": "node --experimental-strip-types scripts/functional-canary.ts",

@@ -6,7 +6,11 @@ import {
   reportThe402Result,
   verifyThe402Webhook,
 } from "../src/the402.ts";
-import { THE402_LISTINGS, THE402_PROVIDER_CATALOG_URL } from "../src/the402-catalog.ts";
+import {
+  THE402_LISTINGS,
+  THE402_PROVIDER_CATALOG_URL,
+  THE402_SUBSCRIPTION_PLAN,
+} from "../src/the402-catalog.ts";
 import { outputSchema, portfolioOutputSchema } from "../src/discovery.ts";
 import { harnessOutputSchema } from "../src/harness-discovery.ts";
 import { runOutputSchema } from "../src/run-discovery.ts";
@@ -22,6 +26,20 @@ const body = JSON.stringify({
   service_id: "svc_bounty_123",
   brief: { issue_url: "https://github.com/typeorm/typeorm/issues/3357" },
   callback_url: "https://api.the402.ai/v1/threads/thread_123/update",
+});
+
+test("the402 monthly bundle contains only the six existing non-SkillVerdict services", () => {
+  assert.equal(THE402_SUBSCRIPTION_PLAN.interval, "monthly");
+  assert.equal(THE402_SUBSCRIPTION_PLAN.plan_id, "plan_ec6c49878dc34636");
+  assert.equal(THE402_SUBSCRIPTION_PLAN.provider_price_usd, 1);
+  assert.equal(THE402_SUBSCRIPTION_PLAN.agent_price_usd, 1.05);
+  assert.equal(THE402_SUBSCRIPTION_PLAN.max_requests, 20);
+  assert.deepEqual(
+    [...THE402_SUBSCRIPTION_PLAN.service_ids].sort(),
+    THE402_LISTINGS.map(({ service_id }) => service_id).sort(),
+  );
+  assert.equal(THE402_SUBSCRIPTION_PLAN.service_ids.length, 6);
+  assert.match(THE402_SUBSCRIPTION_PLAN.description, /SkillVerdict is not included/);
 });
 
 async function signature(timestamp: string, rawBody = body): Promise<string> {

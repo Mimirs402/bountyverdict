@@ -163,12 +163,30 @@
     "check_mcp_tool_drift": "https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/cristianmoroaica/bountyverdict",
-  "updated_at": "2026-07-20T17:50:49.358Z",
+  "updated_at": "2026-07-20T18:02:50.866Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
       "public_catalog": "https://api.the402.ai/v1/services/catalog?provider=p_d4b4ece39162409b&limit=100",
       "skillverdict_excluded_during_frozen_experiment": true,
+      "subscription_plan": {
+        "name": "BountyVerdict Agent Engineering Monthly",
+        "plan_id": "plan_ec6c49878dc34636",
+        "subscribe_endpoint": "https://api.the402.ai/v1/plans/plan_ec6c49878dc34636/subscribe",
+        "method": "POST",
+        "interval": "monthly",
+        "agent_price_usdc": "1.05",
+        "provider_net_usdc": "1.00",
+        "maximum_requests_per_period": 20,
+        "service_ids": [
+          "svc_5e36dabc8b434e95",
+          "svc_780bf04bd8204b2f",
+          "svc_df4baf282b7d48d5",
+          "svc_cdd16073d02c4429",
+          "svc_565a2a5c8e154b6e",
+          "svc_40e97a390c5b4d71"
+        ]
+      },
       "services": [
         {
           "name": "BountyVerdict",
@@ -207,7 +225,7 @@
           "fulfillment_type": "instant"
         },
         {
-          "name": "FlakeVerdict",
+          "name": "CI Flake Verdict",
           "service_id": "svc_565a2a5c8e154b6e",
           "purchase_endpoint": "https://api.the402.ai/v1/services/svc_565a2a5c8e154b6e/purchase",
           "method": "POST",

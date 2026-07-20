@@ -23,6 +23,8 @@ test("manifest activation records a verified HTTPS production origin", () => {
   assert.equal(marketplaces.the402.provider_id, "p_d4b4ece39162409b");
   assert.equal(marketplaces.the402.services.length, 6);
   assert.equal(marketplaces.the402.services.some((service: any) => service.name === "SkillVerdict"), false);
+  assert.equal(marketplaces.the402.subscription_plan.plan_id, "plan_ec6c49878dc34636");
+  assert.equal(marketplaces.the402.subscription_plan.maximum_requests_per_period, 20);
   assert.match(marketplaces.the402.services[0].purchase_endpoint, /^https:\/\/api\.the402\.ai\/v1\/services\/svc_/);
 });
 

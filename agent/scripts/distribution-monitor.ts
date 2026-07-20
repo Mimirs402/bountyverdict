@@ -13,7 +13,11 @@ import {
 import { PRODUCT_CATALOG, productForAtomicAmount, type ProductKey } from "../src/product-catalog.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import { evaluateEarnedPlacementExperiment } from "../src/acquisition.ts";
-import { THE402_API, THE402_LISTINGS } from "../src/the402-catalog.ts";
+import {
+  THE402_API,
+  THE402_LISTINGS,
+  THE402_SUBSCRIPTION_PLAN,
+} from "../src/the402-catalog.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -338,7 +342,7 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const catalogUrl = new URL(`${THE402_API}/services/catalog`);
   catalogUrl.searchParams.set("provider", the402ParticipantId);
   catalogUrl.searchParams.set("limit", "100");
-  const [catalogResponse, earningsResponse, notificationsResponse] = await Promise.all([
+  const [catalogResponse, earningsResponse, notificationsResponse, plansResponse] = await Promise.all([
     monitoredFetch(catalogUrl.href),
     monitoredFetch(`${THE402_API}/provider/earnings`, {
       headers: { "X-API-Key": the402ApiKey },
@@ -346,15 +350,18 @@ async function the402Status(): Promise<Record<string, unknown>> {
     monitoredFetch(`${THE402_API}/postings/notifications`, {
       headers: { "X-API-Key": the402ApiKey },
     }),
+    monitoredFetch(`${THE402_API}/plans?limit=100`),
   ]);
   if (!catalogResponse.ok) throw new Error(`the402 catalog returned HTTP ${catalogResponse.status}.`);
   if (!earningsResponse.ok) throw new Error(`the402 earnings returned HTTP ${earningsResponse.status}.`);
   if (!notificationsResponse.ok) {
     throw new Error(`the402 request notification status returned HTTP ${notificationsResponse.status}.`);
   }
+  if (!plansResponse.ok) throw new Error(`the402 plan catalog returned HTTP ${plansResponse.status}.`);
   const catalog = await catalogResponse.json() as { services?: Array<Record<string, any>> };
   const earnings = await earningsResponse.json() as Record<string, any>;
   const notifications = await notificationsResponse.json() as Record<string, any>;
+  const plansPayload = await plansResponse.json() as Record<string, any>;
   const services = Array.isArray(catalog.services) ? catalog.services : [];
   const expectedById = new Map(THE402_LISTINGS.map((listing) => [listing.service_id, listing]));
   const expectedIds = new Set<string>(expectedById.keys());
@@ -396,6 +403,18 @@ async function the402Status(): Promise<Record<string, unknown>> {
   if (notifications.enabled !== true) {
     throw new Error("the402 request.created notifications are not enabled.");
   }
+  const plans = Array.isArray(plansPayload.plans) ? plansPayload.plans as Array<Record<string, any>> : [];
+  const plan = plans.find(({ id }) => id === THE402_SUBSCRIPTION_PLAN.plan_id);
+  if (
+    !plan || plan.provider_id !== the402ParticipantId || plan.name !== THE402_SUBSCRIPTION_PLAN.name ||
+    plan.description !== THE402_SUBSCRIPTION_PLAN.description ||
+    plan.interval !== THE402_SUBSCRIPTION_PLAN.interval ||
+    Number(plan.price_usd) !== THE402_SUBSCRIPTION_PLAN.agent_price_usd ||
+    Number(plan.max_requests) !== THE402_SUBSCRIPTION_PLAN.max_requests ||
+    !isDeepStrictEqual(plan.service_ids, THE402_SUBSCRIPTION_PLAN.service_ids)
+  ) {
+    throw new Error("the402 subscription plan is missing or its public contract drifted.");
+  }
   const settledUsd = Number(earnings.earnings?.settled_usd);
   const heldUsd = Number(earnings.earnings?.held_usd);
   const pendingUsd = Number(earnings.earnings?.pending_usd);
@@ -405,6 +424,33 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const recentSettlements = Array.isArray(earnings.recent_settlements)
     ? earnings.recent_settlements as Array<Record<string, unknown>>
     : [];
+  // A subscription is one purchase even when it later produces many covered
+  // service calls. Only count settlements that the marketplace explicitly
+  // attributes to our plan; never infer a subscription from price alone.
+  const subscriptionSettlements = recentSettlements.flatMap((entry) => {
+    const planId = typeof entry.plan_id === "string"
+      ? entry.plan_id
+      : typeof entry.subscription_plan_id === "string" ? entry.subscription_plan_id : null;
+    if (planId !== THE402_SUBSCRIPTION_PLAN.plan_id) return [];
+    const transactionHash = typeof entry.transaction_hash === "string"
+      ? entry.transaction_hash
+      : typeof entry.tx_hash === "string" ? entry.tx_hash : null;
+    const settlementId = typeof entry.settlement_id === "string"
+      ? entry.settlement_id
+      : typeof entry.id === "string"
+        ? entry.id
+        : transactionHash;
+    if (!settlementId) return [];
+    return [{
+      settlement_id: settlementId,
+      plan_id: planId,
+      subscription_id: typeof entry.subscription_id === "string" ? entry.subscription_id : null,
+      transaction_hash: transactionHash,
+      settled_at: typeof entry.settled_at === "string"
+        ? entry.settled_at
+        : typeof entry.created_at === "string" ? entry.created_at : null,
+    }];
+  });
   return {
     listed: true,
     participant_id: the402ParticipantId,
@@ -417,11 +463,22 @@ async function the402Status(): Promise<Record<string, unknown>> {
     request_notification_failures: Number.isSafeInteger(notifications.consecutive_failures)
       ? notifications.consecutive_failures
       : null,
+    subscription_plan: {
+      active: true,
+      plan_id: THE402_SUBSCRIPTION_PLAN.plan_id,
+      name: THE402_SUBSCRIPTION_PLAN.name,
+      agent_price_usd: THE402_SUBSCRIPTION_PLAN.agent_price_usd,
+      provider_net_usd: THE402_SUBSCRIPTION_PLAN.provider_price_usd,
+      maximum_monthly_requests: THE402_SUBSCRIPTION_PLAN.max_requests,
+      service_count: THE402_SUBSCRIPTION_PLAN.service_ids.length,
+    },
     completed_jobs: completedCounts[0],
     settled_usd: settledUsd,
     held_usd: heldUsd,
     pending_usd: pendingUsd,
     recent_settlement_count: recentSettlements.length,
+    subscription_settlement_ids: subscriptionSettlements.map(({ settlement_id }) => settlement_id),
+    subscription_settlements: subscriptionSettlements,
     recent_settlements: recentSettlements.map((entry) => ({
       service_id: typeof entry.service_id === "string" ? entry.service_id : null,
       transaction_hash: typeof entry.transaction_hash === "string"
@@ -535,7 +592,8 @@ function renderMonitorNote(report: Record<string, any>): string {
   const profitValue = revenueValue - costsValue;
   const purchases = report.revenue?.purchases || {};
   const marketplacePurchases = Number(report.marketplaces?.the402?.completed_jobs || 0);
-  const totalPurchases = Number(purchases.total || 0) + marketplacePurchases;
+  const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
+  const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases;
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
   const experiment = report.acquisition?.experiment || {};
@@ -554,9 +612,10 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
-- **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 escrow)
+- **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 one-off jobs; ${subscriptionPurchases} the402 subscriptions)
 - **the402 listing contracts:** ${report.marketplaces?.the402?.listing_contracts_verified ? "6 / 6 exact input and deliverable schemas verified" : "unavailable or drifted"}
 - **the402 buyer-request feed:** ${report.marketplaces?.the402?.request_notifications_enabled ? "enabled; exact-match autonomous bids only" : "unavailable"}
+- **the402 monthly bundle:** ${report.marketplaces?.the402?.subscription_plan?.active ? `$${Number(report.marketplaces.the402.subscription_plan.agent_price_usd).toFixed(2)} for up to ${report.marketplaces.the402.subscription_plan.maximum_monthly_requests} requests` : "unavailable"}
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -619,6 +678,7 @@ skills.sh counts are anonymous CLI telemetry with unknown provenance. They are t
 ## Revenue detail
 
 - the402 completed customer jobs: ${marketplacePurchases}
+- the402 genuine subscription purchases: ${subscriptionPurchases}
 - the402 settled provider revenue: ${money(marketplaceRevenueValue)}
 - the402 held/pending: ${money(report.marketplaces?.the402?.held_usd || 0)} / ${money(report.marketplaces?.the402?.pending_usd || 0)}
 
@@ -757,6 +817,28 @@ try {
 // experiment's health classification above.
 try {
   the402 = await the402Status();
+  let previousSubscriptionIds: string[] = [];
+  try {
+    const previousReport = JSON.parse(await readFile(stateFile, "utf8")) as Record<string, any>;
+    const previousIds = previousReport.marketplaces?.the402?.subscription_settlement_ids;
+    if (Array.isArray(previousIds)) {
+      previousSubscriptionIds = previousIds.filter((value): value is string => typeof value === "string");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const currentSubscriptionIds = Array.isArray(the402.subscription_settlement_ids)
+    ? the402.subscription_settlement_ids.filter((value): value is string => typeof value === "string")
+    : [];
+  const subscriptionSettlementIds = [...new Set([
+    ...previousSubscriptionIds,
+    ...currentSubscriptionIds,
+  ])];
+  the402 = {
+    ...the402,
+    subscription_settlement_ids: subscriptionSettlementIds,
+    subscription_purchases: subscriptionSettlementIds.length,
+  };
 } catch (error) {
   errors.push(`the402: ${error instanceof Error ? error.message : String(error)}`);
 }
@@ -774,7 +856,7 @@ const report = {
   marketplaces: { the402 },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
-      Number(the402.completed_jobs || 0),
+      Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0),
     customer_revenue_usdc: (
       Number(revenue.recognized_usdc || 0) + Number(the402.settled_usd || 0)
     ).toFixed(6).replace(/\.?0+$/, ""),

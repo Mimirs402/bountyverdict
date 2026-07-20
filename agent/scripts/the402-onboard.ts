@@ -72,7 +72,7 @@ const existing = await existingServices();
 const map: Record<string, The402Product> = {};
 const results: Array<{ product: The402Product; service_id: string; action: "created" | "updated" }> = [];
 for (const definition of definitions) {
-  const previous = existing.find(({ name }) => name === definition.name);
+  const previous = existing.find(({ id }) => id === definition.service_id);
   const payload = {
     name: definition.name,
     description: definition.description,

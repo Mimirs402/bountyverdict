@@ -13,6 +13,7 @@ import {
 import {
   THE402_LISTINGS,
   THE402_PROVIDER_CATALOG_URL,
+  THE402_SUBSCRIPTION_PLAN,
 } from "./the402-catalog.ts";
 
 function paymentInfo(price: string) {
@@ -540,6 +541,7 @@ export function createLlmsText(origin: string): string {
 - Public the402 provider catalog: ${THE402_PROVIDER_CATALOG_URL}
 - These six routes offer the same tested products through the402 escrow; inspect each exact input and deliverable schema in the public catalog before purchase.
 - SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
+- Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the six listed services.
 ${the402Services}
 
 ## Differentiation

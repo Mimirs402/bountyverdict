@@ -38,7 +38,7 @@ Task-specific skills are the least-privilege path. Install all seven only when n
 
 Every product has a free sample, a machine-readable OpenAPI contract, a declared price, and a successful-result `service_reuse` rule. Invalid inputs and upstream failures are not settled. Start with the [agent page](https://cristianmoroaica.github.io/bountyverdict/agents.html), [`agent-manifest.json`](agent-manifest.json), or the production [`openapi.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json).
 
-The seven contracts are continuously checked in production. Coinbase Bazaar currently merchant-indexes six resources. FlakeVerdict is awaiting semantic-search propagation; MCPDriftVerdict is pending its first eligible settlement. Owner-funded proofs are excluded from customer revenue.
+The seven contracts are continuously checked in production. Coinbase Bazaar currently merchant-indexes six resources. Six existing non-SkillVerdict products are also available through exact-schema the402 listings, either per call or through a $1.05 monthly bundle of up to 20 combined requests. Owner-funded proofs are excluded from customer revenue.
 
 For the strongest current buyer-intent fit, inspect the [free SkillVerdict sample](https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill/sample) and the task-specific [`preflight-agent-skills`](https://skills.sh/cristianmoroaica/bountyverdict/preflight-agent-skills) workflow. It audits the entire commit-pinned public skill directory without executing it; the paid verdict costs $0.06.
 

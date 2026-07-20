@@ -1,4 +1,5 @@
 import { analyzeBounty, parseIssueUrl } from "../../analysis.js";
+import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
   GITHUB_TOKEN?: string;
@@ -18,6 +19,7 @@ export interface AgentVerdict {
   verdict: "AVOID" | "CAUTION" | "VIABLE";
   score: number;
   summary: string;
+  service_reuse: ServiceReuseGuidance;
   issue: {
     url: string;
     title: string;
@@ -274,6 +276,7 @@ export async function checkGithubIssue(
     verdict: analysis.verdict,
     score: analysis.score,
     summary: summarize(analysis.verdict),
+    service_reuse: SERVICE_REUSE.single,
     issue: {
       url: issueResponse.data.html_url,
       title: issueResponse.data.title,

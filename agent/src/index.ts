@@ -33,6 +33,7 @@ interface Env {
   CDP_API_KEY_ID?: string;
   CDP_API_KEY_SECRET?: string;
   CANARY_TOKEN?: string;
+  CANARY_RATE_LIMITER?: RateLimit;
 }
 
 type AppBindings = { Bindings: Env };
@@ -313,7 +314,8 @@ app.get("/_internal/canary/:product", async (c) => {
   c.header("X-Robots-Tag", "noindex, nofollow");
   const configured = Boolean(c.env.CANARY_TOKEN && c.env.CANARY_TOKEN.length >= 32);
   if (!configured) {
-    return c.json({ error: "CANARY_NOT_CONFIGURED" }, 503);
+    console.error("Functional canary secret is not configured.");
+    return c.json({ error: "NOT_FOUND" }, 404);
   }
   if (!await verifyCanaryAuthorization(c.req.header("Authorization"), c.env.CANARY_TOKEN)) {
     return c.json({ error: "NOT_FOUND" }, 404);
@@ -321,6 +323,15 @@ app.get("/_internal/canary/:product", async (c) => {
   const product = c.req.param("product");
   if (!isCanaryProduct(product)) {
     return c.json({ error: "NOT_FOUND" }, 404);
+  }
+  if (!c.env.CANARY_RATE_LIMITER) {
+    console.error("Functional canary rate limiter is not configured.");
+    return c.json({ error: "NOT_FOUND" }, 404);
+  }
+  const rateLimit = await c.env.CANARY_RATE_LIMITER.limit({ key: `canary:${product}` });
+  if (!rateLimit.success) {
+    c.header("Retry-After", "60");
+    return c.json({ product, ok: false, error: "CANARY_RATE_LIMITED" }, 429);
   }
   try {
     return c.json(await runFunctionalCanary(product, { GITHUB_TOKEN: c.env.GITHUB_TOKEN }));

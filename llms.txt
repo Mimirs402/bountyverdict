@@ -24,6 +24,7 @@ Paste a canonical public GitHub issue URL. The browser performs read-only GitHub
 - Marketplace: Coinbase x402 Bazaar after production settlement activation
 - Free sample, OpenAPI contract, and llms.txt are served by the agent endpoint
 - Source and integration contract: https://github.com/cristianmoroaica/bountyverdict/tree/main/agent
+- Reuse contract: every successful paid result includes `service_reuse`, stating when agents should call the same bounded live check again and when an exact commit-pinned result can be reused
 
 The bounty products add conventional repository contribution-document checks for explicit AI-work bans and disclosure requirements. The portfolio ranks full verdicts and recommends the strongest candidate. HarnessVerdict checks coding-agent instruction discovery, paths, portability, context size, skill frontmatter, and secret-like material. SkillVerdict performs a bounded, redacted, repository-aware pre-install security audit of a requested SKILL.md bundle. RunVerdict diagnoses exact-attempt jobs and bounded failed-job logs, separating root causes from downstream aggregate failures. No audit executes repository code or reruns CI. Invalid or failed checks are not settled.
 

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
@@ -21,13 +21,26 @@ const stateFile = process.env.STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/distribution-status.json`;
 const canaryStateFile = process.env.CANARY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/functional-canary.json`;
+const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
+const trackedCostsInput = process.env.TRACKED_COSTS_USDC || "0";
 const MAX_CANARY_AGE_MS = 8 * 60 * 60 * 1000;
+const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run"] as const;
 
 if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
   throw new Error("REVENUE_WALLET must be a public 20-byte EVM address.");
 }
 if (!/^\d+$/.test(startBlockInput)) {
   throw new Error("START_BLOCK must be an unsigned integer.");
+}
+if (!/^\d+(?:\.\d{1,6})?$/.test(trackedCostsInput)) {
+  throw new Error("TRACKED_COSTS_USDC must be a non-negative decimal with at most six places.");
+}
+
+async function atomicWrite(path: string, contents: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const temporary = `${path}.${process.pid}.tmp`;
+  await writeFile(temporary, contents, { mode: 0o600 });
+  await rename(temporary, path);
 }
 
 async function monitoredFetch(input: string, init?: RequestInit): Promise<Response> {
@@ -237,6 +250,7 @@ async function functionalStatus(): Promise<Record<string, unknown>> {
   const state = JSON.parse(raw) as {
     checked_at?: unknown;
     healthy?: unknown;
+    production_api?: unknown;
     products_checked?: unknown;
     checks?: unknown;
   };
@@ -248,16 +262,106 @@ async function functionalStatus(): Promise<Record<string, unknown>> {
     throw new Error(`Functional canary state is stale (${Math.round(ageMs / 60_000)} minutes old).`);
   }
   if (state.healthy !== true) throw new Error("The latest functional canary run is unhealthy.");
+  if (state.production_api !== api) throw new Error("Functional canary state does not belong to the production API.");
   const checked = Array.isArray(state.products_checked) ? state.products_checked : [];
-  const missing = ["single", "portfolio", "harness", "skill", "run"].filter((product) => !checked.includes(product));
-  if (missing.length) throw new Error(`Functional canary state is missing products: ${missing.join(", ")}.`);
+  const checkedSet = new Set(checked);
+  const missing = EXPECTED_PRODUCTS.filter((product) => !checkedSet.has(product));
+  if (missing.length || checked.length !== EXPECTED_PRODUCTS.length || checkedSet.size !== EXPECTED_PRODUCTS.length) {
+    throw new Error(`Functional canary state has an invalid product set${missing.length ? `; missing ${missing.join(", ")}` : ""}.`);
+  }
+  const checks = Array.isArray(state.checks) ? state.checks as Array<Record<string, unknown>> : [];
+  const checkProducts = checks.map(({ product }) => product);
+  for (const product of EXPECTED_PRODUCTS) {
+    const matching = checks.filter((check) => check.product === product);
+    if (matching.length !== 1) throw new Error(`Functional canary state must contain one ${product} check.`);
+    const check = matching[0];
+    if (check.ok !== true || check.contract !== "1.0" || check.http_status !== 200) {
+      throw new Error(`Functional canary ${product} check does not prove contract 1.0 success.`);
+    }
+    if (typeof check.checked_at !== "string" || !Number.isFinite(Date.parse(check.checked_at))) {
+      throw new Error(`Functional canary ${product} check has no valid server timestamp.`);
+    }
+  }
+  if (new Set(checkProducts).size !== EXPECTED_PRODUCTS.length) {
+    throw new Error("Functional canary state contains duplicate or unexpected checks.");
+  }
   return {
     healthy: true,
     checked_at: state.checked_at,
     age_seconds: Math.round(ageMs / 1000),
     products_checked: checked,
-    checks: Array.isArray(state.checks) ? state.checks : [],
+    checks,
   };
+}
+
+function money(value: unknown): string {
+  const parsed = typeof value === "string" || typeof value === "number" ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? `$${parsed.toFixed(2)}` : "unavailable";
+}
+
+function renderMonitorNote(report: Record<string, any>): string {
+  const revenueValue = Number(report.revenue?.recognized_usdc || 0);
+  const costsValue = Number(trackedCostsInput);
+  const profitValue = revenueValue - costsValue;
+  const purchases = report.revenue?.purchases || {};
+  const ranks = report.discovery?.semantic_best_rank || {};
+  const indexed = report.discovery?.indexed_products || {};
+  const status = report.healthy ? "HEALTHY" : "DEGRADED";
+  const errors = Array.isArray(report.errors) && report.errors.length
+    ? report.errors.map((error: unknown) => `- ${String(error)}`).join("\n")
+    : "- None";
+  return `# Mimir x402 Monitor
+
+- **STATUS:** ${status}
+- **Customer revenue:** ${money(revenueValue)} / $1,000.00
+- **Current profit:** ${money(profitValue)} (customer revenue minus ${money(costsValue)} tracked external costs)
+- **Customer purchases:** ${Number(purchases.total || 0)}
+- **Last refreshed:** ${report.checked_at}
+
+Owner-funded launch proofs are excluded from both customer revenue and profit. Wallet reserves are capital, not revenue.
+
+## Current milestone
+
+Five paid products are live on Base mainnet. All five real handlers are exercised by authenticated six-hour functional canaries, while the 15-minute monitor verifies free routes, exact x402 challenges, global Bazaar discovery, and on-chain revenue. Every successful semantic result now carries an explicit reusable-service contract in \`service_reuse\`.
+
+## What is next
+
+1. Complete and verify the reusable-result production release and hardened deploy workflow.
+2. Build FlakeVerdict, the strongest currently validated underserved x402 opportunity: historical CI flake versus regression diagnosis.
+3. Improve unbranded marketplace rank for BountyVerdict and Portfolio while measuring only genuine customer settlements.
+4. Reach the first unique paying agent, then optimize from observed calls rather than owner-funded proofs.
+
+## Production health
+
+- API: ${report.production_api}
+- Payment/network: Base mainnet USDC, exact x402 v2
+- Functional canary: ${report.functional?.healthy === true ? "healthy" : "unhealthy or stale"}
+- Latest functional pass: ${report.functional?.checked_at || "unavailable"}
+- Products checked: ${Array.isArray(report.functional?.products_checked) ? report.functional.products_checked.join(", ") : "unavailable"}
+- Monitor errors:
+${errors}
+
+## Products and distribution
+
+| Product | Price | Global semantic best rank | Merchant cache |
+|---|---:|---:|---|
+| BountyVerdict | $0.05 | ${ranks.single ?? "not found"} | ${indexed.single ? "indexed" : "pending"} |
+| BountyVerdict Portfolio | $0.40 | ${ranks.portfolio ?? "not found"} | ${indexed.portfolio ? "indexed" : "pending"} |
+| HarnessVerdict | $0.03 | ${ranks.harness ?? "not found"} | ${indexed.harness ? "indexed" : "pending"} |
+| SkillVerdict | $0.06 | ${ranks.skill ?? "not found"} | ${indexed.skill ? "indexed" : "pending"} |
+| RunVerdict | $0.04 | ${ranks.run ?? "not found"} | ${indexed.run ? "indexed" : "pending"} |
+
+## Revenue detail
+
+- Single verdict purchases: ${Number(purchases.single || 0)}
+- Portfolio purchases: ${Number(purchases.portfolio || 0)}
+- Harness purchases: ${Number(purchases.harness || 0)}
+- Skill purchases: ${Number(purchases.skill || 0)}
+- Run purchases: ${Number(purchases.run || 0)}
+- Remaining to first goal: ${money(report.revenue?.remaining_usdc)}
+
+This file is overwritten by the production monitor. Machine-readable state: \`~/.local/state/bountyverdict/distribution-status.json\`.
+`;
 }
 
 const checkedAt = new Date().toISOString();
@@ -320,7 +424,7 @@ const report = {
   errors,
 };
 
-await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 });
-await writeFile(stateFile, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+await atomicWrite(stateFile, `${JSON.stringify(report, null, 2)}\n`);
+await atomicWrite(monitorNoteFile, renderMonitorNote(report));
 console.log(JSON.stringify(report, null, 2));
 if (errors.length) process.exitCode = 1;

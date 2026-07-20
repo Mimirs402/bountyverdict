@@ -96,7 +96,7 @@ The credential-free production monitor verifies all free routes, all five exact 
 npm run distribution:monitor
 ```
 
-It writes the latest machine-readable snapshot to `~/.local/state/bountyverdict/distribution-status.json`. The versioned user-service templates in `ops/systemd/` run it every 15 minutes; per-product merchant indexing and semantic-search rank are tracked without treating normal discovery-cache delay as a health failure. Owner-funded production proofs are retained as settlement evidence but explicitly excluded from earned revenue and $1,000 progress.
+It atomically writes the latest machine-readable snapshot to `~/.local/state/bountyverdict/distribution-status.json` and overwrites the SSH-friendly milestone dashboard at `~/notes/mimirx402.md`, keeping health, next work, customer revenue, tracked costs, and profit at the top. The versioned user-service templates in `ops/systemd/` run it every 15 minutes; per-product merchant indexing and semantic-search rank are tracked without treating normal discovery-cache delay as a health failure. Owner-funded production proofs are retained as settlement evidence but explicitly excluded from earned revenue and $1,000 progress.
 
 The separate six-hour functional canary invokes each real paid handler against a hard-coded public fixture without creating a settlement or accepting a customer-controlled target. It validates commit pinning, coverage, structured output, and failed-job log retrieval—not just HTTP availability. Its bearer token lives only in the Worker secret store, the repository Actions secret store, and a mode-0600 local token file:
 
@@ -105,7 +105,7 @@ CANARY_TOKEN=... npm run canary:production
 # Or: CANARY_TOKEN_FILE=~/.config/bountyverdict/canary.token npm run canary:production
 ```
 
-The latest result is written to `~/.local/state/bountyverdict/functional-canary.json`. The internal endpoint is absent from OpenAPI and Bazaar metadata, returns only a compact fixture summary, and responds as not found without the exact secret.
+The latest result is written to `~/.local/state/bountyverdict/functional-canary.json`. The internal endpoint is absent from OpenAPI and Bazaar metadata, returns only a compact fixture summary, responds as not found without the exact secret, and rate-limits each authenticated product canary at the Cloudflare edge.
 
 ## Deployment inputs
 

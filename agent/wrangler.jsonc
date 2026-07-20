@@ -11,13 +11,27 @@
     "X402_NETWORK": "eip155:84532",
     "X402_FACILITATOR_URL": "https://x402.org/facilitator"
   },
+  "ratelimits": [
+    {
+      "name": "CANARY_RATE_LIMITER",
+      "namespace_id": "402701",
+      "simple": { "limit": 1, "period": 60 }
+    }
+  ],
   "env": {
     "production": {
       "name": "bountyverdict-agent-production",
       "vars": {
         "X402_NETWORK": "eip155:8453",
         "X402_FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402"
-      }
+      },
+      "ratelimits": [
+        {
+          "name": "CANARY_RATE_LIMITER",
+          "namespace_id": "402702",
+          "simple": { "limit": 1, "period": 60 }
+        }
+      ]
     }
   }
 }

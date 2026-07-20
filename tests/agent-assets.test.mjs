@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const readJson = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
+const assertReusable = (value) => {
+  assert.equal(value?.reusable, true);
+  assert.equal(value?.fresh_result_per_successful_call, true);
+  assert.equal(value?.reliability, "bounded_live_check");
+  assert.match(value?.guidance || "", /^Call /);
+};
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
@@ -12,6 +18,9 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.match(manifest.test_api, /^https:\/\//);
   assert.equal(manifest.test_network, "eip155:84532");
   assert.deepEqual(manifest.products.map((product) => product.price_usdc), ["0.05", "0.40", "0.03", "0.06", "0.04"]);
+  assert.ok(manifest.products.every((product) => product.reusable === true));
+  assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
+  assert.equal(manifest.reliability.scheduled_functional_canaries, true);
   assert.match(manifest.skill, /\/SKILL\.md$/);
   assert.match(manifest.skills.audit_agent_harness, /audit-agent-harness\/SKILL\.md$/);
   assert.match(manifest.skills.preflight_agent_skills, /preflight-agent-skills\/SKILL\.md$/);
@@ -26,17 +35,23 @@ test("public samples remain valid JSON with the declared product contracts", asy
   const runDiagnosis = await readJson("../samples/run.json");
   assert.equal(verdict.product, "BountyVerdict");
   assert.ok(["AVOID", "CAUTION", "VIABLE"].includes(verdict.verdict));
+  assertReusable(verdict.service_reuse);
   assert.equal(portfolio.product, "BountyVerdict Portfolio");
+  assertReusable(portfolio.service_reuse);
+  portfolio.ranked.forEach((result) => assertReusable(result.service_reuse));
   assert.equal(portfolio.counts.checked, portfolio.ranked.length);
   assert.equal(portfolio.counts.failed, portfolio.failures.length);
   assert.equal(harness.product, "HarnessVerdict");
   assert.ok(["READY", "REVIEW", "REPAIR"].includes(harness.verdict));
+  assertReusable(harness.service_reuse);
   assert.match(harness.repository.commit_sha, /^[a-f0-9]{40}$/);
   assert.equal(skillAudit.product, "SkillVerdict");
   assert.ok(["LOW_RISK", "REVIEW", "BLOCK"].includes(skillAudit.verdict));
+  assertReusable(skillAudit.service_reuse);
   assert.match(skillAudit.repository.commit_sha, /^[a-f0-9]{40}$/);
   assert.equal(runDiagnosis.product, "RunVerdict");
   assert.ok(["PASS", "WAIT", "RETRY", "FIX", "INVESTIGATE"].includes(runDiagnosis.verdict));
+  assertReusable(runDiagnosis.service_reuse);
   assert.match(runDiagnosis.run.head_sha, /^[a-f0-9]{40}$/);
 });
 
@@ -49,6 +64,7 @@ test("hosted RunVerdict workflow caps payment and treats logs as untrusted", asy
   assert.match(skill, /40000/);
   assert.match(skill, /untrusted evidence/i);
   assert.match(skill, /Never reveal wallet secrets/);
+  assert.match(skill, /service_reuse/);
 });
 
 test("hosted SkillVerdict workflow blocks unsafe installation and caps payment", async () => {
@@ -61,6 +77,7 @@ test("hosted SkillVerdict workflow blocks unsafe installation and caps payment",
   assert.match(skill, /BLOCK/);
   assert.match(skill, /Never install, load, or execute/);
   assert.match(skill, /Never reveal wallet secrets/);
+  assert.match(skill, /service_reuse/);
 });
 
 test("hosted HarnessVerdict skill has payment and evidence safety gates", async () => {
@@ -72,6 +89,7 @@ test("hosted HarnessVerdict skill has payment and evidence safety gates", async 
   assert.match(skill, /30000/);
   assert.match(skill, /commit_sha/);
   assert.match(skill, /Never reveal wallet secrets/);
+  assert.match(skill, /service_reuse/);
 });
 
 test("hosted agent skill has valid minimal frontmatter and safety gates", async () => {
@@ -84,4 +102,5 @@ test("hosted agent skill has valid minimal frontmatter and safety gates", async 
   assert.match(skill, /50000/);
   assert.match(skill, /400000/);
   assert.match(skill, /Never reveal wallet secrets/);
+  assert.match(skill, /service_reuse/);
 });

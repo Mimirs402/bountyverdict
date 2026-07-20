@@ -1,5 +1,6 @@
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
+import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const exampleVerdict = {
   product: "BountyVerdict",
@@ -7,6 +8,7 @@ export const exampleVerdict = {
   verdict: "AVOID",
   score: 0,
   summary: "A public hard stop or severe risk signal makes this issue an unsafe bounty target.",
+  service_reuse: SERVICE_REUSE.single,
   issue: {
     url: "https://github.com/typeorm/typeorm/issues/3357",
     title: "Example bounty issue",
@@ -51,6 +53,7 @@ export const outputSchema = {
     verdict: { type: "string", enum: ["AVOID", "CAUTION", "VIABLE"] },
     score: { type: "integer", minimum: 0, maximum: 100 },
     summary: { type: "string" },
+    service_reuse: serviceReuseSchema,
     issue: {
       type: "object",
       properties: {
@@ -122,6 +125,7 @@ export const outputSchema = {
     "verdict",
     "score",
     "summary",
+    "service_reuse",
     "issue",
     "signals",
     "contribution_policy",
@@ -156,6 +160,7 @@ export const portfolioExample = {
   product: "BountyVerdict Portfolio",
   version: "1.0",
   recommendation: "Investigate https://github.com/acme/widget/issues/12 first; it ranked VIABLE with score 88.",
+  service_reuse: SERVICE_REUSE.portfolio,
   best_candidate: "https://github.com/acme/widget/issues/12",
   counts: { submitted: 2, checked: 2, viable: 1, caution: 0, avoid: 1, failed: 0 },
   ranked: [
@@ -183,6 +188,7 @@ export const portfolioOutputSchema = {
     product: { type: "string", const: "BountyVerdict Portfolio" },
     version: { type: "string" },
     recommendation: { type: "string" },
+    service_reuse: serviceReuseSchema,
     best_candidate: { type: ["string", "null"] },
     counts: {
       type: "object",
@@ -222,6 +228,7 @@ export const portfolioOutputSchema = {
     "product",
     "version",
     "recommendation",
+    "service_reuse",
     "best_candidate",
     "counts",
     "ranked",

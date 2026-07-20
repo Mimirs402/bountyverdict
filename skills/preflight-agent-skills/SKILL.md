@@ -45,4 +45,6 @@ Retry the identical request with an x402-compatible client only after validation
 
 Require `repository.commit_sha`. Follow every `evidence_url`; compare `capabilities.declared` with `capabilities.observed`; inspect `external_domains`; and reject incomplete scans when `selection_truncated` or skipped files matter to the requested capability.
 
+Read `service_reuse` in every successful result. When it marks the audit reusable and fresh per successful call, reuse an existing audit only for the exact same commit and skill path. Call SkillVerdict when either changes, then preserve the newly audited commit.
+
 Secret-like values are intentionally redacted. Never request or reproduce them. If a hardcoded secret or exfiltration chain is reported, rotate affected credentials and remove the material from repository history.

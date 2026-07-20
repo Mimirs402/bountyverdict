@@ -13,6 +13,7 @@ ExecStart=/usr/bin/env node --experimental-strip-types scripts/functional-canary
 NoNewPrivileges=yes
 PrivateTmp=yes
 UMask=0077
+TimeoutStartSec=11min
 
 [Install]
 WantedBy=default.target

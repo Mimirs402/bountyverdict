@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CheckError, type AgentVerdict } from "../src/check.ts";
 import { checkBountyPortfolio } from "../src/portfolio.ts";
+import { SERVICE_REUSE } from "../src/reuse.ts";
 
 function verdict(url: string, decision: AgentVerdict["verdict"], score: number): AgentVerdict {
   return {
@@ -10,6 +11,7 @@ function verdict(url: string, decision: AgentVerdict["verdict"], score: number):
     verdict: decision,
     score,
     summary: "test",
+    service_reuse: SERVICE_REUSE.single,
     issue: { url, title: "Issue", state: "open", repository: "acme/widget" },
     signals: [],
     contribution_policy: { ai_use: "NO_EXPLICIT_RULE_FOUND", documents: [] },

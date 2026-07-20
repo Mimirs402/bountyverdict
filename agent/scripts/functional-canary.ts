@@ -1,11 +1,15 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { CANARY_PRODUCTS, isCanaryProduct, type CanaryProduct } from "../src/canary.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const TIMEOUT_MS = 120_000;
-const api = new URL(process.env.PRODUCTION_API_URL || DEFAULT_API).origin;
+const configuredApi = new URL(process.env.PRODUCTION_API_URL || DEFAULT_API);
+if (configuredApi.origin !== DEFAULT_API || configuredApi.pathname !== "/" || configuredApi.search || configuredApi.hash) {
+  throw new Error("Functional canaries may only send credentials to the exact production Worker origin.");
+}
+const api = configuredApi.origin;
 const tokenFile = process.env.CANARY_TOKEN_FILE;
 const token = (process.env.CANARY_TOKEN || (tokenFile ? await readFile(tokenFile, "utf8") : "")).trim();
 const stateFile = process.env.CANARY_STATE_FILE ||
@@ -29,6 +33,7 @@ for (const product of products) {
   try {
     const response = await fetch(`${api}/_internal/canary/${product}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      redirect: "error",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const body = await response.json() as Record<string, unknown>;
@@ -57,6 +62,8 @@ const report = {
 };
 
 await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 });
-await writeFile(stateFile, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+const temporaryStateFile = `${stateFile}.${process.pid}.tmp`;
+await writeFile(temporaryStateFile, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+await rename(temporaryStateFile, stateFile);
 console.log(JSON.stringify(report, null, 2));
 if (!report.healthy) process.exitCode = 1;

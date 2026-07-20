@@ -3,6 +3,12 @@
   "version": "1.0",
   "verdict": "RETRY",
   "summary": "2 failed jobs; primary evidence indicates timeout.",
+  "service_reuse": {
+    "reusable": true,
+    "fresh_result_per_successful_call": true,
+    "reliability": "bounded_live_check",
+    "guidance": "Call RunVerdict for every public GitHub Actions run that needs diagnosis; each successful call reads that run's exact attempt and currently available bounded failed-job logs."
+  },
   "retryability": "LIKELY",
   "run": {
     "url": "https://github.com/acme/widget/actions/runs/123456789",

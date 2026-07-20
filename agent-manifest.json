@@ -14,12 +14,19 @@
   "marketplace": "Coinbase x402 Bazaar",
   "network": "eip155:8453",
   "currency": "USDC",
+  "reliability": {
+    "scheduled_functional_canaries": true,
+    "canary_interval_hours": 6,
+    "result_guidance_field": "service_reuse",
+    "promise": "Every successful result states when agents should reuse the bounded live check."
+  },
   "products": [
     {
       "name": "BountyVerdict",
       "method": "GET",
       "path": "/api/verdict",
       "price_usdc": "0.05",
+      "reusable": true,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/verdict.json"
     },
     {
@@ -27,6 +34,7 @@
       "method": "POST",
       "path": "/api/portfolio",
       "price_usdc": "0.40",
+      "reusable": true,
       "minimum_candidates": 2,
       "maximum_candidates": 10,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/portfolio.json"
@@ -36,6 +44,7 @@
       "method": "GET",
       "path": "/api/harness",
       "price_usdc": "0.03",
+      "reusable": true,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/harness.json"
     },
     {
@@ -43,6 +52,7 @@
       "method": "GET",
       "path": "/api/skill",
       "price_usdc": "0.06",
+      "reusable": true,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/skill.json"
     },
     {
@@ -50,6 +60,7 @@
       "method": "GET",
       "path": "/api/run",
       "price_usdc": "0.04",
+      "reusable": true,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/run.json"
     }
   ],
@@ -61,5 +72,5 @@
     "diagnose_github_actions": "https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md"
   },
   "source": "https://github.com/cristianmoroaica/bountyverdict/tree/main/agent",
-  "updated_at": "2026-07-20T11:42:00.000Z"
+  "updated_at": "2026-07-20T12:04:39.000Z"
 }

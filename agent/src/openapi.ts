@@ -309,6 +309,7 @@ export function createLlmsText(origin: string): string {
 - RunVerdict price: $0.04 USDC per bounded exact-attempt diagnosis
 - Run verdicts: PASS, WAIT, RETRY, FIX, INVESTIGATE
 - Failed or invalid checks are not settled
+- Every successful result includes explicit service_reuse guidance so agents know when to call the same reliable bounded check again
 
 ## Differentiation
 

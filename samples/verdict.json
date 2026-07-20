@@ -4,6 +4,12 @@
   "verdict": "AVOID",
   "score": 0,
   "summary": "A public hard stop or severe risk signal makes this issue an unsafe bounty target.",
+  "service_reuse": {
+    "reusable": true,
+    "fresh_result_per_successful_call": true,
+    "reliability": "bounded_live_check",
+    "guidance": "Call BountyVerdict for every new public bounty candidate and again after issue activity changes; each successful call re-reads bounded live GitHub evidence."
+  },
   "issue": {
     "url": "https://github.com/typeorm/typeorm/issues/3357",
     "title": "Example bounty issue",

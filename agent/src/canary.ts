@@ -71,6 +71,22 @@ function validCommit(value: string): boolean {
   return /^[0-9a-f]{40}$/i.test(value);
 }
 
+export function assertServiceReuseGuidance(value: unknown, expectedProduct: string): void {
+  const reuse = value as Partial<{
+    reusable: boolean;
+    fresh_result_per_successful_call: boolean;
+    reliability: string;
+    guidance: string;
+  }> | null;
+  requireCondition(reuse?.reusable === true, `${expectedProduct} is not marked reusable.`);
+  requireCondition(reuse.fresh_result_per_successful_call === true, `${expectedProduct} does not promise a fresh successful result.`);
+  requireCondition(reuse.reliability === "bounded_live_check", `${expectedProduct} reliability mode changed.`);
+  requireCondition(
+    typeof reuse.guidance === "string" && reuse.guidance.length >= 80 && reuse.guidance.startsWith(`Call ${expectedProduct}`),
+    `${expectedProduct} reuse guidance is missing or not product-specific.`,
+  );
+}
+
 export function isCanaryProduct(value: string): value is CanaryProduct {
   return (CANARY_PRODUCTS as readonly string[]).includes(value);
 }
@@ -119,8 +135,12 @@ export async function runFunctionalCanary(
     requireCondition(verdict.product === "BountyVerdict" && verdict.version === "1.0", "Single product contract changed.");
     requireCondition(verdict.issue.url === CANARY_FIXTURES.single, "Single result does not match its fixture.");
     requireCondition(["AVOID", "CAUTION", "VIABLE"].includes(verdict.verdict), "Single verdict is invalid.");
+    assertServiceReuseGuidance(verdict.service_reuse, "BountyVerdict");
     requireCondition(validDate(verdict.checked_at), "Single result has no valid check time.");
-    requireCondition(verdict.coverage.timeline_events_scanned >= 0, "Single coverage is missing.");
+    requireCondition(
+      verdict.coverage.comments_scanned > 0 && verdict.coverage.timeline_events_scanned > 0 && verdict.coverage.policy_documents_scanned > 0,
+      "Single fixture no longer proves comment, timeline, and policy evidence collection.",
+    );
     source = CANARY_FIXTURES.single;
     result = {
       verdict: verdict.verdict,
@@ -130,6 +150,7 @@ export async function runFunctionalCanary(
       timeline_events_scanned: verdict.coverage.timeline_events_scanned,
       policy_documents_scanned: verdict.coverage.policy_documents_scanned,
       github_rate_limit_remaining: verdict.coverage.github_rate_limit_remaining,
+      reuse_guidance: verdict.service_reuse.guidance,
     };
   } else if (product === "portfolio") {
     const portfolio = await dependencies.checkPortfolio(CANARY_FIXTURES.portfolio, env);
@@ -137,18 +158,25 @@ export async function runFunctionalCanary(
     requireCondition(portfolio.counts.submitted === 2, "Portfolio did not retain both fixture inputs.");
     requireCondition(portfolio.counts.checked === 2 && portfolio.counts.failed === 0, "Portfolio did not successfully check both fixtures.");
     requireCondition(portfolio.ranked.length === 2 && validDate(portfolio.checked_at), "Portfolio output coverage is incomplete.");
+    assertServiceReuseGuidance(portfolio.service_reuse, "BountyVerdict Portfolio");
     source = [...CANARY_FIXTURES.portfolio];
     result = {
       best_candidate: portfolio.best_candidate,
       counts: portfolio.counts,
       verdicts: portfolio.ranked.map(({ issue, verdict }) => ({ issue_url: issue.url, verdict })),
+      reuse_guidance: portfolio.service_reuse.guidance,
     };
   } else if (product === "harness") {
     const audit = await dependencies.checkHarness(CANARY_FIXTURES.harness, env);
     requireCondition(audit.product === "HarnessVerdict" && audit.version === "1.0", "Harness product contract changed.");
     requireCondition(audit.repository.full_name.toLowerCase() === "openai/codex", "Harness result does not match its fixture.");
     requireCondition(validCommit(audit.repository.commit_sha), "Harness result is not pinned to a commit.");
-    requireCondition(audit.coverage.tree_entries > 0 && audit.coverage.files_scanned > 0 && validDate(audit.checked_at), "Harness coverage is incomplete.");
+    requireCondition(
+      audit.coverage.tree_entries > 0 && audit.coverage.files_scanned > 0 &&
+      !audit.coverage.tree_truncated && !audit.coverage.file_selection_truncated && validDate(audit.checked_at),
+      "Harness coverage is incomplete or truncated.",
+    );
+    assertServiceReuseGuidance(audit.service_reuse, "HarnessVerdict");
     source = CANARY_FIXTURES.harness;
     result = {
       verdict: audit.verdict,
@@ -159,6 +187,7 @@ export async function runFunctionalCanary(
       tree_entries: audit.coverage.tree_entries,
       files_scanned: audit.coverage.files_scanned,
       github_rate_limit_remaining: audit.coverage.github_rate_limit_remaining,
+      reuse_guidance: audit.service_reuse.guidance,
     };
   } else if (product === "skill") {
     const audit = await dependencies.checkSkill(CANARY_FIXTURES.skill.repository, CANARY_FIXTURES.skill.path, env);
@@ -166,7 +195,12 @@ export async function runFunctionalCanary(
     requireCondition(audit.repository.full_name.toLowerCase() === "cristianmoroaica/bountyverdict", "Skill result does not match its fixture.");
     requireCondition(audit.skill.path === `${CANARY_FIXTURES.skill.path}/SKILL.md`, "Skill result does not match its fixture path.");
     requireCondition(validCommit(audit.repository.commit_sha), "Skill result is not pinned to a commit.");
-    requireCondition(audit.coverage.files_scanned > 0 && audit.coverage.bytes_scanned > 0 && validDate(audit.checked_at), "Skill coverage is incomplete.");
+    requireCondition(
+      audit.coverage.files_scanned > 0 && audit.coverage.bytes_scanned > 0 &&
+      !audit.coverage.selection_truncated && validDate(audit.checked_at),
+      "Skill coverage is incomplete or truncated.",
+    );
+    assertServiceReuseGuidance(audit.service_reuse, "SkillVerdict");
     source = `${CANARY_FIXTURES.skill.repository}/tree/main/${CANARY_FIXTURES.skill.path}`;
     result = {
       verdict: audit.verdict,
@@ -175,14 +209,20 @@ export async function runFunctionalCanary(
       files_scanned: audit.coverage.files_scanned,
       bytes_scanned: audit.coverage.bytes_scanned,
       github_rate_limit_remaining: audit.coverage.github_rate_limit_remaining,
+      reuse_guidance: audit.service_reuse.guidance,
     };
   } else {
     const diagnosis = await dependencies.diagnoseRun(CANARY_FIXTURES.run, env);
     requireCondition(diagnosis.product === "RunVerdict" && diagnosis.version === "1.0", "Run product contract changed.");
     requireCondition(diagnosis.run.id === "29728148711", "Run result does not match its fixture.");
     requireCondition(diagnosis.run.status === "completed" && diagnosis.coverage.failed_jobs > 0, "Run fixture no longer proves failure diagnosis.");
-    requireCondition(diagnosis.coverage.jobs_reported > 0 && diagnosis.coverage.logs_scanned > 0, "RunVerdict did not retrieve a failed-job log.");
+    requireCondition(
+      diagnosis.coverage.jobs_reported > 0 && diagnosis.coverage.logs_scanned > 0 &&
+      diagnosis.coverage.logs_unavailable === 0 && !diagnosis.coverage.jobs_truncated,
+      "RunVerdict did not retrieve complete bounded failed-job evidence.",
+    );
     requireCondition(validDate(diagnosis.checked_at), "Run result has no valid check time.");
+    assertServiceReuseGuidance(diagnosis.service_reuse, "RunVerdict");
     source = CANARY_FIXTURES.run;
     result = {
       verdict: diagnosis.verdict,
@@ -193,6 +233,7 @@ export async function runFunctionalCanary(
       logs_scanned: diagnosis.coverage.logs_scanned,
       log_bytes_read: diagnosis.coverage.log_bytes_read,
       github_rate_limit_remaining: diagnosis.coverage.github_rate_limit_remaining,
+      reuse_guidance: diagnosis.service_reuse.guidance,
     };
   }
 

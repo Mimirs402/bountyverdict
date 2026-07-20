@@ -4,6 +4,12 @@
   "verdict": "REVIEW",
   "score": 77,
   "summary": "The instruction stack is usable but has portability, scope, or maintenance risks worth fixing before autonomous work.",
+  "service_reuse": {
+    "reusable": true,
+    "fresh_result_per_successful_call": true,
+    "reliability": "bounded_live_check",
+    "guidance": "Call HarnessVerdict for every public repository before autonomous coding and again after its default branch changes; each successful audit is pinned to the commit it actually inspected."
+  },
   "repository": {
     "url": "https://github.com/acme/widget",
     "full_name": "acme/widget",

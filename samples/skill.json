@@ -4,6 +4,12 @@
   "verdict": "REVIEW",
   "risk_score": 30,
   "summary": "The skill has consequential behavior or structural ambiguity that requires manual review before installation.",
+  "service_reuse": {
+    "reusable": true,
+    "fresh_result_per_successful_call": true,
+    "reliability": "bounded_live_check",
+    "guidance": "Call SkillVerdict when no current audit exists for the exact public skill commit and path, and again whenever either changes; each successful audit re-reads the bounded bundle and pins its findings."
+  },
   "repository": {
     "url": "https://github.com/acme/agent-skills",
     "full_name": "acme/agent-skills",

@@ -1,11 +1,13 @@
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
+import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const runExample = {
   product: "RunVerdict",
   version: "1.0",
   verdict: "RETRY",
   summary: "2 failed jobs; primary evidence indicates timeout.",
+  service_reuse: SERVICE_REUSE.run,
   retryability: "LIKELY",
   run: {
     url: "https://github.com/acme/widget/actions/runs/123456789",
@@ -83,6 +85,7 @@ export const runOutputSchema = {
     version: { type: "string" },
     verdict: { type: "string", enum: ["PASS", "WAIT", "RETRY", "FIX", "INVESTIGATE"] },
     summary: { type: "string" },
+    service_reuse: serviceReuseSchema,
     retryability: { type: "string", enum: ["LIKELY", "POSSIBLE", "UNLIKELY", "UNKNOWN"] },
     run: {
       type: "object",
@@ -132,7 +135,7 @@ export const runOutputSchema = {
     checked_at: { type: "string" },
     limitations: { type: "array", items: { type: "string" } },
   },
-  required: ["product", "version", "verdict", "summary", "retryability", "run", "diagnosis", "failed_jobs", "next_actions", "coverage", "checked_at", "limitations"],
+  required: ["product", "version", "verdict", "summary", "service_reuse", "retryability", "run", "diagnosis", "failed_jobs", "next_actions", "coverage", "checked_at", "limitations"],
 };
 
 export const runDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({

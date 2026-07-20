@@ -1,5 +1,6 @@
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
+import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const skillExample = {
   product: "SkillVerdict",
@@ -7,6 +8,7 @@ export const skillExample = {
   verdict: "REVIEW",
   risk_score: 30,
   summary: "The skill has consequential behavior or structural ambiguity that requires manual review before installation.",
+  service_reuse: SERVICE_REUSE.skill,
   repository: {
     url: "https://github.com/acme/agent-skills",
     full_name: "acme/agent-skills",
@@ -71,6 +73,7 @@ export const skillOutputSchema = {
     verdict: { type: "string", enum: ["LOW_RISK", "REVIEW", "BLOCK"] },
     risk_score: { type: "integer", minimum: 0, maximum: 100 },
     summary: { type: "string" },
+    service_reuse: serviceReuseSchema,
     repository: {
       type: "object",
       properties: {
@@ -119,7 +122,7 @@ export const skillOutputSchema = {
     checked_at: { type: "string" },
     limitations: { type: "array", items: { type: "string" } },
   },
-  required: ["product", "version", "verdict", "risk_score", "summary", "repository", "skill", "capabilities", "findings", "recommendations", "coverage", "checked_at", "limitations"],
+  required: ["product", "version", "verdict", "risk_score", "summary", "service_reuse", "repository", "skill", "capabilities", "findings", "recommendations", "coverage", "checked_at", "limitations"],
 };
 
 export const skillDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({

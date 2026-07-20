@@ -2,14 +2,9 @@ name: Deploy paid Worker
 
 on:
   workflow_dispatch:
-    inputs:
-      api_url:
-        description: Optional HTTPS Worker origin override
-        required: false
-        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: bountyverdict-production
@@ -22,17 +17,10 @@ jobs:
     defaults:
       run:
         working-directory: agent
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
-      CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
-      CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
-      UPSTREAM_GITHUB_TOKEN: ${{ secrets.UPSTREAM_GITHUB_TOKEN }}
-      CANARY_TOKEN: ${{ secrets.CANARY_TOKEN }}
-      API_URL_OVERRIDE: ${{ inputs.api_url }}
-
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -40,9 +28,16 @@ jobs:
           cache: npm
           cache-dependency-path: agent/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Verify required deployment secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+          UPSTREAM_GITHUB_TOKEN: ${{ secrets.UPSTREAM_GITHUB_TOKEN }}
+          CANARY_TOKEN: ${{ secrets.CANARY_TOKEN }}
         run: |
           node -e '
             const required = ["CLOUDFLARE_API_TOKEN", "PAY_TO_ADDRESS", "CDP_API_KEY_ID", "CDP_API_KEY_SECRET", "UPSTREAM_GITHUB_TOKEN", "CANARY_TOKEN"];
@@ -52,6 +47,13 @@ jobs:
           '
 
       - name: Deploy production Worker with secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+          UPSTREAM_GITHUB_TOKEN: ${{ secrets.UPSTREAM_GITHUB_TOKEN }}
+          CANARY_TOKEN: ${{ secrets.CANARY_TOKEN }}
         run: |
           umask 077
           secret_file=/tmp/bountyverdict-worker-secrets.json
@@ -68,11 +70,13 @@ jobs:
             }));
           ' "$secret_file"
           npx wrangler deploy --env production --secrets-file "$secret_file" 2>&1 | tee "$deploy_log"
-          api_url="$API_URL_OVERRIDE"
-          if [ -z "$api_url" ]; then
-            api_url=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "$deploy_log" | tail -1)
-          fi
-          node -e 'const value = new URL(process.argv[1]); if (value.protocol !== "https:" || value.pathname !== "/") throw new Error("Could not resolve deployed Worker HTTPS origin."); console.log(`PRODUCTION_API_URL=${value.origin}`)' "$api_url" >> "$GITHUB_ENV"
+          api_url=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "$deploy_log" | tail -1)
+          node -e '
+            const expected = "https://bountyverdict-agent-production.mimirslab.workers.dev";
+            const value = new URL(process.argv[1]);
+            if (value.origin !== expected || value.pathname !== "/") throw new Error("Deployment did not resolve to the exact production Worker origin.");
+            console.log(`PRODUCTION_API_URL=${value.origin}`);
+          ' "$api_url" >> "$GITHUB_ENV"
 
       - name: Verify live free and paid contracts
         run: |
@@ -94,18 +98,46 @@ jobs:
           PRODUCT=run RESOURCE_SERVER_URL="$PRODUCTION_API_URL" npm run payment:inspect
 
       - name: Verify real production handlers
+        env:
+          CANARY_TOKEN: ${{ secrets.CANARY_TOKEN }}
         run: npm run canary:production
 
       - name: Activate public agent manifest
         run: npm run manifest:activate
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activated-agent-manifest
+          path: agent-manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: activated-agent-manifest
+          path: /tmp/bountyverdict-activation
+
       - name: Publish activation record
-        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          cp /tmp/bountyverdict-activation/agent-manifest.json agent-manifest.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add agent-manifest.json
           if ! git diff --cached --quiet; then
             git commit -m "Activate BountyVerdict production manifest"
-            git push
+            auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" push origin HEAD:main
           fi

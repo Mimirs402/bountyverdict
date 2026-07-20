@@ -5,6 +5,7 @@ import {
   type AgentVerdict,
   type CheckEnvironment,
 } from "./check.ts";
+import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 type FetchLike = typeof fetch;
 type CheckFunction = typeof checkGithubIssue;
@@ -18,6 +19,7 @@ export interface PortfolioVerdict {
   product: "BountyVerdict Portfolio";
   version: "1.0";
   recommendation: string;
+  service_reuse: ServiceReuseGuidance;
   best_candidate: string | null;
   counts: {
     submitted: number;
@@ -119,6 +121,7 @@ export async function checkBountyPortfolio(
     recommendation: best
       ? `Investigate ${best.issue.url} first; it ranked ${best.verdict} with score ${best.score}.`
       : "Do not start any submitted bounty; every successfully checked candidate ranked AVOID.",
+    service_reuse: SERVICE_REUSE.portfolio,
     best_candidate: best?.issue.url ?? null,
     counts: {
       submitted: urls.length,

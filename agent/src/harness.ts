@@ -1,3 +1,5 @@
+import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
+
 export interface HarnessEnvironment {
   GITHUB_TOKEN?: string;
 }
@@ -30,6 +32,7 @@ export interface HarnessAudit {
   verdict: "READY" | "REVIEW" | "REPAIR";
   score: number;
   summary: string;
+  service_reuse: ServiceReuseGuidance;
   repository: {
     url: string;
     full_name: string;
@@ -309,6 +312,7 @@ export function analyzeHarnessSnapshot(input: {
       : verdict === "REVIEW"
         ? "The instruction stack is usable but has portability, scope, or maintenance risks worth fixing before autonomous work."
         : "The repository instruction stack has a hard reliability or safety gap that should be repaired before autonomous work.",
+    service_reuse: SERVICE_REUSE.harness,
     repository: {
       url: input.repositoryUrl,
       full_name: input.fullName,

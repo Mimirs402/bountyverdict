@@ -1,5 +1,6 @@
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
+import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const harnessExample = {
   product: "HarnessVerdict",
@@ -7,6 +8,7 @@ export const harnessExample = {
   verdict: "REVIEW",
   score: 77,
   summary: "The instruction stack is usable but has portability, scope, or maintenance risks worth fixing before autonomous work.",
+  service_reuse: SERVICE_REUSE.harness,
   repository: {
     url: "https://github.com/acme/widget",
     full_name: "acme/widget",
@@ -73,6 +75,7 @@ export const harnessOutputSchema = {
     verdict: { type: "string", enum: ["READY", "REVIEW", "REPAIR"] },
     score: { type: "integer", minimum: 0, maximum: 100 },
     summary: { type: "string" },
+    service_reuse: serviceReuseSchema,
     repository: {
       type: "object",
       properties: {
@@ -122,7 +125,7 @@ export const harnessOutputSchema = {
     checked_at: { type: "string" },
     limitations: { type: "array", items: { type: "string" } },
   },
-  required: ["product", "version", "verdict", "score", "summary", "repository", "surfaces", "portability", "findings", "recommendations", "coverage", "checked_at", "limitations"],
+  required: ["product", "version", "verdict", "score", "summary", "service_reuse", "repository", "surfaces", "portability", "findings", "recommendations", "coverage", "checked_at", "limitations"],
 };
 
 export const harnessDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({

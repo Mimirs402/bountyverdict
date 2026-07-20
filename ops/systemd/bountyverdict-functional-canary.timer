@@ -2,7 +2,7 @@
 Description=Run all BountyVerdict functional canaries every six hours
 
 [Timer]
-OnBootSec=5min
+OnBootSec=1min
 OnUnitActiveSec=6h
 RandomizedDelaySec=5min
 Persistent=true

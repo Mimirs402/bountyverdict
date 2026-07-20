@@ -1,4 +1,5 @@
 import { HarnessError, parseRepositoryUrl } from "./harness.ts";
+import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface SkillEnvironment {
   GITHUB_TOKEN?: string;
@@ -34,6 +35,7 @@ export interface SkillAudit {
   verdict: "LOW_RISK" | "REVIEW" | "BLOCK";
   risk_score: number;
   summary: string;
+  service_reuse: ServiceReuseGuidance;
   repository: {
     url: string;
     full_name: string;
@@ -291,6 +293,7 @@ export function analyzeSkillSnapshot(input: {
       : verdict === "REVIEW"
         ? "The skill has consequential behavior or structural ambiguity that requires manual review before installation."
         : "The skill contains a high-confidence dangerous pattern or accumulated risk that should block installation.",
+    service_reuse: SERVICE_REUSE.skill,
     repository: {
       url: input.repositoryUrl,
       full_name: input.fullName,

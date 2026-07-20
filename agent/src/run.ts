@@ -1,4 +1,5 @@
 import { HarnessError } from "./harness.ts";
+import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface RunEnvironment {
   GITHUB_TOKEN?: string;
@@ -46,6 +47,7 @@ export interface RunDiagnosis {
   version: "1.0";
   verdict: "PASS" | "WAIT" | "RETRY" | "FIX" | "INVESTIGATE";
   summary: string;
+  service_reuse: ServiceReuseGuidance;
   retryability: "LIKELY" | "POSSIBLE" | "UNLIKELY" | "UNKNOWN";
   run: {
     url: string;
@@ -285,6 +287,7 @@ export function analyzeRunSnapshot(input: {
         : primary
           ? `${failed.length} failed job${failed.length === 1 ? "" : "s"}; primary evidence indicates ${primary.family.toLowerCase().replace(/_/g, " ")}.`
           : `${failed.length} failed job${failed.length === 1 ? "" : "s"}, but bounded logs did not expose a reliable root-cause family.`,
+    service_reuse: SERVICE_REUSE.run,
     retryability,
     run: {
       url: input.runUrl,

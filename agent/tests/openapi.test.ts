@@ -14,6 +14,16 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.equal(operation["x-x402"].price, "$0.05");
   assert.equal(operation["x-x402"].network, "eip155:8453");
   assert.ok(operation.parameters.some((parameter) => parameter.name === "issue_url"));
+  const paidOperations = [
+    spec.paths["/api/verdict"].get,
+    spec.paths["/api/portfolio"].post,
+    spec.paths["/api/harness"].get,
+    spec.paths["/api/skill"].get,
+    spec.paths["/api/run"].get,
+  ];
+  for (const paid of paidOperations) {
+    assert.ok(paid.responses["200"].content["application/json"].schema.required.includes("service_reuse"));
+  }
   assert.equal(spec.paths["/api/portfolio"].post["x-x402"].price, "$0.40");
   assert.equal(spec.paths["/api/portfolio"].post.requestBody.content["application/json"].schema.properties.issue_urls.maxItems, 10);
   assert.equal(spec.paths["/api/harness"].get["x-x402"].price, "$0.03");
@@ -34,6 +44,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.match(llms, /SkillVerdict/);
   assert.match(llms, /\$0\.04 USDC/);
   assert.match(llms, /RunVerdict/);
+  assert.match(llms, /service_reuse guidance/);
   assert.match(llms, /preflight-github-bounties\/SKILL\.md/);
   assert.match(llms, /AI-work bans/);
 });

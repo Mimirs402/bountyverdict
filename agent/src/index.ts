@@ -9,6 +9,7 @@ import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { Hono, type MiddlewareHandler } from "hono";
 import { CheckError, checkGithubIssue } from "./check.ts";
 import {
+  BOUNTY_DISCOVERY_DESCRIPTION,
   discoveryExtension,
   exampleVerdict,
   portfolioDiscoveryExtension,
@@ -203,10 +204,10 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: "Check whether one public GitHub bounty is still available and worth pursuing before coding. Detects closed or locked issues, withdrawn rewards, maintainer rejection, competing pull requests, claimant and failed-attempt swarms, then returns AVOID, CAUTION, or VIABLE with public evidence and AI-contribution-policy coverage.",
+    description: BOUNTY_DISCOVERY_DESCRIPTION,
     mimeType: "application/json",
     serviceName: "BountyVerdict",
-    tags: ["github-bounty", "bounty-due-diligence", "worth-pursuing", "competing-pull-requests", "withdrawn-reward", "agent-decision"],
+    tags: ["github", "bounty", "eligibility", "claimability", "already-claimed", "assignment-status", "due-diligence"],
     iconUrl: ICON_URL,
     unpaidResponseBody: () => unpaidDecisionBody({
       product: "BountyVerdict",

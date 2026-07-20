@@ -1,4 +1,4 @@
-import { outputSchema, portfolioOutputSchema } from "./discovery.ts";
+import { BOUNTY_DISCOVERY_DESCRIPTION, outputSchema, portfolioOutputSchema } from "./discovery.ts";
 import { harnessOutputSchema } from "./harness-discovery.ts";
 import { skillOutputSchema } from "./skill-discovery.ts";
 import { runOutputSchema } from "./run-discovery.ts";
@@ -94,8 +94,8 @@ export function createOpenApi(
       },
       "/api/verdict": {
         get: {
-          summary: "Deep-preflight a public GitHub bounty issue",
-          description: "Check whether one public GitHub bounty is still available and worth pursuing before coding. Detects closed or locked issues, withdrawn rewards, maintainer rejection, competing pull requests, claimant and failed-attempt swarms, then returns AVOID, CAUTION, or VIABLE with public evidence and AI-contribution-policy coverage.",
+          summary: "Check GitHub bounty eligibility and claimability",
+          description: BOUNTY_DISCOVERY_DESCRIPTION,
           operationId: "checkBountyVerdict",
           ...agentMetadata(origin, {
             tags: ["bounty-due-diligence"],

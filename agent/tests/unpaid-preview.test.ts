@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
+import { BOUNTY_DISCOVERY_DESCRIPTION } from "../src/discovery.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 
 const env = {
@@ -79,6 +80,28 @@ for (const preview of cases) {
     assert.equal(body.payment.inspect_challenge_before_signing, true);
   });
 }
+
+test("BountyVerdict challenge leads with exact eligibility and claimability intent", async () => {
+  const response = await app.request(
+    "/api/verdict?issue_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo%2Fissues%2F1",
+    {},
+    env,
+  );
+  assert.equal(response.status, 402);
+  const encoded = response.headers.get("payment-required");
+  assert.ok(encoded);
+  const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(decoded.resource.description, BOUNTY_DISCOVERY_DESCRIPTION);
+  assert.deepEqual(decoded.resource.tags, [
+    "github",
+    "bounty",
+    "eligibility",
+    "claimability",
+    "already-claimed",
+    "assignment-status",
+    "due-diligence",
+  ]);
+});
 
 test("MCPDriftVerdict unpaid response identifies the compatibility boundary", async () => {
   const response = await app.request("/api/mcp-drift", {

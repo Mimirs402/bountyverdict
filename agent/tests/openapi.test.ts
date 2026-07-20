@@ -19,6 +19,8 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.equal(spec.tags.length, 7);
   assert.equal(new Set(spec.tags.map((tag) => tag.name)).size, 7);
   const operation = spec.paths["/api/verdict"].get;
+  assert.match(operation.summary, /GitHub bounty eligibility and claimability/i);
+  assert.match(operation.description, /already assigned or claimed/i);
   assert.equal(operation["x-x402"].price, "$0.05");
   assert.equal(operation["x-x402"].network, "eip155:8453");
   assert.ok(operation.parameters.some((parameter) => parameter.name === "issue_url"));

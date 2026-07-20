@@ -2,6 +2,9 @@ import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
+export const BOUNTY_DISCOVERY_DESCRIPTION =
+  "GitHub bounty eligibility and claimability preflight for one public issue before coding. Determines whether it is still open, already assigned or claimed, blocked by linked pull requests, affected by a withdrawn reward or maintainer rejection, crowded by failed attempts, or restricted by repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and bounded coverage.";
+
 export const exampleVerdict = {
   product: "BountyVerdict",
   version: "1.0",

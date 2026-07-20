@@ -18,7 +18,7 @@ const DEFAULT_START_BLOCK = "48876000";
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const MAINNET_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NETWORK = "eip155:8453";
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 30_000;
 
 const api = new URL(process.env.PRODUCTION_API_URL || DEFAULT_API).origin;
 const wallet = process.env.REVENUE_WALLET || DEFAULT_WALLET;
@@ -383,12 +383,12 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite now includes MCPDriftVerdict, a deterministic MCP tools/list upgrade gate that validates and computes before payment. An agent can install one router, select exactly one bounded GitHub or MCP decision check, validate its unpaid x402 challenge, and follow the product-specific result contract. Existing indexed products remain measurable; FlakeVerdict and MCPDriftVerdict stay marked pending until each has a genuine policy-bound indexing settlement.
+The seven-product suite now includes MCPDriftVerdict, a deterministic MCP tools/list upgrade gate that validates and computes before payment. Unattended GitHub-to-Cloudflare production deployment is verified end to end, including all seven exact payment contracts, authenticated real-handler canaries, manifest activation, and publication. Existing indexed products remain measurable; FlakeVerdict and MCPDriftVerdict stay marked pending until each has a genuine policy-bound indexing settlement.
 
 ## What is next
 
-1. Add a restricted Cloudflare Workers API token as the GitHub repository secret \`CLOUDFLARE_API_TOKEN\`; local authenticated deployment works, but unattended GitHub production deployments fail closed without it.
-2. Replace both broad CDP typed-data policies with the prepared seller-and-$0.40-bound rule in the dashboard, then provision and fund the policy-bound buyer before enabling the once-weekly real-settlement canary.
+1. Enable the \`policies#manage\` scope on the existing CDP API key. The guarded migration currently fails closed with HTTP 403; both broad predecessor policies remain unchanged and no EVM buyer account exists.
+2. Re-run the authorized migration to replace both broad CDP typed-data policies with the prepared seller-and-$0.40-bound rule, then provision and fund the policy-bound buyer before enabling the once-weekly real-settlement canary.
 3. Use the policy-bound buyer once per pending resource to index FlakeVerdict and MCPDriftVerdict and refresh stale catalog schemas; exclude every owner operation from revenue and verify cache propagation and unbranded rank.
 4. Keep the verified public router and per-product install paths current, then re-evaluate the next research-backed product after MCPDriftVerdict distribution data exists; MergeVerdict remains the leading public-PR gate candidate.
 5. Reach the first genuine paying agent, then optimize from observed calls rather than owner-funded proofs.
@@ -440,7 +440,7 @@ let revenue: Record<string, unknown> = {};
 let functional: Record<string, unknown> = {};
 
 try {
-  const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms, single, portfolio, harness, skill, run, flake, mcpdrift] = await Promise.all([
+  const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms] = await Promise.all([
     requireStatus("/"),
     requireStatus("/api/sample"),
     requireStatus("/api/portfolio/sample"),
@@ -451,15 +451,15 @@ try {
     requireStatus("/api/mcp-drift/sample"),
     requireStatus("/openapi.json"),
     requireStatus("/llms.txt"),
-    inspectChallenge("single"),
-    inspectChallenge("portfolio"),
-    inspectChallenge("harness"),
-    inspectChallenge("skill"),
-    inspectChallenge("run"),
-    inspectChallenge("flake"),
-    inspectChallenge("mcpdrift"),
   ]);
-  health = { root, sample, portfolio_sample: portfolioSample, harness_sample: harnessSample, skill_sample: skillSample, run_sample: runSample, flake_sample: flakeSample, mcp_drift_sample: mcpDriftSample, openapi, llms, single, portfolio, harness, skill, run, flake, mcpdrift };
+  health = { root, sample, portfolio_sample: portfolioSample, harness_sample: harnessSample, skill_sample: skillSample, run_sample: runSample, flake_sample: flakeSample, mcp_drift_sample: mcpDriftSample, openapi, llms };
+  // Probe protected routes sequentially. A fresh deployment may place concurrent
+  // requests on separate cold isolates, causing redundant facilitator syncs and
+  // a false whole-suite timeout. Incremental assignment also preserves the
+  // evidence collected before any individual failure.
+  for (const product of EXPECTED_PRODUCTS) {
+    health[product] = await inspectChallenge(product);
+  }
 } catch (error) {
   errors.push(error instanceof Error ? error.message : String(error));
 }

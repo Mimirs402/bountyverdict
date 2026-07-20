@@ -298,3 +298,28 @@ test("HTTP preflight rejects invalid catalogs before x402 and challenges valid e
   assert.equal(challengeResponse.headers.get("x-mcp-drift-ruleset-version"), "2026-07-20.1");
   assert.ok(encoded.length < 16_000, "actual base64 PAYMENT-REQUIRED must remain under a common single-header budget");
 });
+
+test("unpaid challenges never depend on facilitator discovery during a cold isolate", async () => {
+  const previousFetch = globalThis.fetch;
+  let facilitatorFetches = 0;
+  globalThis.fetch = (async () => {
+    facilitatorFetches += 1;
+    throw new Error("facilitator discovery must not run before payment");
+  }) as typeof fetch;
+  try {
+    const response = await app.request("/api/mcp-drift", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(mcpDriftExampleInput),
+    }, {
+      PAY_TO_ADDRESS: "0x1111111111111111111111111111111111111111",
+      X402_NETWORK: "eip155:84532",
+      X402_FACILITATOR_URL: "https://facilitator.invalid",
+    });
+    assert.equal(response.status, 402);
+    assert.ok(response.headers.get("payment-required"));
+    assert.equal(facilitatorFetches, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

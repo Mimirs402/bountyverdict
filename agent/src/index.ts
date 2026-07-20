@@ -1,5 +1,9 @@
 import { createFacilitatorConfig } from "@coinbase/x402";
-import { HTTPFacilitatorClient, type RouteConfig } from "@x402/core/server";
+import {
+  HTTPFacilitatorClient,
+  type FacilitatorClient,
+  type RouteConfig,
+} from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -104,9 +108,26 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
   const facilitatorConfig = usingCdp
     ? createFacilitatorConfig(env.CDP_API_KEY_ID, env.CDP_API_KEY_SECRET)
     : { url: facilitatorUrl };
-  const resourceServer = new x402ResourceServer(
-    new HTTPFacilitatorClient(facilitatorConfig),
-  )
+  const httpFacilitator = new HTTPFacilitatorClient(facilitatorConfig);
+  const facilitatorClient: FacilitatorClient = {
+    // The economic contract is pinned and independently verified in CI and by
+    // post-deploy canaries. Returning it locally keeps an unpaid 402 challenge
+    // independent from a regionally unreliable /supported request. Paid
+    // verification and settlement remain delegated to the authenticated CDP
+    // facilitator (or the explicitly configured test facilitator).
+    getSupported: async () => ({
+      kinds: [{
+        x402Version: 2,
+        scheme: "exact",
+        network: network as `${string}:${string}`,
+      }],
+      extensions: ["bazaar"],
+      signers: {},
+    }),
+    verify: (payload, requirements) => httpFacilitator.verify(payload, requirements),
+    settle: (payload, requirements) => httpFacilitator.settle(payload, requirements),
+  };
+  const resourceServer = new x402ResourceServer(facilitatorClient)
     .register(network as `${string}:${string}`, new ExactEvmScheme());
 
   const routeConfig: RouteConfig = {

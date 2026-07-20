@@ -16,6 +16,15 @@ const monetizeYourAgentApi = "https://monetizeyouragent.fun/api/v1";
 const monetizeYourAgentSubmissionId = 234;
 const directory402Api = "https://402directory.com/api";
 const directory402SubmissionIds = Object.freeze([50, 51, 52, 53, 54, 55, 56]);
+const index402Api = "https://402index.io/api/v1/services";
+const index402Listings = Object.freeze([
+  { product: "single", id: "82c992cc-1a4f-44ea-b742-e798784b6a14", path: "/api/verdict", method: "GET" },
+  { product: "portfolio", id: "057ea175-ec64-4c2e-8553-1f747455e6bf", path: "/api/portfolio", method: "POST" },
+  { product: "harness", id: "b64d1c67-a5d9-43f1-b226-79886f425f99", path: "/api/harness", method: "GET" },
+  { product: "skill", id: "f7ae83f3-cef1-4d9e-ae80-327b07d4f674", path: "/api/skill", method: "GET" },
+  { product: "run", id: "19eada5c-4d79-4868-8183-745aab875cbb", path: "/api/run", method: "GET" },
+  { product: "flake", id: "2d2fb88a-7402-4d1a-ab66-63d4e9ba1031", path: "/api/flake", method: "GET" },
+]);
 const x402ScanResources = Object.freeze([
   { url: `${productionOrigin}/api/verdict`, method: "GET" },
   { url: `${productionOrigin}/api/portfolio`, method: "POST" },
@@ -378,6 +387,51 @@ async function directory402Status(): Promise<Record<string, unknown>> {
   }
 }
 
+async function index402Status(): Promise<Record<string, unknown>> {
+  try {
+    const resources = await Promise.all(index402Listings.map(async ({ product, id, path, method }) => {
+      const response = await fetch(`${index402Api}/${id}`, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) throw new Error(`402 Index ${product} returned HTTP ${response.status}.`);
+      const entry = await response.json() as Record<string, unknown>;
+      const expected = x402ScanResources.find((resource) => resource.url === `${productionOrigin}${path}`);
+      if (!expected || expected.method !== method || entry.id !== id || entry.url !== expected.url || entry.protocol !== "x402" ||
+        entry.payment_network !== "eip155:8453" || entry.provider !== "BountyVerdict" ||
+        entry.http_method !== method) {
+        throw new Error(`402 Index ${product} contract telemetry drifted.`);
+      }
+      return {
+        product,
+        id,
+        url: `https://402index.io/service/${id}`,
+        status: entry.status,
+        health_status: entry.health_status,
+        probe_status: entry.probe_status,
+      };
+    }));
+    const active = resources.filter(({ status, health_status, probe_status }) =>
+      status === "active" && health_status === "healthy" && probe_status === "probeable"
+    );
+    return {
+      url: "https://402index.io/",
+      listed: active.length === index402Listings.length,
+      status: active.length === index402Listings.length ? "listed" : active.length ? "partial" : "unavailable",
+      expected_resources: index402Listings.length,
+      active_resources: active.length,
+      missing_product: "mcpdrift",
+      resources,
+      measurement: "public_directory_listing_not_customer_purchase",
+    };
+  } catch (error) {
+    return {
+      url: "https://402index.io/",
+      listed: false,
+      status: "request_failed",
+      expected_resources: index402Listings.length,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function submitAgentSkill(): Promise<Record<string, unknown>> {
   try {
     const response = await fetch("https://agentskill.sh/api/skills/submit", {
@@ -428,6 +482,7 @@ const [
   x402gle,
   monetizeYourAgent,
   directory402,
+  index402,
 ] = await Promise.all([
   skillsShStatus(),
   agentToolStatus(),
@@ -438,6 +493,7 @@ const [
   x402gleStatus(),
   monetizeYourAgentStatus(),
   directory402Status(),
+  index402Status(),
 ]);
 if (Number(x402scan.listed_resources || 0) > 0) {
   x402scan.exposed_at = previous.x402scan?.exposed_at || new Date().toISOString();
@@ -466,6 +522,7 @@ const state = {
   x402gle,
   monetize_your_agent: monetizeYourAgent,
   directory_402: directory402,
+  index_402: index402,
 };
 await atomicWrite(stateFile, `${JSON.stringify(state, null, 2)}\n`);
 console.log(JSON.stringify(state, null, 2));

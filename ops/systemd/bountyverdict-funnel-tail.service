@@ -1,0 +1,19 @@
+[Unit]
+Description=BountyVerdict privacy-safe Cloudflare paid-route funnel tail
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=FUNNEL_STATE_FILE=%h/.local/state/bountyverdict/funnel-telemetry.json
+ExecStart=/usr/bin/env node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cloudflare-funnel-tail.ts
+Restart=always
+RestartSec=10s
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

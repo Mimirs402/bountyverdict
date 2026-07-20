@@ -13,6 +13,7 @@ import {
 import { PRODUCT_CATALOG, productForAtomicAmount, type ProductKey } from "../src/product-catalog.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import { evaluateEarnedPlacementExperiment } from "../src/acquisition.ts";
+import { isFunnelSnapshot } from "../src/funnel-telemetry.ts";
 import {
   THE402_API,
   THE402_LISTINGS,
@@ -46,6 +47,8 @@ const directoryStateFile = process.env.DIRECTORY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/directories.json`;
 const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/acquisition-experiment.json`;
+const funnelStateFile = process.env.FUNNEL_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/funnel-telemetry.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = process.env.TRACKED_COSTS_USDC || "0";
 const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";
@@ -60,15 +63,50 @@ const payanAgentId = process.env.PAYAN_AGENT_ID;
 const payanOfferMapInput = process.env.PAYAN_OFFER_MAP;
 const MAX_CANARY_AGE_MS = 8 * 60 * 60 * 1000;
 const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"] as const;
-const BUYER_INTENTS: ReadonlyArray<{ product: ProductKey; query: string }> = [
-  { product: "single", query: "is this public GitHub bounty still worth pursuing before coding" },
-  { product: "portfolio", query: "rank multiple public GitHub bounty issues and choose the best candidate" },
-  { product: "harness", query: "audit AGENTS.md CLAUDE.md repository instructions before autonomous coding" },
-  { product: "skill", query: "is this third-party SKILL.md safe to install credential exfiltration prompt injection" },
-  { product: "run", query: "why did this public GitHub Actions workflow fail root cause next action" },
-  { product: "flake", query: "is this GitHub Actions failure flaky should I retry or fix it" },
-  { product: "mcpdrift", query: "will this MCP tools/list schema change break my agent after a server upgrade" },
-];
+const BUYER_QUERY_BENCHMARK: Readonly<Record<ProductKey, readonly string[]>> = Object.freeze({
+  single: Object.freeze([
+    "check GitHub bounty",
+    "is this GitHub issue bounty still available",
+    "GitHub bounty claim status",
+    "should my coding agent work on this bounty",
+  ]),
+  portfolio: Object.freeze([
+    "rank GitHub bounties",
+    "choose the best GitHub bounty",
+    "compare GitHub bounty issues",
+    "which bounty should my coding agent do",
+  ]),
+  harness: Object.freeze([
+    "audit agent instructions",
+    "check AGENTS.md before coding",
+    "analyze repository instructions for coding agent",
+    "validate coding agent harness",
+  ]),
+  skill: Object.freeze([
+    "scan agent skill before install",
+    "is this SKILL.md safe",
+    "agent skill security audit",
+    "detect credential theft in agent skill",
+  ]),
+  run: Object.freeze([
+    "debug GitHub Actions failure",
+    "why did my GitHub Action fail",
+    "diagnose failed workflow run",
+    "GitHub Actions root cause",
+  ]),
+  flake: Object.freeze([
+    "is this GitHub Actions failure flaky",
+    "should I retry this failed workflow",
+    "classify flaky CI failure",
+    "retry or fix GitHub Action",
+  ]),
+  mcpdrift: Object.freeze([
+    "compare MCP tool schemas",
+    "will this MCP server update break my agent",
+    "detect MCP tools list drift",
+    "MCP compatibility check",
+  ]),
+});
 const MARKETPLACE_SEARCH_INTENTS: ReadonlyArray<{
   product: "single" | "portfolio" | "harness" | "run" | "flake";
   query: string;
@@ -106,7 +144,9 @@ async function atomicWrite(path: string, contents: string): Promise<void> {
 }
 
 async function monitoredFetch(input: string, init?: RequestInit): Promise<Response> {
-  return fetch(input, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const headers = new Headers(init?.headers);
+  if (!headers.has("User-Agent")) headers.set("User-Agent", "bountyverdict-distribution-monitor/1.0");
+  return fetch(input, { ...init, headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
 }
 
 async function monitoredFetchWithServerRetry(input: string, init?: RequestInit): Promise<Response> {
@@ -214,7 +254,10 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
   const merchant = await merchantResponse.json() as { resources?: Array<{ resource?: string }> };
   const resources = merchant.resources || [];
 
-  const searches = await Promise.all(BUYER_INTENTS.map(async ({ product, query }) => {
+  const benchmarkQueries = Object.entries(BUYER_QUERY_BENCHMARK).flatMap(([product, queries]) =>
+    queries.map((query) => ({ product: product as ProductKey, query }))
+  );
+  const searches = await Promise.all(benchmarkQueries.map(async ({ product, query }) => {
     const searchUrl = new URL(`${CDP_DISCOVERY}/search`);
     searchUrl.searchParams.set("query", query);
     searchUrl.searchParams.set("network", NETWORK);
@@ -246,10 +289,28 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
   const semanticProducts = Object.fromEntries(Object.entries(expectedResources).map(([name, resource]) =>
     [name, semanticResources.includes(resource)]
   ));
-  const semanticRanks = Object.fromEntries(searches.map(({ product, resources: found = [] }) => {
-    const rank = found.findIndex((candidate) => candidate.resource === expectedResources[product]);
-    return [product, rank >= 0 ? rank + 1 : null];
+  const buyerQueryBenchmark = Object.fromEntries(EXPECTED_PRODUCTS.map((product) => {
+    const rows = searches.filter((search) => search.product === product).map(({ query, resources: found = [] }) => {
+      const rank = found.findIndex((candidate) => candidate.resource === expectedResources[product]);
+      return { query, rank: rank >= 0 ? rank + 1 : null };
+    });
+    const foundRanks = rows.flatMap(({ rank }) => rank === null ? [] : [rank]).sort((left, right) => left - right);
+    const middle = Math.floor(foundRanks.length / 2);
+    const medianFoundRank = foundRanks.length === 0 ? null : foundRanks.length % 2
+      ? foundRanks[middle]
+      : (foundRanks[middle - 1] + foundRanks[middle]) / 2;
+    return [product, {
+      query_count: rows.length,
+      found_queries: foundRanks.length,
+      top_three_queries: foundRanks.filter((rank) => rank <= 3).length,
+      first_place_queries: foundRanks.filter((rank) => rank === 1).length,
+      coverage_percent: rows.length ? Math.round(foundRanks.length / rows.length * 100) : 0,
+      median_found_rank: medianFoundRank,
+      worst_result: foundRanks.length < rows.length ? "not_found" : foundRanks.at(-1) || null,
+      queries: rows,
+    }];
   }));
+  const benchmarkRows = Object.values(buyerQueryBenchmark) as Array<Record<string, any>>;
   const queryRanks = Object.fromEntries(searches.map(({ query, resources: found = [] }) => [
     query,
     Object.fromEntries(Object.entries(expectedResources).map(([name, resource]) => {
@@ -257,15 +318,24 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
       return [name, rank >= 0 ? rank + 1 : null];
     })),
   ]));
-  const topCompetitors = Object.fromEntries(searches.map(({ product, resources: found = [] }) => [
+  const topCompetitors = Object.fromEntries(EXPECTED_PRODUCTS.map((product) => [
     product,
-    found.filter(({ resource }) => resource !== expectedResources[product]).slice(0, 3).map(({ resource }) => resource),
+    [...new Set(searches.filter((search) => search.product === product).flatMap(({ resources: found = [] }) =>
+      found.filter(({ resource }) => resource !== expectedResources[product]).map(({ resource }) => resource)
+    ))].slice(0, 5),
   ]));
   return {
     indexed: Object.values(indexedProducts).every(Boolean),
     indexed_products: indexedProducts,
     semantic_products: semanticProducts,
-    semantic_best_rank: semanticRanks,
+    buyer_query_benchmark: buyerQueryBenchmark,
+    buyer_query_summary: {
+      query_count: benchmarkRows.reduce((sum, row) => sum + Number(row.query_count || 0), 0),
+      found_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.found_queries || 0), 0),
+      top_three_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.top_three_queries || 0), 0),
+      first_place_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.first_place_queries || 0), 0),
+      methodology: "Four unbranded candidate buyer-language queries per product. This measures retrieval robustness, not observed marketplace query volume.",
+    },
     query_ranks: queryRanks,
     top_competitors: topCompetitors,
     merchant_resource_count: resources.length,
@@ -850,7 +920,35 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
       x402gle: state.x402gle || null,
       monetize_your_agent: state.monetize_your_agent || null,
       directory_402: state.directory_402 || null,
+      index_402: state.index_402 || null,
       note: "Anonymous install telemetry is an acquisition signal, not proof of a genuine buyer or customer purchase.",
+    };
+  } catch (error) {
+    return {
+      available: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function funnelStatus(): Promise<Record<string, unknown>> {
+  try {
+    const state = JSON.parse(await readFile(funnelStateFile, "utf8"));
+    if (!isFunnelSnapshot(state)) throw new Error("Funnel telemetry state is malformed.");
+    const owner = state.by_source.owner_automation;
+    return {
+      available: true,
+      capture_started_at: state.capture_started_at,
+      updated_at: state.updated_at,
+      paid_route_requests: state.totals.requests,
+      external_402_challenges: state.totals.challenges_402 - owner.challenges_402,
+      signed_payment_attempts: state.totals.signed_requests - owner.signed_requests,
+      successful_signed_responses: state.totals.signed_successes - owner.signed_successes,
+      owner_automation_requests: owner.requests,
+      by_product: state.by_product,
+      by_source: state.by_source,
+      privacy: state.privacy,
+      accounting_note: "Edge funnel telemetry measures aggregate HTTP behavior only. Onchain settlement attribution remains authoritative for purchases and revenue.",
     };
   } catch (error) {
     return {
@@ -862,7 +960,7 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
 
 function money(value: unknown): string {
   const parsed = typeof value === "string" || typeof value === "number" ? Number(value) : Number.NaN;
-  return Number.isFinite(parsed) ? `$${parsed.toFixed(2)}` : "unavailable";
+  return Number.isFinite(parsed) ? `${parsed < 0 ? "-" : ""}$${Math.abs(parsed).toFixed(2)}` : "unavailable";
 }
 
 function optionalCount(value: unknown): number | undefined {
@@ -889,11 +987,12 @@ function renderMonitorNote(report: Record<string, any>): string {
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
   const experiment = report.acquisition?.experiment || {};
-  const marketplaceSearch = report.acquisition?.marketplace_search || {};
-  const marketplaceSearchSummary = marketplaceSearch.available
-    ? `${marketplaceSearch.first_place_cells} / ${marketplaceSearch.measured_cells} current targeted marketplace-query cells rank #1 (refreshed ${marketplaceSearch.checked_at})`
-    : `latest verified 14 / 15 targeted cells ranked #1 on 2026-07-20; live refresh unavailable (${marketplaceSearch.error || "unknown error"})`;
-  const ranks = report.discovery?.semantic_best_rank || {};
+  const buyerQuerySummary = report.discovery?.buyer_query_summary || {};
+  const buyerQueryBenchmark = report.discovery?.buyer_query_benchmark || {};
+  const buyerBenchmarkSummary = Number.isFinite(Number(buyerQuerySummary.query_count))
+    ? `${Number(buyerQuerySummary.found_queries || 0)} / ${Number(buyerQuerySummary.query_count)} unbranded buyer-query variants found; ${Number(buyerQuerySummary.top_three_queries || 0)} rank in the top 3`
+    : "unavailable";
+  const funnel = report.funnel || {};
   const indexed = report.discovery?.indexed_products || {};
   const status = report.healthy ? "HEALTHY" : "DEGRADED";
   const errors = Array.isArray(report.errors) && report.errors.length
@@ -906,7 +1005,8 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Current profit (recognized-USDC basis):** ${money(profitValue)} (customer revenue minus ${money(costsValue)} tracked USD costs)
 - **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
-- **Marketplace search conversion:** ${marketplaceSearchSummary}
+- **Neutral buyer-query retrieval:** ${buyerBenchmarkSummary}
+- **Paid-route edge funnel:** ${funnel.available ? `${Number(funnel.external_402_challenges || 0)} external 402 challenges; ${Number(funnel.signed_payment_attempts || 0)} signed attempts; ${Number(funnel.successful_signed_responses || 0)} signed successes since ${funnel.capture_started_at}` : `capture unavailable (${funnel.error || "not started"})`}
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
 - **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 one-off jobs; ${subscriptionPurchases} the402 subscriptions; ${nearPurchases} NEAR Agent Market jobs)
@@ -920,6 +1020,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **x402gle/OpenDexter:** ${report.acquisition?.x402gle?.synthesized_skills ?? "unavailable"} / ${report.acquisition?.x402gle?.expected_products ?? 7} synthesized agent skills (${report.acquisition?.x402gle?.status || "unavailable"}; platform audition/listing activity is never an organic purchase)
 - **Monetize Your Agent:** ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - **402directory:** ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} endpoints listed (${report.acquisition?.directory_402?.status || "unavailable"}; submissions ${Array.isArray(report.acquisition?.directory_402?.submission_ids) ? report.acquisition.directory_402.submission_ids.join(", ") : "unavailable"})
+- **402 Index:** ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} endpoints live (${report.acquisition?.index_402?.status || "unavailable"}; registry presence is never a purchase)
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -929,14 +1030,14 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products are independently buyable through the402, NEAR Agent Market, and PayanAgent with exact machine-readable contracts, and all seven paid endpoints are registered through x402scan's OpenAPI discovery path. A controlled literal-intent copy pass moved 14 of 15 measured marketplace-query cells to #1 while preserving every ID, price, schema, and endpoint; the remaining cell improved from #7 to #3. Direct x402/OpenAPI discovery metadata for BountyVerdict and MCPDriftVerdict now leads with their measured buyer phrases, ready for the next genuine settlement-driven Coinbase refresh without an owner purchase. x402gle now publishes the origin's generated host Skill, A2A card, and synthesized product skills; Monetize Your Agent and 402directory submissions are under independent review. Agentic Market mirrors settled CDP Bazaar endpoints automatically; its owner-contaminated quality counters are excluded from commerce totals. SkillVerdict remains isolated from independently registered channels that require separate seller fulfillment. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks and platform validation activity remain excluded.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products are independently buyable through the402, NEAR Agent Market, and PayanAgent with exact machine-readable contracts, all seven paid endpoints are registered through x402scan, and six method-compatible endpoints are live on 402 Index. Search reporting now uses four short, unbranded candidate buyer-language queries per product and exposes coverage plus median and worst results; the earlier one-query "best rank" display was removed because it overstated retrieval quality. x402gle publishes the origin's generated host Skill, A2A card, and synthesized product skills; Monetize Your Agent and 402directory submissions are under independent review. Privacy-safe edge capture now separates external 402 challenges from signed payment attempts without retaining IPs, headers, URLs, query values, bodies, geolocation, or user-agent strings. Agentic Market's owner-contaminated quality counters remain excluded from commerce totals. Distribution is the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers.
 
 ## What is next
 
 1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
 2. Monitor GitHub Skill, AgentTool, AgentSkill, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
-3. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, all seven x402scan routes, x402gle synthesized skills, Monetize Your Agent and 402directory reviews, Agentic Market's automatic mirror, guarded buyer-request feed, exact receipt attribution, and Coinbase Bazaar while keeping SkillVerdict out of separately fulfilled channels until its isolated experiment ends.
-4. Hold the newly ranked marketplace copy and all prices stable while monitoring genuine calls and exact-fit buyer requests. Do not build an eighth product before ten external purchases are recognized.
+3. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, all seven x402scan routes, six 402 Index listings, x402gle synthesized skills, Monetize Your Agent and 402directory reviews, Agentic Market's automatic mirror, guarded buyer-request feed, edge challenges, and exact receipt attribution.
+4. Use the neutral buyer-query benchmark and edge funnel—not best-case phrase ranks—to decide the next distribution change after the frozen experiment. Do not build an eighth product before ten external purchases are recognized.
 
 ## Production health
 
@@ -950,15 +1051,32 @@ ${errors}
 
 ## Products and distribution
 
-| Product | Price | Global semantic best rank | CDP merchant cache | Agentic Market |
-|---|---:|---:|---|---|
-| BountyVerdict | $0.05 | ${ranks.single ?? "not found"} | ${indexed.single ? "indexed" : "pending"} | ${agenticIndexed.single ? "indexed" : "pending"} |
-| BountyVerdict Portfolio | $0.40 | ${ranks.portfolio ?? "not found"} | ${indexed.portfolio ? "indexed" : "pending"} | ${agenticIndexed.portfolio ? "indexed" : "pending"} |
-| HarnessVerdict | $0.03 | ${ranks.harness ?? "not found"} | ${indexed.harness ? "indexed" : "pending"} | ${agenticIndexed.harness ? "indexed" : "pending"} |
-| SkillVerdict | $0.06 | ${ranks.skill ?? "not found"} | ${indexed.skill ? "indexed" : "pending"} | ${agenticIndexed.skill ? "indexed" : "pending"} |
-| RunVerdict | $0.04 | ${ranks.run ?? "not found"} | ${indexed.run ? "indexed" : "pending"} | ${agenticIndexed.run ? "indexed" : "pending"} |
-| FlakeVerdict | $0.07 | ${ranks.flake ?? "not found"} | ${indexed.flake ? "indexed" : "pending"} | ${agenticIndexed.flake ? "indexed" : "pending"} |
-| MCPDriftVerdict | $0.02 | ${ranks.mcpdrift ?? "not found"} | ${indexed.mcpdrift ? "indexed" : "pending"} | ${agenticIndexed.mcpdrift ? "indexed" : "pending"} |
+| Product | Price | Buyer queries found | Median found rank | Worst result | CDP cache | Agentic Market |
+|---|---:|---:|---:|---:|---|---|
+${EXPECTED_PRODUCTS.map((product) => {
+  const result = buyerQueryBenchmark[product] || {};
+  const name = PRODUCT_CATALOG[product].service;
+  const median = result.median_found_rank !== null && result.median_found_rank !== undefined &&
+      Number.isFinite(Number(result.median_found_rank))
+    ? `#${Number(result.median_found_rank).toFixed(Number(result.median_found_rank) % 1 ? 1 : 0)}`
+    : "not found";
+  const worst = result.worst_result === "not_found" ? "not found" : Number.isFinite(Number(result.worst_result)) ? `#${result.worst_result}` : "not found";
+  return `| ${name} | ${PRODUCT_CATALOG[product].priceUsd} | ${Number(result.found_queries || 0)} / ${Number(result.query_count || 4)} | ${median} | ${worst} | ${indexed[product] ? "indexed" : "pending"} | ${agenticIndexed[product] ? "indexed" : "pending"} |`;
+}).join("\n")}
+
+The buyer-query benchmark uses four short, unbranded candidate task phrasings per product. It is a retrieval robustness test, not evidence of actual query volume; the exact phrases and ranks are retained in the machine-readable monitor state.
+
+### Exact buyer-query benchmark
+
+${EXPECTED_PRODUCTS.map((product) => {
+  const result = buyerQueryBenchmark[product] || {};
+  const queries = Array.isArray(result.queries) ? result.queries : [];
+  return `- **${PRODUCT_CATALOG[product].service}:** ${queries.length
+    ? queries.map(({ query, rank }: { query?: unknown; rank?: unknown }) =>
+        `\`${String(query || "unavailable")}\` → ${rank !== null && rank !== undefined && Number.isFinite(Number(rank)) ? `#${Number(rank)}` : "not found"}`
+      ).join("; ")
+    : "unavailable"}`;
+}).join("\n")}
 
 ## Acquisition funnel
 
@@ -974,10 +1092,12 @@ ${errors}
 - x402gle/OpenDexter synthesized skills: ${report.acquisition?.x402gle?.synthesized_skills ?? "unavailable"} / ${report.acquisition?.x402gle?.expected_products ?? 7} (${report.acquisition?.x402gle?.status || "unavailable"}; public host Skill and A2A card: ${report.acquisition?.x402gle?.listed ? "available" : "unavailable"})
 - Monetize Your Agent suite entry: ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - 402directory endpoints: ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} (${report.acquisition?.directory_402?.status || "unavailable"}; seven review submissions are not purchases)
+- 402 Index endpoints: ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} (${report.acquisition?.index_402?.status || "unavailable"}; MCPDrift body-bound preflight is not probe-compatible)
 - the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded)
 - Agentic Market automatic endpoints: ${report.marketplaces?.agentic_market?.endpoint_count ?? "unavailable"} / 7 (CDP Bazaar mirror; reported quality counters excluded from purchase and revenue accounting)
+- Edge funnel capture: ${funnel.available ? `${Number(funnel.paid_route_requests || 0)} paid-route requests; ${Number(funnel.external_402_challenges || 0)} external challenges; ${Number(funnel.signed_payment_attempts || 0)} signed attempts` : "unavailable"} (aggregate HTTP telemetry only; onchain ledger remains authoritative)
 - Experiment status: ${experiment.status || "unavailable"}
 - Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
 - Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
@@ -1022,6 +1142,7 @@ let the402: Record<string, unknown> = {};
 let nearMarket: Record<string, unknown> = {};
 let payan: Record<string, unknown> = {};
 let agenticMarket: Record<string, unknown> = {};
+let funnel: Record<string, unknown> = {};
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms] = await Promise.all([
@@ -1194,6 +1315,8 @@ try {
   errors.push(`Agentic Market: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+funnel = await funnelStatus();
+
 const report = {
   product: "BountyVerdict",
   checked_at: checkedAt,
@@ -1217,6 +1340,7 @@ const report = {
   },
   functional,
   acquisition,
+  funnel,
   errors,
 };
 

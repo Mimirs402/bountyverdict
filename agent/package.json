@@ -13,6 +13,7 @@
     "wallet:fund": "REQUEST_FUNDS=YES node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cdp-test-wallet.ts",
     "revenue": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/revenue-monitor.ts",
     "distribution:monitor": "node --experimental-strip-types scripts/distribution-monitor.ts",
+    "funnel:tail": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cloudflare-funnel-tail.ts",
     "the402:onboard": "node --experimental-strip-types scripts/the402-onboard.ts",
     "the402:plan": "node --experimental-strip-types scripts/the402-plan.ts",
     "the402:subscribe": "node --experimental-strip-types scripts/the402-subscribe.ts",

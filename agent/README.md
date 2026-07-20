@@ -100,7 +100,7 @@ Use `NETWORK=sepolia` for testnet. The report recognizes exact $0.02, $0.03, $0.
 
 ## Continuous distribution monitoring
 
-The production monitor verifies all free routes, all seven exact mainnet payment challenges, Coinbase Bazaar merchant and semantic-search visibility, on-chain Base USDC revenue, the402 catalog/jobs/earnings, and the freshness of the latest authenticated functional-canary pass in one run:
+The production monitor verifies all free routes, all seven exact mainnet payment challenges, Coinbase Bazaar merchant visibility and a disclosed unbranded buyer-query benchmark, on-chain Base USDC revenue, the402 catalog/jobs/earnings, 402 Index presence, privacy-safe aggregate paid-route arrivals, and the freshness of the latest authenticated functional-canary pass in one run. The benchmark measures retrieval robustness, not marketplace search volume; CDP does not expose seller query-impression analytics. Edge telemetry discards raw URLs, query values, request bodies, headers, IP addresses, geolocation, and user-agent strings:
 
 ```bash
 npm run distribution:monitor

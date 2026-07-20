@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Check whether a GitHub bounty is still worth pursuing. Detect closed issues, withdrawn rewards, maintainer rejection, attempt swarms, and competing pull requests." />
+    <meta name="theme-color" content="#101510" />
+    <meta property="og:title" content="BountyVerdict — know before you code" />
+    <meta property="og:description" content="Check a GitHub bounty for withdrawn rewards, maintainer rejection, attempt swarms, and competing pull requests." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cristianmoroaica.github.io/bountyverdict/" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="canonical" href="https://cristianmoroaica.github.io/bountyverdict/" />
+    <title>BountyVerdict — know before you code</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#issue-url">Skip to checker</a>
+    <header class="nav shell">
+      <a class="brand" href="./"><span>BV</span>BountyVerdict</a>
+      <nav aria-label="Primary"><a href="#method">Method</a><a href="#agents">For agents</a></nav>
+    </header>
+
+    <main>
+      <section class="hero shell">
+        <p class="kicker">Bounty due diligence for GitHub</p>
+        <h1>Know before<br />you <em>code.</em></h1>
+        <p class="lede">Bounty boards tell you money exists. BountyVerdict checks whether the work is still worth touching.</p>
+
+        <form class="checker" id="check-form">
+          <label for="issue-url">Public GitHub issue URL</label>
+          <div class="input-row">
+            <input id="issue-url" name="issue" type="url" inputmode="url" placeholder="https://github.com/owner/repo/issues/123" required />
+            <button id="submit-check" type="submit">Check verdict</button>
+          </div>
+          <p class="form-status" id="status" aria-live="polite">Free · no login · read-only GitHub API requests</p>
+        </form>
+
+        <div class="examples" aria-label="Example checks">
+          <span>See a real trap:</span>
+          <button type="button" data-example="https://github.com/godotengine/godot/issues/70796">Locked Godot bounty</button>
+          <button type="button" data-example="https://github.com/typeorm/typeorm/issues/3357">Withdrawn TypeORM bounty</button>
+        </div>
+      </section>
+
+      <section class="result shell" id="result" hidden aria-live="polite"></section>
+
+      <section class="method shell" id="method">
+        <div>
+          <p class="kicker">What gets checked</p>
+          <h2>Open is not the same as available.</h2>
+        </div>
+        <div class="method-grid">
+          <article><span>01</span><h3>Repository reality</h3><p>Issue state, locks, archive status, recent activity, and specification depth.</p></article>
+          <article><span>02</span><h3>Competition reality</h3><p>Linked open PRs, closed-PR swarms, and distinct attempt or claim commands.</p></article>
+          <article><span>03</span><h3>Maintainer reality</h3><p>Explicit rejection, spam warnings, and comments indicating a withdrawn reward.</p></article>
+          <article><span>04</span><h3>Evidence, not magic</h3><p>Every important signal links back to GitHub. The score never guarantees payment.</p></article>
+        </div>
+      </section>
+
+      <section class="pro shell" id="agents">
+        <p class="kicker">Agent API · x402</p>
+        <h2>Spend 25¢ before wasting a coding run.</h2>
+        <p>Autonomous agents get the same conservative preflight as structured JSON: verdict, score, risk signals, coverage, and direct evidence URLs. The endpoint advertises its price and schema through the x402 Bazaar discovery extension.</p>
+        <div class="agent-offer">
+          <div class="price"><strong>$0.25</strong><span>USDC per fresh verdict<br />no subscription or sales call</span></div>
+          <a class="agent-link" href="https://github.com/cristianmoroaica/bountyverdict/tree/main/agent">Inspect the agent API ↗</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer shell">
+      <p>BountyVerdict reads public GitHub data. It does not claim or guarantee any reward.</p>
+      <p>© <span id="year"></span></p>
+    </footer>
+
+    <template id="result-template">
+      <article class="verdict-card">
+        <div class="verdict-top">
+          <div>
+            <p class="verdict-label"></p>
+            <p class="verdict-summary"></p>
+          </div>
+          <div class="score"><strong class="score-value"></strong><span>/ 100</span></div>
+        </div>
+        <div class="issue-meta">
+          <div><span class="repo-name"></span><h2 class="issue-title"></h2></div>
+          <a class="issue-link" target="_blank" rel="noreferrer">Open issue ↗</a>
+        </div>
+        <ul class="signals"></ul>
+        <p class="scan-meta"></p>
+      </article>
+    </template>
+  </body>
+</html>

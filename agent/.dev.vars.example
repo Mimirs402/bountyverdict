@@ -1,0 +1,5 @@
+# Public EVM address that receives Base Sepolia test payments.
+PAY_TO_ADDRESS=0xYourPublicWalletAddress
+
+# Optional. Adds authenticated GitHub API capacity for paid checks.
+GITHUB_TOKEN=

@@ -1,13 +1,10 @@
 import { createFacilitatorConfig } from "@coinbase/x402";
-import { HTTPFacilitatorClient } from "@x402/core/server";
+import { HTTPFacilitatorClient, type RouteConfig } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
-import {
-  bazaarResourceServerExtension,
-  declareDiscoveryExtension,
-} from "@x402/extensions/bazaar";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { Hono, type MiddlewareHandler } from "hono";
 import { CheckError, checkGithubIssue } from "./check";
+import { discoveryExtension, exampleVerdict } from "./discovery";
 
 interface Env {
   PAY_TO_ADDRESS?: string;
@@ -27,110 +24,6 @@ const TESTNET_FACILITATOR = "https://x402.org/facilitator";
 const CDP_FACILITATOR = "https://api.cdp.coinbase.com/platform/v2/x402";
 const PRODUCT_URL = "https://cristianmoroaica.github.io/bountyverdict/";
 const ICON_URL = `${PRODUCT_URL}favicon.svg`;
-
-const exampleVerdict = {
-  product: "BountyVerdict",
-  version: "1.0",
-  verdict: "AVOID",
-  score: 0,
-  summary: "A public hard stop or severe risk signal makes this issue an unsafe bounty target.",
-  issue: {
-    url: "https://github.com/typeorm/typeorm/issues/3357",
-    title: "Example bounty issue",
-    state: "open",
-    repository: "typeorm/typeorm",
-  },
-  signals: [
-    {
-      label: "Reward withdrawal signal",
-      impact: -70,
-      detail: "The discussion contains language indicating that a bounty or reward was removed, withdrawn, or cancelled.",
-      evidence_url: "https://github.com/typeorm/typeorm/issues/3357",
-      hard_stop: true,
-    },
-  ],
-  coverage: {
-    comments_scanned: 100,
-    timeline_events_scanned: 100,
-    linked_pull_requests_found: 12,
-    github_rate_limit_remaining: 4994,
-  },
-  checked_at: "2026-07-20T00:00:00.000Z",
-  limitations: [
-    "A VIABLE verdict is permission to investigate, not a payout guarantee.",
-  ],
-};
-
-const outputSchema = {
-  properties: {
-    product: { type: "string", const: "BountyVerdict" },
-    version: { type: "string" },
-    verdict: { type: "string", enum: ["AVOID", "CAUTION", "VIABLE"] },
-    score: { type: "integer", minimum: 0, maximum: 100 },
-    summary: { type: "string" },
-    issue: {
-      type: "object",
-      properties: {
-        url: { type: "string", format: "uri" },
-        title: { type: "string" },
-        state: { type: "string" },
-        repository: { type: "string" },
-      },
-      required: ["url", "title", "state", "repository"],
-    },
-    signals: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          label: { type: "string" },
-          impact: { type: "integer" },
-          detail: { type: "string" },
-          evidence_url: { type: ["string", "null"] },
-          hard_stop: { type: "boolean" },
-        },
-        required: ["label", "impact", "detail", "evidence_url", "hard_stop"],
-      },
-    },
-    coverage: { type: "object" },
-    checked_at: { type: "string", format: "date-time" },
-    limitations: { type: "array", items: { type: "string" } },
-  },
-  required: [
-    "product",
-    "version",
-    "verdict",
-    "score",
-    "summary",
-    "issue",
-    "signals",
-    "coverage",
-    "checked_at",
-    "limitations",
-  ],
-};
-
-const discoveryExtension = declareDiscoveryExtension({
-  input: {
-    issue_url: "https://github.com/typeorm/typeorm/issues/3357",
-  },
-  inputSchema: {
-    properties: {
-      issue_url: {
-        type: "string",
-        format: "uri",
-        pattern: "^https://github\\.com/[^/]+/[^/]+/issues/[0-9]+(?:[?#].*)?$",
-        description: "Canonical URL of a public GitHub issue to preflight before an agent starts work.",
-      },
-    },
-    required: ["issue_url"],
-    additionalProperties: false,
-  },
-  output: {
-    example: exampleVerdict,
-    schema: outputSchema,
-  },
-});
 
 const middlewareCache = new Map<string, MiddlewareHandler>();
 
@@ -160,40 +53,41 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
   const resourceServer = new x402ResourceServer(
     new HTTPFacilitatorClient(facilitatorConfig),
   )
-    .register(network as `${string}:${string}`, new ExactEvmScheme())
-    .registerExtension(bazaarResourceServerExtension);
+    .register(network as `${string}:${string}`, new ExactEvmScheme());
 
-  const middleware = paymentMiddleware(
-    {
-      [`GET ${ENDPOINT}`]: {
-        accepts: {
-          scheme: "exact",
-          price: PRICE_USD,
-          network: network as `${string}:${string}`,
-          payTo,
-        },
-        description: "Preflight a public GitHub bounty issue before spending agent compute. Returns a deterministic AVOID, CAUTION, or VIABLE verdict with linked evidence for locks, closed state, competing PRs, failed-attempt swarms, maintainer rejection, and withdrawn rewards.",
-        mimeType: "application/json",
-        serviceName: "BountyVerdict",
-        tags: ["github", "bounties", "developer-tools", "risk", "agents"],
-        iconUrl: ICON_URL,
-        extensions: discoveryExtension,
-        unpaidResponseBody: () => ({
-          contentType: "application/json",
-          body: {
-            error: "PAYMENT_REQUIRED",
-            product: "BountyVerdict",
-            price: PRICE_USD,
-            currency: "USDC",
-            description: "Pay once to receive a fresh evidence-linked bounty risk verdict.",
-            free_sample: "/api/sample",
-            documentation: PRODUCT_URL,
-          },
-        }),
-      },
+  const routeConfig: RouteConfig = {
+    accepts: {
+      scheme: "exact",
+      price: PRICE_USD,
+      network: network as `${string}:${string}`,
+      payTo,
     },
+    description: "Preflight a public GitHub bounty issue before spending agent compute. Returns a deterministic AVOID, CAUTION, or VIABLE verdict with linked evidence for locks, closed state, competing PRs, failed-attempt swarms, maintainer rejection, and withdrawn rewards.",
+    mimeType: "application/json",
+    serviceName: "BountyVerdict",
+    tags: ["github", "bounties", "developer-tools", "risk", "agents"],
+    iconUrl: ICON_URL,
+    unpaidResponseBody: () => ({
+      contentType: "application/json",
+      body: {
+        error: "PAYMENT_REQUIRED",
+        product: "BountyVerdict",
+        price: PRICE_USD,
+        currency: "USDC",
+        description: "Pay once to receive a fresh evidence-linked bounty risk verdict.",
+        free_sample: "/api/sample",
+        documentation: PRODUCT_URL,
+      },
+    }),
+  };
+  const middleware = paymentMiddleware(
+    { [`GET ${ENDPOINT}`]: routeConfig },
     resourceServer,
   );
+  // Attach already-enriched metadata after middleware construction. The Hono
+  // adapter otherwise auto-loads the eval-based validator that Workers reject.
+  // x402HTTPResourceServer retains this same route object for payment responses.
+  routeConfig.extensions = discoveryExtension;
   middlewareCache.set(key, middleware);
   return middleware;
 }

@@ -11,6 +11,7 @@ import {
 } from "../src/revenue.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "../src/product-catalog.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
+import { evaluateEarnedPlacementExperiment } from "../src/acquisition.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -372,6 +373,7 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
       agentskill: state.agentskill || null,
       security_directory_pr: state.security_directory_pr || null,
       x402_directory_pr: state.x402_directory_pr || null,
+      x402scout: state.x402scout || null,
       note: "Anonymous install telemetry is an acquisition signal, not proof of a genuine buyer or customer purchase.",
     };
   } catch (error) {
@@ -394,6 +396,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const purchases = report.revenue?.purchases || {};
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
+  const experiment = report.acquisition?.experiment || {};
   const ranks = report.discovery?.semantic_best_rank || {};
   const indexed = report.discovery?.indexed_products || {};
   const status = report.healthy ? "HEALTHY" : "DEGRADED";
@@ -407,6 +410,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Current profit (recognized-USDC basis):** ${money(profitValue)} (customer revenue minus ${money(costsValue)} tracked USD costs)
 - **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Distribution milestone:** ${Number(purchases.total || 0)} / 10 genuine external purchases
+- **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Customer purchases:** ${Number(purchases.total || 0)}
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
@@ -421,7 +425,7 @@ The seven-product suite is healthy in production and unattended GitHub-to-Cloudf
 
 ## What is next
 
-1. Run a proof-led acquisition experiment for SkillVerdict through its direct skill, free sample, and the two appropriate public directory submissions.
+1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
 2. Monitor GitHub Skill, AgentTool, AgentSkill, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
 3. Keep Coinbase Bazaar automatic discovery under observation while FlakeVerdict propagates and MCPDriftVerdict awaits an eligible settlement.
 4. Improve positioning from observed discovery and genuine calls until ten external purchases are recognized. Do not build an eighth product before that gate.
@@ -457,6 +461,10 @@ ${errors}
 - AgentSkill: ${report.acquisition?.agentskill?.status || (report.acquisition?.agentskill?.listed ? "listed" : "unavailable")}
 - Agent security directory PR: ${report.acquisition?.security_directory_pr?.status || "unavailable"} (${report.acquisition?.security_directory_pr?.url || "not recorded"})
 - x402 ecosystem directory PR: ${report.acquisition?.x402_directory_pr?.status || "unavailable"} (${report.acquisition?.x402_directory_pr?.url || "not recorded"})
+- x402Scout GET listings: ${report.acquisition?.x402scout?.listed_entries ?? "unavailable"} / ${report.acquisition?.x402scout?.expected_entries ?? 5} (${report.acquisition?.x402scout?.status || "unavailable"}; ${Number(report.acquisition?.x402scout?.total_query_count || 0)} catalog queries)
+- Experiment status: ${experiment.status || "unavailable"}
+- Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
+- Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
 
 skills.sh counts are anonymous CLI telemetry with unknown provenance. They are tracked as a funnel signal only and are never counted as purchases or revenue.
 
@@ -529,6 +537,28 @@ try {
 }
 
 acquisition = await acquisitionStatus();
+
+try {
+  const installs = (acquisition.skills_sh as Record<string, any> | null)?.install_counts || {};
+  acquisition = {
+    ...acquisition,
+    experiment: evaluateEarnedPlacementExperiment({
+      checked_at: checkedAt,
+      healthy: errors.length === 0,
+      genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0),
+      total_installs: Number((acquisition.skills_sh as Record<string, unknown> | null)?.total_installs),
+      router_installs: Number(installs["route-github-agent-checks"]),
+      skillverdict_installs: Number(installs["preflight-agent-skills"]),
+      placements: [
+        acquisition.security_directory_pr as Record<string, unknown>,
+        acquisition.x402_directory_pr as Record<string, unknown>,
+        acquisition.x402scout as Record<string, unknown>,
+      ],
+    }),
+  };
+} catch (error) {
+  errors.push(`Acquisition experiment: ${error instanceof Error ? error.message : String(error)}`);
+}
 
 const report = {
   product: "BountyVerdict",

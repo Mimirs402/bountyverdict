@@ -8,6 +8,14 @@ const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-ap
 const skillsUrl = "https://skills.sh/cristianmoroaica/bountyverdict";
 const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-skills-security/pull/38";
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
+const x402ScoutUrl = "https://x402scout.com/catalog";
+const x402ScoutIds = Object.freeze([
+  "be000191-00e6-41d6-aed5-da35c6123e52",
+  "f2ae9481-cfb9-4bbc-bf7c-9c1fb32523e4",
+  "dfc4f4e3-b1ea-440d-b9c1-a416296e4fdd",
+  "10bf30eb-c3f7-4231-ab23-fc16d02a0e7c",
+  "98fed8fa-da74-436d-9fbe-22a500abf298",
+]);
 const stateFile = process.env.DIRECTORY_STATE_FILE || `${homedir()}/.local/state/bountyverdict/directories.json`;
 const timeoutMs = 30_000;
 const agentSkillRetryMs = 20 * 60 * 60 * 1000;
@@ -117,6 +125,55 @@ async function githubPrStatus(
   }
 }
 
+async function x402ScoutStatus(): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(`${x402ScoutUrl}?limit=500&offset=0`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      return { url: x402ScoutUrl, http_status: response.status, listed: false, status: "unexpected_response" };
+    }
+    const payload = await response.json() as { endpoints?: Array<Record<string, unknown>> };
+    const expected = new Set(x402ScoutIds);
+    const entries = (payload.endpoints || [])
+      .filter((entry) => expected.has(String(entry.id)))
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        url: entry.url,
+        registered_at: entry.registered_at,
+        status: entry.status,
+        health_status: entry.health_status,
+        uptime_pct: entry.uptime_pct,
+        avg_latency_ms: entry.avg_latency_ms,
+        query_count: entry.query_count,
+      }));
+    const exposedAt = entries
+      .map((entry) => String(entry.registered_at || ""))
+      .filter((value) => Number.isFinite(Date.parse(value)))
+      .sort((left, right) => Date.parse(left) - Date.parse(right))[0] || null;
+    const listed = entries.length === x402ScoutIds.length && entries.every((entry) => entry.status === "active");
+    return {
+      url: x402ScoutUrl,
+      http_status: response.status,
+      listed,
+      status: listed ? "listed" : entries.length ? "partial" : "missing",
+      exposed_at: exposedAt,
+      expected_entries: x402ScoutIds.length,
+      listed_entries: entries.length,
+      total_query_count: entries.reduce((total, entry) => total + Number(entry.query_count || 0), 0),
+      entries,
+    };
+  } catch (error) {
+    return {
+      url: x402ScoutUrl,
+      listed: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function submitAgentSkill(): Promise<Record<string, unknown>> {
   try {
     const response = await fetch("https://agentskill.sh/api/skills/submit", {
@@ -157,11 +214,12 @@ try {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
 
-const [skills, agenttool, securityDirectoryPr, x402DirectoryPr] = await Promise.all([
+const [skills, agenttool, securityDirectoryPr, x402DirectoryPr, x402scout] = await Promise.all([
   skillsShStatus(),
   agentToolStatus(),
   githubPrStatus("LLMSecurity", "awesome-agent-skills-security", 38, securityDirectoryPrUrl),
   githubPrStatus("xpaysh", "awesome-x402", 934, x402DirectoryPrUrl),
+  x402ScoutStatus(),
 ]);
 const previousAttempt = Date.parse(String(previous.agentskill?.attempted_at || previous.checked_at || ""));
 const agentSkillRetryDue = !Number.isFinite(previousAttempt) || Date.now() - previousAttempt >= agentSkillRetryMs;
@@ -182,6 +240,7 @@ const state = {
   agentskill,
   security_directory_pr: securityDirectoryPr,
   x402_directory_pr: x402DirectoryPr,
+  x402scout,
   x402scan: {
     url: "https://www.x402scan.com/resources/register",
     listed: false,

@@ -96,7 +96,7 @@ test("the402 request evaluation fetches one official posting and places one auth
     price_usd: 0.04,
     eta_hours: 1,
     service_id: "svc_cdd16073d02c4429",
-    pitch: "RunVerdict is an existing automated, evidence-linked service with a published exact input and deliverable contract. Delivery is within one hour and normally completes in seconds.",
+    pitch: "GitHub Actions CI Failure Diagnosis — RunVerdict is an existing automated, evidence-linked service with a published exact input and deliverable contract. Delivery is within one hour and normally completes in seconds.",
   });
 });
 

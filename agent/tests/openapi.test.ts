@@ -85,4 +85,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.match(llms, /SkillVerdict is intentionally excluded/);
   assert.match(llms, /plans\/plan_ec6c49878dc34636\/subscribe/);
   assert.match(llms, /up to 20 combined requests/);
+  assert.match(llms, /NEAR Agent Market/);
+  assert.match(llms, /market\.near\.ai\/hire\?service_id=88c3e8f6-07f4-414e-bc43-c5ad61cf21fd/);
+  assert.match(llms, /market\.near\.ai\/v1\/services\/0a0b0909-2829-4437-b23e-4376a61041ba\/invoke/);
 });

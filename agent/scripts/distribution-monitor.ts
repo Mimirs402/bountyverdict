@@ -29,6 +29,8 @@ const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.de
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
 const DEFAULT_START_BLOCK = "48876000";
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
+const AGENTIC_MARKET_SERVICE =
+  "https://api.agentic.market/v1/services/bountyverdict-agent-production-mimirslab-workers-dev";
 const MAINNET_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NETWORK = "eip155:8453";
 const TIMEOUT_MS = 30_000;
@@ -260,6 +262,64 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
     semantic_match_count: semanticResources.filter((resource) => resource.startsWith(`${api}/api/`)).length,
     search_method: [...new Set(searches.map(({ searchMethod }) => searchMethod).filter(Boolean))],
     resources: resources.map(({ resource }) => resource).filter(Boolean),
+  };
+}
+
+async function agenticMarketStatus(): Promise<Record<string, unknown>> {
+  const response = await monitoredFetch(AGENTIC_MARKET_SERVICE);
+  if (!response.ok) throw new Error(`service lookup returned HTTP ${response.status}.`);
+  const service = await response.json() as Record<string, any>;
+  if (
+    service.id !== "bountyverdict-agent-production-mimirslab-workers-dev" ||
+    service.domain !== new URL(api).hostname ||
+    !Array.isArray(service.endpoints) ||
+    service.endpoints.length === 0 ||
+    service.endpoints.length > EXPECTED_PRODUCTS.length
+  ) {
+    throw new Error("automatic service group identity or endpoint count is invalid.");
+  }
+
+  const expectedByUrl = new Map(EXPECTED_PRODUCTS.map((product) => [
+    `${api}${PRODUCT_CATALOG[product].path}`,
+    product,
+  ]));
+  const indexedProducts = Object.fromEntries(EXPECTED_PRODUCTS.map((product) => [product, false]));
+  const quality: Record<string, { reported_calls_30d: number; reported_unique_payers_30d: number }> = {};
+  const seen = new Set<ProductKey>();
+  for (const endpoint of service.endpoints as Array<Record<string, any>>) {
+    const product = expectedByUrl.get(String(endpoint.url));
+    if (!product || seen.has(product)) throw new Error("automatic directory contains an unknown or duplicate endpoint.");
+    const expected = PRODUCT_CATALOG[product];
+    const amount = Number(endpoint.pricing?.amount);
+    const reportedCalls = Number(endpoint.quality?.l30DaysTotalCalls);
+    const reportedPayers = Number(endpoint.quality?.l30DaysUniquePayers);
+    if (
+      endpoint.serviceName !== expected.service || endpoint.method !== expected.method ||
+      !Number.isFinite(amount) || Math.round(amount * 1_000_000) !== Number(expected.amountAtomic) ||
+      String(endpoint.pricing?.currency).toUpperCase() !== "USDC" ||
+      endpoint.pricing?.network !== NETWORK || endpoint.pricing?.scheme !== "exact" ||
+      !Number.isSafeInteger(reportedCalls) || reportedCalls < 0 ||
+      !Number.isSafeInteger(reportedPayers) || reportedPayers < 0 || reportedPayers > reportedCalls
+    ) {
+      throw new Error(`automatic directory contract drifted for ${expected.service}.`);
+    }
+    seen.add(product);
+    indexedProducts[product] = true;
+    quality[product] = {
+      reported_calls_30d: reportedCalls,
+      reported_unique_payers_30d: reportedPayers,
+    };
+  }
+  const missingProducts = EXPECTED_PRODUCTS.filter((product) => !seen.has(product));
+  return {
+    listed: true,
+    service_id: service.id,
+    endpoint_count: seen.size,
+    exact_contracts_verified: true,
+    indexed_products: indexedProducts,
+    missing_products: missingProducts,
+    reported_quality: quality,
+    accounting_note: "Agentic Market mirrors CDP Bazaar endpoints. Its aggregate quality counters are owner-contaminated and are never counted as genuine purchases or revenue; Base settlements are recognized only by the direct onchain ledger.",
   };
 }
 
@@ -542,14 +602,15 @@ async function nearMarketStatus(): Promise<Record<string, unknown>> {
   const jobs = await jobsResponse.json() as Array<Record<string, any>>;
   const walletState = await walletResponse.json() as Record<string, any>;
   if (!Array.isArray(services) || !Array.isArray(jobs)) throw new Error("marketplace returned invalid telemetry.");
-  const expected = new Map(NEAR_MARKET_LISTINGS.map((listing) => [listing.name, listing]));
-  const owned = services.filter(({ name }) => expected.has(String(name)));
+  const expected = new Map(NEAR_MARKET_LISTINGS.map((listing) => [listing.service_id, listing]));
+  const owned = services.filter(({ service_id }) => expected.has(String(service_id)));
   if (owned.length !== expected.size || new Set(owned.map(({ service_id }) => service_id)).size !== expected.size) {
     throw new Error("catalog does not contain the exact six expected services.");
   }
   for (const service of owned) {
-    const listing = expected.get(String(service.name));
+    const listing = expected.get(String(service.service_id));
     if (!listing || service.agent_id !== NEAR_MARKET_PROVIDER_ID ||
+      service.name !== listing.name ||
       service.description !== listing.description || service.category !== listing.category ||
       service.pricing_model !== listing.pricing_model || service.endpoint_url !== listing.endpoint_url ||
       service.price_amount !== listing.price_amount || service.price_token !== listing.price_token ||
@@ -731,6 +792,10 @@ function renderMonitorNote(report: Record<string, any>): string {
   const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
   const nearPurchases = Number(report.marketplaces?.near?.completed_external_jobs || 0);
   const payanAttributedSales = Number(report.marketplaces?.payan?.delivered_external_sales || 0);
+  const agenticIndexed = report.marketplaces?.agentic_market?.indexed_products || {};
+  const agenticMissing = Array.isArray(report.marketplaces?.agentic_market?.missing_products)
+    ? report.marketplaces.agentic_market.missing_products
+    : [];
   const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases + nearPurchases;
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
@@ -756,6 +821,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **the402 monthly bundle:** ${report.marketplaces?.the402?.subscription_plan?.active ? `$${Number(report.marketplaces.the402.subscription_plan.agent_price_usd).toFixed(2)} for up to ${report.marketplaces.the402.subscription_plan.maximum_monthly_requests} requests` : "unavailable"}
 - **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"}
 - **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
+- **Agentic Market automatic directory:** ${report.marketplaces?.agentic_market?.exact_contracts_verified ? `${report.marketplaces.agentic_market.endpoint_count} / 7 exact contracts indexed` : "unavailable or drifted"}${agenticMissing.length ? `; pending ${agenticMissing.join(", ")}` : ""}
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
@@ -765,13 +831,13 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products are independently buyable through the402, NEAR Agent Market, and PayanAgent with exact machine-readable contracts; SkillVerdict remains isolated. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six existing products are independently buyable through the402, NEAR Agent Market, and PayanAgent with exact machine-readable contracts. Agentic Market also mirrors settled CDP Bazaar endpoints automatically; its owner-contaminated quality counters are excluded from commerce totals. SkillVerdict remains isolated from independently registered channels. Distribution is now the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers. Owner-funded checks remain excluded.
 
 ## What is next
 
 1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
 2. Monitor GitHub Skill, AgentTool, AgentSkill, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
-3. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, guarded buyer-request feed, exact receipt attribution, and Coinbase Bazaar while keeping SkillVerdict out of the new channels until its isolated experiment ends.
+3. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, Agentic Market's automatic mirror, guarded buyer-request feed, exact receipt attribution, and Coinbase Bazaar while keeping SkillVerdict out of independently registered channels until its isolated experiment ends.
 4. Improve positioning from observed discovery and genuine calls until ten external purchases are recognized. Do not build an eighth product before that gate.
 
 ## Production health
@@ -786,15 +852,15 @@ ${errors}
 
 ## Products and distribution
 
-| Product | Price | Global semantic best rank | Merchant cache |
-|---|---:|---:|---|
-| BountyVerdict | $0.05 | ${ranks.single ?? "not found"} | ${indexed.single ? "indexed" : "pending"} |
-| BountyVerdict Portfolio | $0.40 | ${ranks.portfolio ?? "not found"} | ${indexed.portfolio ? "indexed" : "pending"} |
-| HarnessVerdict | $0.03 | ${ranks.harness ?? "not found"} | ${indexed.harness ? "indexed" : "pending"} |
-| SkillVerdict | $0.06 | ${ranks.skill ?? "not found"} | ${indexed.skill ? "indexed" : "pending"} |
-| RunVerdict | $0.04 | ${ranks.run ?? "not found"} | ${indexed.run ? "indexed" : "pending"} |
-| FlakeVerdict | $0.07 | ${ranks.flake ?? "not found"} | ${indexed.flake ? "indexed" : "pending"} |
-| MCPDriftVerdict | $0.02 | ${ranks.mcpdrift ?? "not found"} | ${indexed.mcpdrift ? "indexed" : "pending"} |
+| Product | Price | Global semantic best rank | CDP merchant cache | Agentic Market |
+|---|---:|---:|---|---|
+| BountyVerdict | $0.05 | ${ranks.single ?? "not found"} | ${indexed.single ? "indexed" : "pending"} | ${agenticIndexed.single ? "indexed" : "pending"} |
+| BountyVerdict Portfolio | $0.40 | ${ranks.portfolio ?? "not found"} | ${indexed.portfolio ? "indexed" : "pending"} | ${agenticIndexed.portfolio ? "indexed" : "pending"} |
+| HarnessVerdict | $0.03 | ${ranks.harness ?? "not found"} | ${indexed.harness ? "indexed" : "pending"} | ${agenticIndexed.harness ? "indexed" : "pending"} |
+| SkillVerdict | $0.06 | ${ranks.skill ?? "not found"} | ${indexed.skill ? "indexed" : "pending"} | ${agenticIndexed.skill ? "indexed" : "pending"} |
+| RunVerdict | $0.04 | ${ranks.run ?? "not found"} | ${indexed.run ? "indexed" : "pending"} | ${agenticIndexed.run ? "indexed" : "pending"} |
+| FlakeVerdict | $0.07 | ${ranks.flake ?? "not found"} | ${indexed.flake ? "indexed" : "pending"} | ${agenticIndexed.flake ? "indexed" : "pending"} |
+| MCPDriftVerdict | $0.02 | ${ranks.mcpdrift ?? "not found"} | ${indexed.mcpdrift ? "indexed" : "pending"} | ${agenticIndexed.mcpdrift ? "indexed" : "pending"} |
 
 ## Acquisition funnel
 
@@ -809,6 +875,7 @@ ${errors}
 - the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded)
+- Agentic Market automatic endpoints: ${report.marketplaces?.agentic_market?.endpoint_count ?? "unavailable"} / 7 (CDP Bazaar mirror; reported quality counters excluded from purchase and revenue accounting)
 - Experiment status: ${experiment.status || "unavailable"}
 - Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
 - Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
@@ -852,6 +919,7 @@ let acquisition: Record<string, unknown> = {};
 let the402: Record<string, unknown> = {};
 let nearMarket: Record<string, unknown> = {};
 let payan: Record<string, unknown> = {};
+let agenticMarket: Record<string, unknown> = {};
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, openapi, llms] = await Promise.all([
@@ -1002,6 +1070,12 @@ try {
   errors.push(`PayanAgent: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+try {
+  agenticMarket = await agenticMarketStatus();
+} catch (error) {
+  errors.push(`Agentic Market: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 const report = {
   product: "BountyVerdict",
   checked_at: checkedAt,
@@ -1012,7 +1086,7 @@ const report = {
   health,
   discovery,
   revenue,
-  marketplaces: { the402, near: nearMarket, payan },
+  marketplaces: { the402, near: nearMarket, payan, agentic_market: agenticMarket },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
       Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0) +

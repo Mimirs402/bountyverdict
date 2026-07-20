@@ -29,10 +29,10 @@ export const THE402_LISTINGS: ReadonlyArray<{
     product: "single",
     service_id: "svc_5e36dabc8b434e95",
     name: "BountyVerdict",
-    description: "Decide whether one public GitHub bounty is still available and worth pursuing before coding. Returns AVOID, CAUTION, or VIABLE with public evidence and repository AI-policy coverage. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
+    description: "Check GitHub bounty eligibility and claimability for one public issue before coding. Determine whether it is still open, already assigned or claimed, blocked by linked pull requests, or restricted by repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and bounded coverage. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
     price: "$0.05",
     agent_price: "$0.053",
-    tags: ["github", "bounty", "due-diligence", "agent-decision"],
+    tags: ["github", "bounty", "eligibility", "claimability", "due-diligence", "agent-decision"],
     input_schema: {
       type: "object",
       required: ["issue_url"],
@@ -100,11 +100,11 @@ export const THE402_LISTINGS: ReadonlyArray<{
   {
     product: "run",
     service_id: "svc_cdd16073d02c4429",
-    name: "RunVerdict",
-    description: "Diagnose why one public GitHub Actions run failed and return a bounded root cause, retryability decision, redacted evidence, and concrete next action without rerunning CI. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
+    name: "GitHub Actions CI Failure Diagnosis — RunVerdict",
+    description: "Diagnose one failed public GitHub Actions workflow run from bounded job metadata and failed-job logs. Returns PASS, WAIT, RETRY, FIX, or INVESTIGATE with a root-cause classification, retryability, redacted evidence, and concrete next actions. Instant, read-only, and never reruns CI or executes repository code.",
     price: "$0.04",
     agent_price: "$0.042",
-    tags: ["github-actions", "ci", "root-cause", "developer-tools"],
+    tags: ["github-actions", "ci-failure", "failure-diagnosis", "failed-workflow", "workflow-debugging", "root-cause", "retry-decision", "developer-tools"],
     input_schema: {
       type: "object",
       required: ["run_url"],

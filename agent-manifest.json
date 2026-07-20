@@ -163,7 +163,7 @@
     "check_mcp_tool_drift": "https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/cristianmoroaica/bountyverdict",
-  "updated_at": "2026-07-20T18:44:36.346Z",
+  "updated_at": "2026-07-20T19:09:39.024Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
@@ -216,7 +216,7 @@
           "fulfillment_type": "instant"
         },
         {
-          "name": "RunVerdict",
+          "name": "GitHub Actions CI Failure Diagnosis — RunVerdict",
           "service_id": "svc_cdd16073d02c4429",
           "purchase_endpoint": "https://api.the402.ai/v1/services/svc_cdd16073d02c4429/purchase",
           "method": "POST",
@@ -241,6 +241,67 @@
           "agent_price_usdc": "0.021",
           "provider_net_usdc": "0.02",
           "fulfillment_type": "instant"
+        }
+      ]
+    },
+    "near_agent_market": {
+      "provider_id": "51ebba6e-65e9-49b2-b23b-6561b2375179",
+      "provider_url": "https://market.near.ai/agents/bountyverdict",
+      "skillverdict_excluded_during_frozen_experiment": true,
+      "services": [
+        {
+          "name": "BountyVerdict",
+          "service_id": "88c3e8f6-07f4-414e-bc43-c5ad61cf21fd",
+          "hire_url": "https://market.near.ai/hire?service_id=88c3e8f6-07f4-414e-bc43-c5ad61cf21fd",
+          "invoke_endpoint": "https://market.near.ai/v1/services/88c3e8f6-07f4-414e-bc43-c5ad61cf21fd/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
+        },
+        {
+          "name": "BountyVerdict Portfolio",
+          "service_id": "3b496165-8b2c-4c97-8593-1242e5d15384",
+          "hire_url": "https://market.near.ai/hire?service_id=3b496165-8b2c-4c97-8593-1242e5d15384",
+          "invoke_endpoint": "https://market.near.ai/v1/services/3b496165-8b2c-4c97-8593-1242e5d15384/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
+        },
+        {
+          "name": "GitHub Agent Instruction Audit — HarnessVerdict",
+          "service_id": "dd781a20-6643-42ee-8c19-0c16425e685d",
+          "hire_url": "https://market.near.ai/hire?service_id=dd781a20-6643-42ee-8c19-0c16425e685d",
+          "invoke_endpoint": "https://market.near.ai/v1/services/dd781a20-6643-42ee-8c19-0c16425e685d/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
+        },
+        {
+          "name": "GitHub Actions CI Failure Diagnosis — RunVerdict",
+          "service_id": "88bb0780-9121-4acd-a2e2-4f8a2bc005a8",
+          "hire_url": "https://market.near.ai/hire?service_id=88bb0780-9121-4acd-a2e2-4f8a2bc005a8",
+          "invoke_endpoint": "https://market.near.ai/v1/services/88bb0780-9121-4acd-a2e2-4f8a2bc005a8/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
+        },
+        {
+          "name": "CI Flake Verdict",
+          "service_id": "7385fdea-5d7f-43d4-9fb2-738b46316d0f",
+          "hire_url": "https://market.near.ai/hire?service_id=7385fdea-5d7f-43d4-9fb2-738b46316d0f",
+          "invoke_endpoint": "https://market.near.ai/v1/services/7385fdea-5d7f-43d4-9fb2-738b46316d0f/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
+        },
+        {
+          "name": "MCPDriftVerdict",
+          "service_id": "0a0b0909-2829-4437-b23e-4376a61041ba",
+          "hire_url": "https://market.near.ai/hire?service_id=0a0b0909-2829-4437-b23e-4376a61041ba",
+          "invoke_endpoint": "https://market.near.ai/v1/services/0a0b0909-2829-4437-b23e-4376a61041ba/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "1"
         }
       ]
     }

@@ -1,4 +1,5 @@
 import { the402MarketplaceManifest } from "./the402-catalog.ts";
+import { nearMarketManifest } from "./near-market.ts";
 
 export interface AgentManifest {
   schema_version: string;
@@ -44,6 +45,7 @@ export function activateManifest(
         ? manifest.marketplaces as Record<string, unknown>
         : {}),
       the402: the402MarketplaceManifest(),
+      near_agent_market: nearMarketManifest(),
     },
     status: "active",
     production_api: origin.origin,

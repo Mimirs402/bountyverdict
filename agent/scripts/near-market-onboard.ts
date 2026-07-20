@@ -35,8 +35,8 @@ if (!Array.isArray(owned)) throw new Error("NEAR Market returned an invalid serv
 
 const results: Array<{ product: string; service_id: string; action: "created" | "updated" }> = [];
 for (const definition of NEAR_MARKET_LISTINGS) {
-  const matches = owned.filter(({ name }) => name === definition.name);
-  if (matches.length > 1) throw new Error(`NEAR Market contains duplicate ${definition.name} listings.`);
+  const matches = owned.filter(({ service_id }) => service_id === definition.service_id);
+  if (matches.length > 1) throw new Error(`NEAR Market contains duplicate ${definition.service_id} listings.`);
   const previous = matches[0];
   if (previous && previous.agent_id !== NEAR_MARKET_PROVIDER_ID) {
     throw new Error(`NEAR Market ${definition.name} belongs to an unexpected provider.`);
@@ -51,7 +51,7 @@ for (const definition of NEAR_MARKET_LISTINGS) {
   }
   const service = await response.json() as Service;
   if (
-    !service || typeof service.service_id !== "string" ||
+    !service || service.service_id !== definition.service_id ||
     service.agent_id !== NEAR_MARKET_PROVIDER_ID || service.name !== definition.name
   ) throw new Error(`NEAR Market returned an invalid ${definition.product} listing.`);
   results.push({
@@ -62,4 +62,3 @@ for (const definition of NEAR_MARKET_LISTINGS) {
 }
 
 console.log(JSON.stringify({ provider_id: NEAR_MARKET_PROVIDER_ID, services: results }, null, 2));
-

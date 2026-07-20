@@ -15,6 +15,10 @@ import {
   THE402_PROVIDER_CATALOG_URL,
   THE402_SUBSCRIPTION_PLAN,
 } from "./the402-catalog.ts";
+import {
+  NEAR_MARKET_LISTINGS,
+  NEAR_MARKET_PROVIDER_URL,
+} from "./near-market.ts";
 
 function paymentInfo(price: string) {
   const amount = price.replace(/^\$/, "");
@@ -495,6 +499,9 @@ export function createLlmsText(origin: string): string {
   const the402Services = THE402_LISTINGS.map((listing) =>
     `- ${listing.name}: POST https://api.the402.ai/v1/services/${listing.service_id}/purchase — agent price ${listing.agent_price} USDC; instant fulfillment`,
   ).join("\n");
+  const nearMarketServices = NEAR_MARKET_LISTINGS.map((listing) =>
+    `- ${listing.name}: hire https://market.near.ai/hire?service_id=${listing.service_id}; authenticated POST https://market.near.ai/v1/services/${listing.service_id}/invoke — ${listing.price_amount} ${listing.price_token}`,
+  ).join("\n");
   return `# BountyVerdict Agent Decision APIs
 
 > Seven bounded checks for public GitHub decisions and MCP tool-catalog upgrade safety.
@@ -543,6 +550,12 @@ export function createLlmsText(origin: string): string {
 - SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
 - Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the six listed services.
 ${the402Services}
+
+## NEAR Agent Market
+
+- Public provider profile: ${NEAR_MARKET_PROVIDER_URL}
+- These six automated services expose the same tested input and output contracts through NEAR Agent Market; SkillVerdict remains excluded during its frozen experiment.
+${nearMarketServices}
 
 ## Differentiation
 

@@ -26,6 +26,11 @@ test("manifest activation records a verified HTTPS production origin", () => {
   assert.equal(marketplaces.the402.subscription_plan.plan_id, "plan_ec6c49878dc34636");
   assert.equal(marketplaces.the402.subscription_plan.maximum_requests_per_period, 20);
   assert.match(marketplaces.the402.services[0].purchase_endpoint, /^https:\/\/api\.the402\.ai\/v1\/services\/svc_/);
+  assert.equal(marketplaces.near_agent_market.provider_id, "51ebba6e-65e9-49b2-b23b-6561b2375179");
+  assert.equal(marketplaces.near_agent_market.services.length, 6);
+  assert.equal(marketplaces.near_agent_market.services.some((service: any) => service.name === "SkillVerdict"), false);
+  assert.match(marketplaces.near_agent_market.services[0].hire_url, /^https:\/\/market\.near\.ai\/hire\?service_id=/);
+  assert.match(marketplaces.near_agent_market.services[0].invoke_endpoint, /^https:\/\/market\.near\.ai\/v1\/services\//);
 });
 
 test("manifest activation rejects non-origin and non-HTTPS URLs", () => {

@@ -15,7 +15,9 @@ test("NEAR Market publishes only the six frozen automated products", () => {
     "flake", "harness", "mcpdrift", "portfolio", "run", "single",
   ]);
   assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ endpoint_url }) => endpoint_url)).size, 6);
+  assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ service_id }) => service_id)).size, 6);
   for (const listing of NEAR_MARKET_LISTINGS) {
+    assert.match(listing.service_id, /^[a-f0-9-]{36}$/);
     assert.equal(listing.price_amount, "1");
     assert.equal(listing.price_token, "USDC");
     assert.equal(listing.pricing_model, "fixed");

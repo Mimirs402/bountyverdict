@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, promisify } from "node:util";
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { base } from "viem/chains";
 import { validatePaymentChallenge } from "../src/payment-safety.ts";
@@ -25,6 +26,7 @@ import {
   NEAR_MARKET_PROVIDER_ID,
 } from "../src/near-market.ts";
 import { PAYAN_API, PAYAN_OFFERS, PAYAN_PROVIDER_ID } from "../src/payan.ts";
+import { parseGitHubTraffic } from "../src/github-traffic.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -35,6 +37,8 @@ const AGENTIC_MARKET_SERVICE =
 const MAINNET_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NETWORK = "eip155:8453";
 const TIMEOUT_MS = 30_000;
+const execFileAsync = promisify(execFile);
+const GITHUB_REPOSITORY = "cristianmoroaica/bountyverdict";
 
 const api = new URL(process.env.PRODUCTION_API_URL || DEFAULT_API).origin;
 const wallet = process.env.REVENUE_WALLET || DEFAULT_WALLET;
@@ -51,6 +55,8 @@ const funnelStateFile = process.env.FUNNEL_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/funnel-telemetry.json`;
 const trustedFunnelBaselineFile = process.env.TRUSTED_FUNNEL_BASELINE_FILE ||
   `${homedir()}/.local/state/bountyverdict/funnel-trusted-baseline.json`;
+const trustedFunnelEpochFile = process.env.TRUSTED_FUNNEL_HISTORY_FILE ||
+  `${homedir()}/.local/state/bountyverdict/funnel-trusted-epochs.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = process.env.TRACKED_COSTS_USDC || "0";
 const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";
@@ -158,6 +164,27 @@ async function monitoredFetchWithServerRetry(input: string, init?: RequestInit):
     response = await monitoredFetch(input, init);
   }
   return response;
+}
+
+async function githubTrafficStatus(): Promise<Record<string, unknown>> {
+  const names = ["views", "clones", "popular/referrers", "popular/paths"] as const;
+  const values = await Promise.all(names.map(async (name) => {
+    const { stdout } = await execFileAsync("gh", [
+      "api",
+      `repos/${GITHUB_REPOSITORY}/traffic/${name}`,
+      "-H",
+      "Accept: application/vnd.github+json",
+      "-H",
+      "X-GitHub-Api-Version: 2022-11-28",
+    ], { timeout: TIMEOUT_MS, maxBuffer: 1_000_000, encoding: "utf8" });
+    return JSON.parse(stdout) as unknown;
+  }));
+  return parseGitHubTraffic(GITHUB_REPOSITORY, {
+    views: values[0],
+    clones: values[1],
+    referrers: values[2],
+    popular_paths: values[3],
+  });
 }
 
 async function requireStatus(path: string, expected = 200): Promise<number> {
@@ -936,6 +963,17 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
 
 async function funnelStatus(): Promise<Record<string, unknown>> {
   try {
+    const monotonicDelta = (current: unknown, baseline: unknown, label: string): number => {
+      const currentValue = Number(current || 0);
+      const baselineValue = Number(baseline || 0);
+      if (!Number.isSafeInteger(currentValue) || currentValue < 0 || !Number.isSafeInteger(baselineValue) || baselineValue < 0) {
+        throw new Error(`${label} counters are invalid.`);
+      }
+      if (currentValue < baselineValue) {
+        throw new Error(`${label} regressed from ${baselineValue} to ${currentValue}; trusted rates are unavailable until an explicit audited epoch starts.`);
+      }
+      return currentValue - baselineValue;
+    };
     const state = loadFunnelSnapshot(JSON.parse(await readFile(funnelStateFile, "utf8")));
     if (!state) throw new Error("Funnel telemetry state is malformed.");
     const owner = state.by_source.owner_automation;
@@ -976,6 +1014,7 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
     try {
       trustedBaseline = JSON.parse(await readFile(trustedFunnelBaselineFile, "utf8"));
       if (trustedBaseline.schema_version !== 1 || typeof trustedBaseline.initialized_at !== "string" ||
+        (trustedBaseline.epoch_id !== undefined && (!Number.isSafeInteger(trustedBaseline.epoch_id) || trustedBaseline.epoch_id < 1)) ||
         !trustedBaseline.counters || !trustedBaseline.external_by_product || !trustedBaseline.by_channel ||
         !trustedBaseline.by_client_class || !trustedBaseline.external_discovery_by_surface) {
         throw new Error("Trusted funnel baseline is malformed.");
@@ -984,6 +1023,7 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       trustedBaseline = {
         schema_version: 1,
+        epoch_id: 1,
         initialized_at: new Date().toISOString(),
         reason: "Owner release probes were not identifiable before this boundary; earlier external-or-unattributed totals are retained but not used for conversion rates.",
         counters: currentTrustedCounters,
@@ -994,43 +1034,74 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
       };
       await atomicWrite(trustedFunnelBaselineFile, `${JSON.stringify(trustedBaseline, null, 2)}\n`);
     }
+    let epochRotation: Record<string, any> | null = null;
+    try {
+      const ledger = JSON.parse(await readFile(trustedFunnelEpochFile, "utf8")) as Record<string, any>;
+      if (ledger.schema_version !== 2 || !Number.isSafeInteger(ledger.active_epoch_id) || !Array.isArray(ledger.epochs)) {
+        throw new Error("Trusted funnel epoch ledger is malformed.");
+      }
+      if (Number(ledger.active_epoch_id) !== Number(trustedBaseline.epoch_id || 1)) {
+        throw new Error("Trusted funnel epoch ledger and active baseline disagree.");
+      }
+      if (ledger.rotation && !["draining", "activated"].includes(String(ledger.rotation.status))) {
+        throw new Error("Trusted funnel epoch rotation is malformed.");
+      }
+      epochRotation = ledger.rotation || null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     const trustedExternalByProduct = Object.fromEntries(EXPECTED_PRODUCTS.map((product) => {
       const current = externalByProduct[product];
       const baseline = trustedBaseline.external_by_product?.[product] || {};
       return [product, Object.fromEntries(Object.entries(current).map(([key, value]) => [
         key,
-        Math.max(0, Number(value || 0) - Number(baseline[key] || 0)),
+        monotonicDelta(value, baseline[key], `Product ${product} ${key}`),
       ]))];
     }));
     const trusted = Object.fromEntries(Object.entries(currentTrustedCounters).map(([key, value]) => [
       key,
-      Math.max(0, Number(value) - Number(trustedBaseline.counters[key] || 0)),
+      monotonicDelta(value, trustedBaseline.counters[key], `Funnel ${key}`),
     ]));
     const trustedByChannel = Object.fromEntries(Object.entries(state.by_channel).map(([channel, current]) => [
       channel,
       Object.fromEntries(Object.entries(current).map(([key, value]) => [
         key,
-        Math.max(0, Number(value || 0) - Number(trustedBaseline.by_channel?.[channel]?.[key] || 0)),
+        monotonicDelta(value, trustedBaseline.by_channel?.[channel]?.[key], `Channel ${channel} ${key}`),
       ])),
     ]));
     const trustedByClientClass = Object.fromEntries(Object.entries(state.by_client_class).map(([client, current]) => [
       client,
       Object.fromEntries(Object.entries(current).map(([key, value]) => [
         key,
-        Math.max(0, Number(value || 0) - Number(trustedBaseline.by_client_class?.[client]?.[key] || 0)),
+        monotonicDelta(value, trustedBaseline.by_client_class?.[client]?.[key], `Client ${client} ${key}`),
       ])),
     ]));
     const trustedExternalDiscoveryBySurface = Object.fromEntries(Object.entries(externalDiscoveryBySurface).map(([surface, count]) => [
       surface,
-      Math.max(0, Number(count || 0) - Number(trustedBaseline.external_discovery_by_surface?.[surface] || 0)),
+      monotonicDelta(count, trustedBaseline.external_discovery_by_surface?.[surface], `Discovery surface ${surface}`),
     ]));
-    const trustedLearningStage = trusted.external_discovery_requests === 0 && trusted.external_402_challenges === 0 && trusted.signed_payment_attempts === 0
+    const measurementEligible = epochRotation?.status !== "draining";
+    const effectiveTrusted = measurementEligible
+      ? trusted
+      : Object.fromEntries(Object.keys(trusted).map((key) => [key, 0]));
+    const zeroCounters = (record: Record<string, Record<string, unknown>>) => Object.fromEntries(
+      Object.entries(record).map(([dimension, counters]) => [dimension, Object.fromEntries(Object.keys(counters).map((key) => [key, 0]))]),
+    );
+    const effectiveByProduct = measurementEligible ? trustedExternalByProduct : zeroCounters(trustedExternalByProduct);
+    const effectiveByChannel = measurementEligible ? trustedByChannel : zeroCounters(trustedByChannel);
+    const effectiveByClient = measurementEligible ? trustedByClientClass : zeroCounters(trustedByClientClass);
+    const effectiveDiscoveryBySurface = measurementEligible
+      ? trustedExternalDiscoveryBySurface
+      : Object.fromEntries(Object.keys(trustedExternalDiscoveryBySurface).map((surface) => [surface, 0]));
+    const trustedLearningStage = !measurementEligible
+      ? "measurement_draining"
+      : effectiveTrusted.external_discovery_requests === 0 && effectiveTrusted.external_402_challenges === 0 && effectiveTrusted.signed_payment_attempts === 0
       ? "reach_not_observed"
-      : trusted.external_402_challenges === 0 && trusted.signed_payment_attempts === 0
+      : effectiveTrusted.external_402_challenges === 0 && effectiveTrusted.signed_payment_attempts === 0
         ? "discovery_surface_without_paid_route"
-      : trusted.signed_payment_attempts === 0
+      : effectiveTrusted.signed_payment_attempts === 0
         ? "discovery_without_payment_attempt"
-        : trusted.successful_signed_responses === 0
+        : effectiveTrusted.successful_signed_responses === 0
           ? "signed_payment_friction"
           : "signed_conversion_observed";
     return {
@@ -1047,21 +1118,28 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
       signed_payment_attempts: externalSignedRequests,
       successful_signed_responses: externalSignedSuccesses,
       trusted_capture_started_at: trustedBaseline.initialized_at,
-      trusted_external_discovery_requests: trusted.external_discovery_requests,
-      trusted_external_402_challenges: trusted.external_402_challenges,
-      trusted_signed_payment_attempts: trusted.signed_payment_attempts,
-      trusted_successful_signed_responses: trusted.successful_signed_responses,
-      trusted_external_by_product: trustedExternalByProduct,
-      trusted_by_channel: trustedByChannel,
-      trusted_by_client_class: trustedByClientClass,
-      trusted_external_discovery_by_surface: trustedExternalDiscoveryBySurface,
+      trusted_epoch_id: Number(trustedBaseline.epoch_id || 1),
+      trusted_measurement_eligible: measurementEligible,
+      trusted_epoch_rotation: epochRotation,
+      trusted_external_discovery_requests: effectiveTrusted.external_discovery_requests,
+      trusted_external_402_challenges: effectiveTrusted.external_402_challenges,
+      trusted_signed_payment_attempts: effectiveTrusted.signed_payment_attempts,
+      trusted_successful_signed_responses: effectiveTrusted.successful_signed_responses,
+      trusted_external_by_product: effectiveByProduct,
+      trusted_by_channel: effectiveByChannel,
+      trusted_by_client_class: effectiveByClient,
+      trusted_external_discovery_by_surface: effectiveDiscoveryBySurface,
+      provisional_external_discovery_requests: trusted.external_discovery_requests,
+      provisional_external_402_challenges: trusted.external_402_challenges,
+      provisional_signed_payment_attempts: trusted.signed_payment_attempts,
+      provisional_successful_signed_responses: trusted.successful_signed_responses,
       pre_trusted_external_402_challenges: Number(trustedBaseline.counters.external_402_challenges || 0),
       pre_trusted_measurement_note: trustedBaseline.reason,
-      challenge_to_signed_attempt_percent: trusted.external_402_challenges > 0
-        ? Math.round(trusted.signed_payment_attempts / trusted.external_402_challenges * 1_000) / 10
+      challenge_to_signed_attempt_percent: measurementEligible && effectiveTrusted.external_402_challenges > 0
+        ? Math.round(effectiveTrusted.signed_payment_attempts / effectiveTrusted.external_402_challenges * 1_000) / 10
         : null,
-      signed_attempt_success_percent: trusted.signed_payment_attempts > 0
-        ? Math.round(trusted.successful_signed_responses / trusted.signed_payment_attempts * 1_000) / 10
+      signed_attempt_success_percent: measurementEligible && effectiveTrusted.signed_payment_attempts > 0
+        ? Math.round(effectiveTrusted.successful_signed_responses / effectiveTrusted.signed_payment_attempts * 1_000) / 10
         : null,
       learning_stage: trustedLearningStage,
       owner_automation_requests: owner.requests,
@@ -1120,6 +1198,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const totalPurchases = Number(purchases.total || 0) + marketplacePurchases + subscriptionPurchases + nearPurchases;
   const skillInstalls = report.acquisition?.skills_sh?.install_counts || {};
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
+  const skillsShSearch = report.acquisition?.skills_sh?.search_index || {};
   const experiment = report.acquisition?.experiment || {};
   const buyerQuerySummary = report.discovery?.buyer_query_summary || {};
   const buyerQueryBenchmark = report.discovery?.buyer_query_benchmark || {};
@@ -1127,6 +1206,7 @@ function renderMonitorNote(report: Record<string, any>): string {
     ? `${Number(buyerQuerySummary.found_queries || 0)} / ${Number(buyerQuerySummary.query_count)} unbranded buyer-query variants found; ${Number(buyerQuerySummary.top_three_queries || 0)} rank in the top 3`
     : "unavailable";
   const funnel = report.funnel || {};
+  const githubTraffic = report.acquisition?.github_traffic || {};
   const externalProductFunnel = funnel.trusted_external_by_product || {};
   const activeChannels = Object.entries(funnel.trusted_by_channel || {})
     .filter(([channel, counters]: [string, any]) => !["owner_automation", "legacy_unclassified"].includes(channel) && Number(counters?.requests || 0) > 0)
@@ -1150,7 +1230,9 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
 - **Neutral buyer-query retrieval:** ${buyerBenchmarkSummary}
-- **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external discovery hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
+- **GitHub repository reach (rolling 14 days):** ${githubTraffic.available ? `${Number(githubTraffic.views?.count || 0)} views / ${Number(githubTraffic.views?.uniques || 0)} unique; ${Number(githubTraffic.clones?.count || 0)} clones / ${Number(githubTraffic.clones?.uniques || 0)} unique` : `unavailable (${githubTraffic.error || "not captured"})`}
+- **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external discovery hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
+- **Measurement boundary:** ${funnel.trusted_measurement_eligible === false ? `draining owner-triggered downstream probes; ${Number(funnel.provisional_external_discovery_requests || 0)} discovery and ${Number(funnel.provisional_external_402_challenges || 0)} challenge signals are excluded until a stable new epoch activates` : `epoch ${Number(funnel.trusted_epoch_id || 1)} eligible`}
 - **Current funnel diagnosis:** ${funnel.learning_stage || "unavailable"}
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
@@ -1168,6 +1250,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **402directory:** ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} endpoints listed (${report.acquisition?.directory_402?.status || "unavailable"}; submissions ${Array.isArray(report.acquisition?.directory_402?.submission_ids) ? report.acquisition.directory_402.submission_ids.join(", ") : "unavailable"})
 - **402 Index:** ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} endpoints live (${report.acquisition?.index_402?.status || "unavailable"}; registry presence is never a purchase)
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
+- **skills.sh global search:** ${Number(skillsShSearch.exact_found || 0)} / ${Number(skillsShSearch.exact_expected || 7)} exact names; ${Number(skillsShSearch.natural_found || 0)} / ${Number(skillsShSearch.natural_expected || 7)} natural buyer queries (owner-run corpus check, not impressions)
 - **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
 - **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
 - **Last refreshed:** ${report.checked_at}
@@ -1226,7 +1309,11 @@ ${EXPECTED_PRODUCTS.map((product) => {
 
 ## Acquisition funnel
 
+- GitHub repository traffic: ${githubTraffic.available ? `${Number(githubTraffic.views?.count || 0)} views (${Number(githubTraffic.views?.uniques || 0)} unique) and ${Number(githubTraffic.clones?.count || 0)} clones (${Number(githubTraffic.clones?.uniques || 0)} unique) in GitHub's rolling 14-day window` : `unavailable (${githubTraffic.error || "not captured"})`}
+- GitHub top referrers: ${Array.isArray(githubTraffic.referrers) && githubTraffic.referrers.length ? githubTraffic.referrers.map(({ referrer, count, uniques }: Record<string, unknown>) => `${String(referrer)} (${Number(count)} / ${Number(uniques)} unique)`).join(", ") : "none reported"}
+- GitHub popular paths: ${Array.isArray(githubTraffic.popular_paths) && githubTraffic.popular_paths.length ? githubTraffic.popular_paths.map(({ path, count, uniques }: Record<string, unknown>) => `${String(path)} (${Number(count)} / ${Number(uniques)} unique)`).join(", ") : "none reported"}
 - skills.sh repository installs: ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"}
+- skills.sh search corpus: branded ${skillsShSearch.branded_found === true ? "found" : "not found"}; exact names ${Number(skillsShSearch.exact_found || 0)} / ${Number(skillsShSearch.exact_expected || 7)}; natural buyer queries ${Number(skillsShSearch.natural_found || 0)} / ${Number(skillsShSearch.natural_expected || 7)} (owner-run retrieval, never demand)
 - Router installs: ${Number(skillInstalls["route-github-agent-checks"] || 0)}
 - SkillVerdict workflow installs: ${Number(skillInstalls["preflight-agent-skills"] || 0)}
 - AgentTool: ${report.acquisition?.agenttool?.status || (report.acquisition?.agenttool?.listed ? "listed" : "unavailable")}
@@ -1244,7 +1331,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded)
 - Agentic Market automatic endpoints: ${report.marketplaces?.agentic_market?.endpoint_count ?? "unavailable"} / 7 (CDP Bazaar mirror; reported quality counters excluded from purchase and revenue accounting)
-- Edge funnel capture: ${funnel.available ? `${Number(funnel.trusted_external_402_challenges || 0)} trusted external challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts since ${funnel.trusted_capture_started_at || "the clean boundary"}; ${Number(funnel.external_402_challenges || 0)} older/lifetime external-or-unattributed challenges retained but excluded from rates` : "unavailable"} (aggregate HTTP telemetry only; onchain ledger remains authoritative)
+- Edge funnel capture: ${funnel.available ? `${Number(funnel.trusted_external_402_challenges || 0)} trusted external challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}; ${Number(funnel.external_402_challenges || 0)} older/lifetime external-or-unattributed challenges retained but excluded from rates` : "unavailable"} (aggregate HTTP telemetry only; onchain ledger remains authoritative)
 - Discovery-surface capture: ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external since the clean boundary; ${Number(funnel.external_discovery_requests || 0)} lifetime external` : "unavailable"} (homepage, OpenAPI, llms.txt, samples, and common agent-convention probes)
 - External discovery surfaces observed: ${externalDiscoverySurfaces.length ? externalDiscoverySurfaces.map(([surface, count]) => `${surface} (${Number(count)})`).join(", ") : "none yet"}
 - Enhanced learning dimensions active since: ${funnel.enhanced_capture_started_at || "unavailable"}
@@ -1355,6 +1442,23 @@ try {
 }
 
 acquisition = await acquisitionStatus();
+
+try {
+  acquisition = {
+    ...acquisition,
+    github_traffic: await githubTrafficStatus(),
+  };
+} catch (error) {
+  acquisition = {
+    ...acquisition,
+    github_traffic: {
+      available: false,
+      checked_at: checkedAt,
+      error: error instanceof Error ? error.message : String(error),
+      accounting_note: "Repository traffic is acquisition evidence only and is never counted as a purchase or revenue.",
+    },
+  };
+}
 
 try {
   acquisition = {

@@ -243,7 +243,7 @@ function headersRecord(value: unknown): Record<string, string> {
 }
 
 function clientClass(userAgent: string, signed: boolean): FunnelClientClass {
-  if (/bountyverdict-(?:funnel-smoke|payment-smoke|directory-monitor|distribution-monitor|settlement-canary)/i.test(userAgent)) {
+  if (/bountyverdict-(?:owner-audit|funnel-smoke|payment-smoke|directory-monitor|distribution-monitor|settlement-canary)/i.test(userAgent)) {
     return "owner_automation";
   }
   if (/agent402/i.test(userAgent)) return "agent402";

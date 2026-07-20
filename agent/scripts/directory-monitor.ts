@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
-import { parseSkillsShInstallCounts } from "../src/acquisition.ts";
+import { parseSkillsShInstallCounts, PUBLISHED_SKILLS } from "../src/acquisition.ts";
 
 const repository = "https://github.com/cristianmoroaica/bountyverdict";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
@@ -51,6 +51,15 @@ const agent402BuyerQueries = Object.freeze([
   { product: "flake", path: "/api/flake", query: "decide whether failed github actions run is flaky and should retry" },
   { product: "mcpdrift", path: "/api/mcp-drift", query: "check MCP tools list schema drift compatibility breaking change" },
 ]);
+const skillsShBuyerQueries = Object.freeze([
+  { skill: "route-github-agent-checks", query: "route github agent checks" },
+  { skill: "audit-agent-harness", query: "audit coding agent repository instructions" },
+  { skill: "check-mcp-tool-drift", query: "check MCP tool schema compatibility" },
+  { skill: "classify-github-flakes", query: "decide whether github actions failure is flaky" },
+  { skill: "diagnose-github-actions", query: "diagnose github actions failure" },
+  { skill: "preflight-agent-skills", query: "security audit agent skill before install" },
+  { skill: "preflight-github-bounties", query: "check github bounty before coding" },
+]);
 const stateFile = process.env.DIRECTORY_STATE_FILE || `${homedir()}/.local/state/bountyverdict/directories.json`;
 const timeoutMs = 30_000;
 const agentSkillRetryMs = 20 * 60 * 60 * 1000;
@@ -64,10 +73,42 @@ async function atomicWrite(path: string, contents: string): Promise<void> {
 
 async function skillsShStatus(): Promise<Record<string, unknown>> {
   try {
-    const response = await fetch(skillsUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    const searchQueries = [
+      { type: "branded", skill: null, query: "bountyverdict" },
+      ...PUBLISHED_SKILLS.map((skill) => ({ type: "exact", skill, query: skill })),
+      ...skillsShBuyerQueries.map(({ skill, query }) => ({ type: "natural", skill, query })),
+    ];
+    const [response, ...searchResponses] = await Promise.all([
+      fetch(skillsUrl, { signal: AbortSignal.timeout(timeoutMs) }),
+      ...searchQueries.map(({ query }) => {
+        const url = new URL("https://skills.sh/api/search");
+        url.searchParams.set("q", query);
+        url.searchParams.set("limit", "100");
+        url.searchParams.set("owner", "cristianmoroaica");
+        return fetch(url, {
+          headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      }),
+    ]);
     const body = await response.text();
     const listed = response.ok && body.includes("bountyverdict") && !body.toLowerCase().includes("not found");
     if (!listed) return { url: skillsUrl, http_status: response.status, listed };
+    if (searchResponses.some((searchResponse) => !searchResponse.ok)) {
+      throw new Error("skills.sh search returned an unsuccessful response.");
+    }
+    const searchResults = await Promise.all(searchResponses.map(async (searchResponse, index) => {
+      const payload = await searchResponse.json() as Record<string, unknown>;
+      if (!Array.isArray(payload.skills) || !Number.isSafeInteger(payload.count)) {
+        throw new Error("skills.sh search returned malformed telemetry.");
+      }
+      const query = searchQueries[index];
+      const expectedId = query.skill ? `cristianmoroaica/bountyverdict/${query.skill}` : null;
+      const rank = expectedId === null
+        ? (payload.skills as Array<Record<string, unknown>>).findIndex(({ source }) => source === "cristianmoroaica/bountyverdict")
+        : (payload.skills as Array<Record<string, unknown>>).findIndex(({ id }) => id === expectedId);
+      return { ...query, found: rank >= 0, rank: rank >= 0 ? rank + 1 : null, returned_results: payload.skills.length };
+    }));
     try {
       const installs = parseSkillsShInstallCounts(body);
       return {
@@ -76,6 +117,15 @@ async function skillsShStatus(): Promise<Record<string, unknown>> {
         listed: true,
         total_installs: installs.total,
         install_counts: installs.by_skill,
+        search_index: {
+          branded_found: searchResults[0].found,
+          exact_found: searchResults.filter(({ type, found }) => type === "exact" && found).length,
+          exact_expected: PUBLISHED_SKILLS.length,
+          natural_found: searchResults.filter(({ type, found }) => type === "natural" && found).length,
+          natural_expected: skillsShBuyerQueries.length,
+          queries: searchResults,
+          measurement: "owner_run_search_corpus_and_retrieval_check_not_impressions_or_purchases",
+        },
         measurement: "anonymous_cli_install_telemetry_not_customer_purchases",
       };
     } catch (error) {
@@ -482,8 +532,7 @@ async function index402Status(): Promise<Record<string, unknown>> {
       const entry = await response.json() as Record<string, unknown>;
       const expected = x402ScanResources.find((resource) => resource.url === `${productionOrigin}${path}`);
       if (!expected || expected.method !== method || entry.id !== id || entry.url !== expected.url || entry.protocol !== "x402" ||
-        entry.payment_network !== "eip155:8453" || entry.provider !== "BountyVerdict" ||
-        entry.http_method !== method) {
+        entry.payment_network !== "eip155:8453" || entry.http_method !== method) {
         throw new Error(`402 Index ${product} contract telemetry drifted.`);
       }
       return {
@@ -493,6 +542,7 @@ async function index402Status(): Promise<Record<string, unknown>> {
         status: entry.status,
         health_status: entry.health_status,
         probe_status: entry.probe_status,
+        provider_display: entry.provider,
       };
     }));
     const active = resources.filter(({ status, health_status, probe_status }) =>

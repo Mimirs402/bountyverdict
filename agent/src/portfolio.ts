@@ -34,7 +34,7 @@ export interface PortfolioVerdict {
   checked_at: string;
 }
 
-function validateUrls(values: unknown): string[] {
+export function validatePortfolioUrls(values: unknown): string[] {
   if (!Array.isArray(values) || values.length < 2 || values.length > 10) {
     throw new CheckError("issue_urls must contain between 2 and 10 GitHub issue URLs.", 400, "INVALID_PORTFOLIO_SIZE");
   }
@@ -87,7 +87,7 @@ export async function checkBountyPortfolio(
   now = new Date(),
   checkImpl: CheckFunction = checkGithubIssue,
 ): Promise<PortfolioVerdict> {
-  const urls = validateUrls(issueUrls);
+  const urls = validatePortfolioUrls(issueUrls);
   const checks = await mapConcurrent(urls, 2, async (issueUrl) => {
     try {
       return { verdict: await checkImpl(issueUrl, env, fetchImpl, now), failure: null };

@@ -103,6 +103,12 @@ test("separates owner automation from external challenge counts", () => {
     { "user-agent": "bountyverdict-payment-smoke/1.0" },
   ));
   assert.equal(paymentProbe?.source, "owner_automation");
+  const ownerAudit = classifyFunnelTailEvent(event(
+    "/api/verdict?issue_url=https%3A%2F%2Fgithub.com%2Facme%2Frepo%2Fissues%2F1",
+    402,
+    { "user-agent": "bountyverdict-owner-audit/1.0" },
+  ));
+  assert.equal(ownerAudit?.source, "owner_automation");
 });
 
 test("learns only coarse channel, client, input, payment, and response dimensions", () => {

@@ -479,7 +479,7 @@ export function createOpenApi(
             "413": { description: "Request body exceeds 524,288 bytes; no payment challenge is emitted" },
             "422": { description: "Unsupported schema dialect or feature; no payment challenge is emitted" },
             "402": {
-              description: "Valid verdict is ready; payment required to return it. Snapshot/ruleset headers bind the challenge to the precomputed body result.",
+              description: "Valid verdict is ready; payment required to return it. Snapshot/ruleset headers identify the precomputed result; standard x402 authorizes the resource URL, not the POST body.",
               headers: {
                 "X-MCP-Drift-Baseline-Snapshot": { schema: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } },
                 "X-MCP-Drift-Current-Snapshot": { schema: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } },

@@ -7,7 +7,8 @@ import {
 } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { parseIssueUrl } from "../../analysis.js";
 import { CheckError, checkGithubIssue } from "./check.ts";
 import {
   BOUNTY_DISCOVERY_DESCRIPTION,
@@ -17,14 +18,14 @@ import {
   portfolioExample,
 } from "./discovery.ts";
 import { createLlmsText, createOpenApi } from "./openapi.ts";
-import { checkBountyPortfolio } from "./portfolio.ts";
-import { checkGithubHarness, HarnessError } from "./harness.ts";
+import { checkBountyPortfolio, validatePortfolioUrls } from "./portfolio.ts";
+import { checkGithubHarness, HarnessError, parseRepositoryUrl } from "./harness.ts";
 import { harnessDiscoveryExtension, harnessExample } from "./harness-discovery.ts";
-import { checkGithubSkill } from "./skill.ts";
+import { checkGithubSkill, normalizeSkillPath } from "./skill.ts";
 import { skillDiscoveryExtension, skillExample } from "./skill-discovery.ts";
-import { diagnoseGithubRun } from "./run.ts";
+import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { runDiscoveryExtension, runExample } from "./run-discovery.ts";
-import { diagnoseGithubFlake, FlakeError } from "./flake.ts";
+import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
 import { flakeDiscoveryExtension, flakeExample } from "./flake-discovery.ts";
 import {
   MCP_DRIFT_MAX_BODY_BYTES,
@@ -82,7 +83,17 @@ interface Env {
 
 type AppBindings = {
   Bindings: Env;
-  Variables: { mcpDriftResult: McpDriftResult };
+  Variables: {
+    mcpDriftResult: McpDriftResult;
+    singleIssueUrl: string;
+    portfolioIssueUrls: string[];
+    harnessRepoUrl: string;
+    skillRepoUrl: string;
+    skillPath: string;
+    runUrl: string;
+    flakeRunUrl: string;
+    flakeAttempt: number | undefined;
+  };
 };
 
 const SINGLE_PRICE_USD = PRODUCT_CATALOG.single.priceUsd;
@@ -107,6 +118,82 @@ const ICON_URL = `${PRODUCT_URL}favicon.svg`;
 const MANIFEST_URL = `${PRODUCT_URL}agent-manifest.json`;
 const SKILLS_URL = `${PRODUCT_URL}skills/`;
 const SKILL_URL = `${SKILLS_URL}route-github-agent-checks/SKILL.md`;
+const PORTFOLIO_MAX_BODY_BYTES = 16 * 1024;
+
+const INPUT_GUIDANCE = Object.freeze({
+  single: {
+    product: "BountyVerdict",
+    method: "GET",
+    required: ["issue_url"],
+    example: { issue_url: "https://github.com/owner/repository/issues/123" },
+  },
+  portfolio: {
+    product: "BountyVerdict Portfolio",
+    method: "POST",
+    required: ["issue_urls"],
+    example: { issue_urls: ["https://github.com/owner/repository/issues/123", "https://github.com/owner/repository/issues/456"] },
+  },
+  harness: {
+    product: "HarnessVerdict",
+    method: "GET",
+    required: ["repo_url"],
+    example: { repo_url: "https://github.com/owner/repository" },
+  },
+  skill: {
+    product: "SkillVerdict",
+    method: "GET",
+    required: ["repo_url", "skill_path"],
+    example: { repo_url: "https://github.com/owner/skills", skill_path: "skills/example" },
+  },
+  run: {
+    product: "RunVerdict",
+    method: "GET",
+    required: ["run_url"],
+    example: { run_url: "https://github.com/owner/repository/actions/runs/123456789" },
+  },
+  flake: {
+    product: "FlakeVerdict",
+    method: "GET",
+    required: ["run_url"],
+    optional: ["attempt"],
+    example: { run_url: "https://github.com/owner/repository/actions/runs/123456789", attempt: 1 },
+  },
+  mcpdrift: {
+    product: "MCPDriftVerdict",
+    method: "POST",
+    required: ["baseline", "current"],
+    example: mcpDriftExampleInput,
+  },
+} as const);
+
+type PreflightProduct = keyof typeof INPUT_GUIDANCE;
+
+function preflightFailure(
+  c: Context<AppBindings>,
+  product: PreflightProduct,
+  code: string,
+  message: string,
+  status: 400 | 413 | 422 | 429 | 503 = 400,
+  details: Record<string, unknown> = {},
+) {
+  const origin = new URL(c.req.url).origin;
+  const guidance = INPUT_GUIDANCE[product];
+  return c.json({
+    error: code,
+    message,
+    product: guidance.product,
+    payment_signature_present: Boolean(c.req.header("Payment-Signature") || c.req.header("X-PAYMENT")),
+    payment_verified: false,
+    payment_settled: false,
+    payment_challenge_issued: false,
+    ...details,
+    required_input: guidance,
+    free_sample: `${origin}${PRODUCT_CATALOG[product].samplePath}`,
+    openapi: `${origin}/openapi.json`,
+    agent_guide: `${origin}/llms.txt`,
+    retry: "Correct the input, then retry without a payment signature to receive a request-bound x402 challenge.",
+  }, status);
+}
 
 type UnpaidDecisionPreview = {
   product: string;
@@ -124,16 +211,24 @@ type UnpaidDecisionPreview = {
 async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPRequestContext) {
   const requestHint = preview.method === "GET"
     ? "Use the exact request URL, including its encoded query string."
-    : "Use POST with the exact validated JSON body; payment binds to those request bytes.";
+    : "Use POST with the intended validated JSON body. Standard x402 authorizes the resource URL, not the POST body; review the normalized body hash and resend the same JSON on the signed retry.";
   const requestUrl = context.adapter.getUrl();
   const requestBody = preview.method === "POST" && context.adapter.getBody
     ? await context.adapter.getBody()
     : undefined;
   const maxAmountAtomic = String(Math.round(Number(preview.price.replace(/^\$/, "")) * 1_000_000));
+  if (preview.method === "POST" && requestBody === undefined) {
+    throw new Error(`Validated POST body is unavailable for ${preview.product}; refusing to construct a payment challenge.`);
+  }
   const awalArgv = ["awal@2.12.0", "x402", "pay", requestUrl];
+  const normalizedBodyJson = requestBody === undefined ? undefined : JSON.stringify(requestBody);
+  const normalizedBodySha256 = normalizedBodyJson === undefined
+    ? undefined
+    : `sha256:${[...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalizedBodyJson)))]
+      .map((value) => value.toString(16).padStart(2, "0")).join("")}`;
   if (preview.method === "POST") {
     awalArgv.push("-X", "POST");
-    if (requestBody !== undefined) awalArgv.push("-d", JSON.stringify(requestBody));
+    if (normalizedBodyJson !== undefined) awalArgv.push("-d", normalizedBodyJson);
   }
   awalArgv.push("--max-amount", maxAmountAtomic, "--json");
   return {
@@ -162,7 +257,9 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
           method: preview.method,
           url: requestUrl,
           ...(requestBody === undefined ? {} : { body: requestBody }),
+          ...(normalizedBodySha256 === undefined ? {} : { normalized_body_sha256: normalizedBodySha256 }),
         },
+        authorization_scope: preview.method === "POST" ? "resource_url_not_post_body" : "resource_url",
         agentic_wallet: {
           executable: "npx",
           argv: awalArgv,
@@ -175,6 +272,7 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
           expected_success_status: 200,
           never_raise_max_amount_without_new_authorization: true,
         },
+        execution_risk: "Input shape is validated before payment. Third-party GitHub availability or state can still change after settlement; a payment does not guarantee upstream success.",
       },
     },
   };
@@ -670,6 +768,117 @@ const paymentGate: MiddlewareHandler<AppBindings> = async (c, next) => {
   }
 };
 
+const singlePreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "GET") return await next();
+  try {
+    const parsed = parseIssueUrl(c.req.query("issue_url") || "");
+    c.set("singleIssueUrl", `https://github.com/${parsed.owner}/${parsed.repo}/issues/${parsed.number}`);
+    return await next();
+  } catch (error) {
+    return preflightFailure(
+      c,
+      "single",
+      "INVALID_ISSUE_URL",
+      error instanceof Error ? error.message : "issue_url must be a canonical public GitHub issue URL.",
+    );
+  }
+};
+
+const portfolioPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "POST") return await next();
+  const contentType = c.req.header("Content-Type") || "";
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    return preflightFailure(c, "portfolio", "INVALID_CONTENT_TYPE", "Content-Type must be application/json.");
+  }
+  const declaredLength = c.req.header("Content-Length");
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > PORTFOLIO_MAX_BODY_BYTES) {
+    return preflightFailure(c, "portfolio", "INPUT_TOO_LARGE", "Request body exceeds 16,384 bytes.", 413);
+  }
+  try {
+    const raw = await c.req.raw.clone().text();
+    if (new TextEncoder().encode(raw).byteLength > PORTFOLIO_MAX_BODY_BYTES) {
+      return preflightFailure(c, "portfolio", "INPUT_TOO_LARGE", "Request body exceeds 16,384 bytes.", 413);
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+      Object.keys(parsed).length !== 1 || !("issue_urls" in parsed)) {
+      return preflightFailure(c, "portfolio", "INVALID_INPUT", "Request body must contain exactly issue_urls.");
+    }
+    c.set("portfolioIssueUrls", validatePortfolioUrls(parsed.issue_urls));
+    return await next();
+  } catch (error) {
+    if (error instanceof CheckError) {
+      return preflightFailure(c, "portfolio", error.code, error.message);
+    }
+    return preflightFailure(c, "portfolio", "INVALID_JSON", "Request body must be valid JSON.");
+  }
+};
+
+const harnessPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "GET") return await next();
+  try {
+    const parsed = parseRepositoryUrl(c.req.query("repo_url") || "");
+    c.set("harnessRepoUrl", `https://github.com/${parsed.owner}/${parsed.repo}`);
+    return await next();
+  } catch (error) {
+    return preflightFailure(c, "harness", "INVALID_REPOSITORY_URL", error instanceof Error ? error.message : "repo_url is invalid.");
+  }
+};
+
+const skillPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "GET") return await next();
+  try {
+    const parsed = parseRepositoryUrl(c.req.query("repo_url") || "");
+    const skill = normalizeSkillPath(c.req.query("skill_path") || "");
+    c.set("skillRepoUrl", `https://github.com/${parsed.owner}/${parsed.repo}`);
+    c.set("skillPath", skill.entry);
+    return await next();
+  } catch (error) {
+    const code = error instanceof HarnessError ? error.code : "INVALID_INPUT";
+    return preflightFailure(c, "skill", code, error instanceof Error ? error.message : "Skill input is invalid.");
+  }
+};
+
+const runPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "GET") return await next();
+  try {
+    const parsed = parseRunUrl(c.req.query("run_url") || "");
+    c.set("runUrl", `https://github.com/${parsed.owner}/${parsed.repo}/actions/runs/${parsed.runId}`);
+    return await next();
+  } catch (error) {
+    return preflightFailure(c, "run", "INVALID_RUN_URL", error instanceof Error ? error.message : "run_url is invalid.");
+  }
+};
+
+const flakePreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "GET") return await next();
+  try {
+    const parsed = parseRunUrl(c.req.query("run_url") || "");
+    c.set("flakeRunUrl", `https://github.com/${parsed.owner}/${parsed.repo}/actions/runs/${parsed.runId}`);
+    c.set("flakeAttempt", parseFlakeAttempt(c.req.query("attempt")));
+    if (!c.env.FLAKE_RATE_LIMITER) {
+      return preflightFailure(c, "flake", "SERVICE_CONFIGURATION_ERROR", "FlakeVerdict capacity protection is unavailable.", 503);
+    }
+    if (c.req.header("Payment-Signature") || c.req.header("X-PAYMENT")) {
+      const rateLimit = await c.env.FLAKE_RATE_LIMITER.limit({ key: "flake:verified-global" });
+      if (!rateLimit.success) {
+        c.header("Retry-After", "60");
+        return preflightFailure(c, "flake", "FLAKE_RATE_LIMITED", "FlakeVerdict is temporarily at its bounded upstream capacity.", 429);
+      }
+    }
+    return await next();
+  } catch (error) {
+    const code = error instanceof HarnessError ? error.code : "INVALID_INPUT";
+    return preflightFailure(c, "flake", code, error instanceof Error ? error.message : "Flake input is invalid.");
+  }
+};
+
+app.use(SINGLE_ENDPOINT, singlePreflight);
+app.use(PORTFOLIO_ENDPOINT, portfolioPreflight);
+app.use(HARNESS_ENDPOINT, harnessPreflight);
+app.use(SKILL_ENDPOINT, skillPreflight);
+app.use(RUN_ENDPOINT, runPreflight);
+app.use(FLAKE_ENDPOINT, flakePreflight);
 app.use(SINGLE_ENDPOINT, paymentGate);
 app.use(PORTFOLIO_ENDPOINT, paymentGate);
 app.use(HARNESS_ENDPOINT, paymentGate);
@@ -679,19 +888,12 @@ app.use(FLAKE_ENDPOINT, paymentGate);
 
 const mcpDriftPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
   const contentType = c.req.header("Content-Type") || "";
-  // Discovery registries probe POST resources without a body. Let an unsigned,
-  // bodyless probe reach x402 first so it can inspect the payment challenge.
-  // Real calls (including every signed payment) still validate and compute the
-  // exact body before verification or settlement.
-  if (!contentType && !c.req.header("Payment-Signature")) {
-    return await next();
-  }
   if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
-    return c.json({ error: "INVALID_INPUT", message: "Content-Type must be application/json.", path: "" }, 400);
+    return preflightFailure(c, "mcpdrift", "INVALID_INPUT", "Content-Type must be application/json.");
   }
   const declaredLength = c.req.header("Content-Length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > MCP_DRIFT_MAX_BODY_BYTES) {
-    return c.json({ error: "INPUT_TOO_LARGE", message: "Request body exceeds 524,288 bytes.", path: "" }, 413);
+    return preflightFailure(c, "mcpdrift", "INPUT_TOO_LARGE", "Request body exceeds 524,288 bytes.", 413);
   }
   try {
     const result = await parseAndAnalyzeMcpDrift(await c.req.text());
@@ -702,7 +904,7 @@ const mcpDriftPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
     return await next();
   } catch (error) {
     if (error instanceof McpDriftError) {
-      return c.json({ error: error.code, message: error.message, path: error.path }, error.status);
+      return preflightFailure(c, "mcpdrift", error.code, error.message, error.status, { path: error.path });
     }
     console.error("MCPDriftVerdict preflight failed", error instanceof Error ? { name: error.name, message: error.message } : { name: "unknown" });
     return c.json({ error: "INTERNAL_ERROR", message: "The MCP drift verdict could not be produced before payment." }, 500);
@@ -714,7 +916,7 @@ app.use(MCP_DRIFT_ENDPOINT, mcpDriftPreflight);
 app.use(MCP_DRIFT_ENDPOINT, paymentGate);
 
 app.get(SINGLE_ENDPOINT, async (c) => {
-  const issueUrl = c.req.query("issue_url") || "";
+  const issueUrl = c.get("singleIssueUrl");
   try {
     const verdict = await checkGithubIssue(issueUrl, {
       GITHUB_TOKEN: c.env.GITHUB_TOKEN,
@@ -733,14 +935,8 @@ app.get(SINGLE_ENDPOINT, async (c) => {
 });
 
 app.post(PORTFOLIO_ENDPOINT, async (c) => {
-  let body: { issue_urls?: unknown };
   try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "INVALID_JSON", message: "Request body must be valid JSON." }, 400);
-  }
-  try {
-    const portfolio = await checkBountyPortfolio(body.issue_urls, {
+    const portfolio = await checkBountyPortfolio(c.get("portfolioIssueUrls"), {
       GITHUB_TOKEN: c.env.GITHUB_TOKEN,
     });
     return c.json(portfolio);
@@ -757,7 +953,7 @@ app.post(PORTFOLIO_ENDPOINT, async (c) => {
 });
 
 app.get(HARNESS_ENDPOINT, async (c) => {
-  const repoUrl = c.req.query("repo_url") || "";
+  const repoUrl = c.get("harnessRepoUrl");
   try {
     const audit = await checkGithubHarness(repoUrl, { GITHUB_TOKEN: c.env.GITHUB_TOKEN });
     return c.json(audit);
@@ -771,8 +967,8 @@ app.get(HARNESS_ENDPOINT, async (c) => {
 });
 
 app.get(SKILL_ENDPOINT, async (c) => {
-  const repoUrl = c.req.query("repo_url") || "";
-  const skillPath = c.req.query("skill_path") || "";
+  const repoUrl = c.get("skillRepoUrl");
+  const skillPath = c.get("skillPath");
   try {
     const audit = await checkGithubSkill(repoUrl, skillPath, { GITHUB_TOKEN: c.env.GITHUB_TOKEN });
     return c.json(audit);
@@ -786,7 +982,7 @@ app.get(SKILL_ENDPOINT, async (c) => {
 });
 
 app.get(RUN_ENDPOINT, async (c) => {
-  const runUrl = c.req.query("run_url") || "";
+  const runUrl = c.get("runUrl");
   try {
     const diagnosis = await diagnoseGithubRun(runUrl, { GITHUB_TOKEN: c.env.GITHUB_TOKEN });
     return c.json(diagnosis);
@@ -800,17 +996,8 @@ app.get(RUN_ENDPOINT, async (c) => {
 });
 
 app.get(FLAKE_ENDPOINT, async (c) => {
-  const runUrl = c.req.query("run_url") || "";
-  const attempt = c.req.query("attempt");
-  if (!c.env.FLAKE_RATE_LIMITER) {
-    console.error("FlakeVerdict rate limiter is not configured.");
-    return c.json({ error: "SERVICE_CONFIGURATION_ERROR", message: "FlakeVerdict capacity protection is unavailable." }, 503);
-  }
-  const rateLimit = await c.env.FLAKE_RATE_LIMITER.limit({ key: "flake:verified-global" });
-  if (!rateLimit.success) {
-    c.header("Retry-After", "60");
-    return c.json({ error: "FLAKE_RATE_LIMITED", message: "FlakeVerdict is temporarily at its bounded upstream capacity." }, 429);
-  }
+  const runUrl = c.get("flakeRunUrl");
+  const attempt = c.get("flakeAttempt");
   try {
     const verdict = await diagnoseGithubFlake(
       runUrl,

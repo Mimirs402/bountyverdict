@@ -51,7 +51,7 @@
         <div class="method-grid">
           <article><span>GET</span><h3>Exact URL</h3><p>Coinbase Agentic Wallet users can inspect a GET challenge with <code>npx awal@2.12.0 x402 details '&lt;EXACT_REQUEST_URL&gt;' --json</code>.</p></article>
           <article><span>PAY</span><h3>Bounded spend</h3><p>Pay with <code>npx awal@2.12.0 x402 pay '&lt;EXACT_REQUEST_URL&gt;' --max-amount &lt;ATOMIC_USDC_CAP&gt; --json</code>. Verify method, URL, recipient, network, asset, and amount before signing.</p></article>
-          <article><span>POST</span><h3>Bind the body</h3><p>For Portfolio and MCP Drift, pass <code>-X POST -d '&lt;BYTE-IDENTICAL_JSON&gt;'</code>. The payment is valid only for the exact request.</p></article>
+          <article><span>POST</span><h3>Preserve the body</h3><p>For Portfolio and MCP Drift, pass <code>-X POST -d '&lt;VALIDATED_JSON&gt;'</code> and resend the same JSON after signing. Standard x402 binds the resource URL, not the POST body, so verify the returned normalized-body hash before authorizing.</p></article>
           <article><span>ANY</span><h3>Client-neutral</h3><p>The APIs use standard x402 v2 on Base USDC. Coinbase Agentic Wallet is optional; any compatible client can pay.</p></article>
         </div>
       </section>

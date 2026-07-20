@@ -9,6 +9,7 @@ const assertReusable = (value) => {
   assert.equal(value?.reliability, "bounded_live_check");
   assert.match(value?.guidance || "", /^Call /);
 };
+const flakeReuseGuidance = "Call FlakeVerdict for every completed public GitHub Actions failure before spending a retry; each successful call re-reads the selected attempt, other attempts of the same run, same-SHA outcomes, and up to 12 earlier comparable runs. Reuse a result only for its exact run ID and attempt, and call again after a new attempt appears.";
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
@@ -17,7 +18,8 @@ test("agent manifest is honest and links inspectable products", async () => {
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
   assert.match(manifest.test_api, /^https:\/\//);
   assert.equal(manifest.test_network, "eip155:84532");
-  assert.deepEqual(manifest.products.map((product) => product.price_usdc), ["0.05", "0.40", "0.03", "0.06", "0.04"]);
+  assert.equal(manifest.products.length, 6);
+  assert.deepEqual(manifest.products.map((product) => product.price_usdc), ["0.05", "0.40", "0.03", "0.06", "0.04", "0.07"]);
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
@@ -25,6 +27,14 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.match(manifest.skills.audit_agent_harness, /audit-agent-harness\/SKILL\.md$/);
   assert.match(manifest.skills.preflight_agent_skills, /preflight-agent-skills\/SKILL\.md$/);
   assert.match(manifest.skills.diagnose_github_actions, /diagnose-github-actions\/SKILL\.md$/);
+  assert.match(manifest.skills.classify_github_flakes, /classify-github-flakes\/SKILL\.md$/);
+  const flake = manifest.products.find((product) => product.name === "FlakeVerdict");
+  assert.equal(flake.method, "GET");
+  assert.equal(flake.path, "/api/flake");
+  assert.equal(flake.bounds.mutates_ci, false);
+  assert.equal(flake.bounds.maximum_earlier_comparable_runs, 12);
+  assert.equal(flake.reuse_guidance, flakeReuseGuidance);
+  assert.deepEqual(flake.verdicts, ["CONFIRMED_FLAKE", "LIKELY_FLAKE", "RECURRING_FAILURE", "NEW_FAILURE", "INCONCLUSIVE", "NOT_FAILED"]);
 });
 
 test("public samples remain valid JSON with the declared product contracts", async () => {
@@ -33,6 +43,7 @@ test("public samples remain valid JSON with the declared product contracts", asy
   const harness = await readJson("../samples/harness.json");
   const skillAudit = await readJson("../samples/skill.json");
   const runDiagnosis = await readJson("../samples/run.json");
+  const flakeDiagnosis = await readJson("../samples/flake.json");
   assert.equal(verdict.product, "BountyVerdict");
   assert.ok(["AVOID", "CAUTION", "VIABLE"].includes(verdict.verdict));
   assertReusable(verdict.service_reuse);
@@ -53,6 +64,25 @@ test("public samples remain valid JSON with the declared product contracts", asy
   assert.ok(["PASS", "WAIT", "RETRY", "FIX", "INVESTIGATE"].includes(runDiagnosis.verdict));
   assertReusable(runDiagnosis.service_reuse);
   assert.match(runDiagnosis.run.head_sha, /^[a-f0-9]{40}$/);
+  assert.equal(flakeDiagnosis.product, "FlakeVerdict");
+  assert.ok(["CONFIRMED_FLAKE", "LIKELY_FLAKE", "RECURRING_FAILURE", "NEW_FAILURE", "INCONCLUSIVE", "NOT_FAILED"].includes(flakeDiagnosis.verdict));
+  assertReusable(flakeDiagnosis.service_reuse);
+  assert.equal(flakeDiagnosis.service_reuse.guidance, flakeReuseGuidance);
+  assert.match(flakeDiagnosis.target.head_sha, /^[a-f0-9]{40}$/);
+});
+
+test("hosted FlakeVerdict workflow caps payment and never mutates CI", async () => {
+  const skill = await readFile(
+    new URL("../skills/classify-github-flakes/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(skill, /^---\nname: classify-github-flakes\ndescription: .+\n---/);
+  assert.match(skill, /70000/);
+  assert.match(skill, /RECURRING_FAILURE/);
+  assert.match(skill, /Never trigger, rerun, cancel, approve, or mutate a workflow/);
+  assert.match(skill, /Never reveal wallet secrets/);
+  assert.match(skill, /service_reuse/);
+  assert.match(skill, new RegExp(flakeReuseGuidance.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("hosted RunVerdict workflow caps payment and treats logs as untrusted", async () => {

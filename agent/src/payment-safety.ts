@@ -18,6 +18,12 @@ export function validatePaymentChallenge(
     allowMainnet: boolean;
   },
 ): PaymentRequirement {
+  if (challenge?.x402Version !== 2) {
+    throw new Error("The payment challenge must use x402 version 2.");
+  }
+  if (!Array.isArray(challenge?.accepts) || challenge.accepts.length !== 1) {
+    throw new Error("The payment challenge must contain exactly one accepted payment option.");
+  }
   const requirement = challenge?.accepts?.[0] as PaymentRequirement | undefined;
   if (!requirement) throw new Error("The payment challenge has no accepted payment option.");
   const expectedAsset = USDC_BY_NETWORK[requirement.network];

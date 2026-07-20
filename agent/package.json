@@ -14,6 +14,8 @@
     "revenue": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/revenue-monitor.ts",
     "distribution:monitor": "node --experimental-strip-types scripts/distribution-monitor.ts",
     "canary:production": "node --experimental-strip-types scripts/functional-canary.ts",
+    "settlement:provision": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/provision-settlement-buyer.ts",
+    "settlement:canary": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/settlement-canary.ts",
     "manifest:activate": "node --experimental-strip-types scripts/activate-manifest.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"

@@ -15,18 +15,22 @@ Paste a canonical public GitHub issue URL. The browser performs read-only GitHub
 - Harness audit skill: https://cristianmoroaica.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md
 - Skill security workflow: https://cristianmoroaica.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md
 - CI diagnosis workflow: https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md
+- CI flake classification workflow: https://cristianmoroaica.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md
 - Single verdict: GET /api/verdict for $0.05 USDC per successful result
 - Portfolio ranking: POST /api/portfolio for $0.40 USDC, covering 2 to 10 unique candidates
 - Harness audit: GET /api/harness for $0.03 USDC per successful commit-pinned public repository audit
 - Skill security audit: GET /api/skill for $0.06 USDC per successful commit-pinned public skill audit
 - CI run diagnosis: GET /api/run for $0.04 USDC per bounded public GitHub Actions diagnosis
+- CI flake classification: GET /api/flake?run_url=<canonical-public-run-url>&attempt=<optional-positive-integer> for $0.07 Base USDC per successful selected-attempt classification
 - Payment: x402 v2 exact scheme
 - Marketplace: Coinbase x402 Bazaar after production settlement activation
 - Free sample, OpenAPI contract, and llms.txt are served by the agent endpoint
 - Source and integration contract: https://github.com/cristianmoroaica/bountyverdict/tree/main/agent
 - Reuse contract: every successful paid result includes `service_reuse`, stating when agents should call the same bounded live check again and when an exact commit-pinned result can be reused
 
-The bounty products add conventional repository contribution-document checks for explicit AI-work bans and disclosure requirements. The portfolio ranks full verdicts and recommends the strongest candidate. HarnessVerdict checks coding-agent instruction discovery, paths, portability, context size, skill frontmatter, and secret-like material. SkillVerdict performs a bounded, redacted, repository-aware pre-install security audit of a requested SKILL.md bundle. RunVerdict diagnoses exact-attempt jobs and bounded failed-job logs, separating root causes from downstream aggregate failures. No audit executes repository code or reruns CI. Invalid or failed checks are not settled.
+The bounty products add conventional repository contribution-document checks for explicit AI-work bans and disclosure requirements. The portfolio ranks full verdicts and recommends the strongest candidate. HarnessVerdict checks coding-agent instruction discovery, paths, portability, context size, skill frontmatter, and secret-like material. SkillVerdict performs a bounded, redacted, repository-aware pre-install security audit of a requested SKILL.md bundle. RunVerdict diagnoses exact-attempt jobs and bounded failed-job logs, separating root causes from downstream aggregate failures. FlakeVerdict compares the selected completed public run attempt with other attempts of that run, same-SHA outcomes, and up to 12 earlier comparable runs; it scans at most 8 selected failed-job logs and 4 MiB of logs. Its verdicts are CONFIRMED_FLAKE, LIKELY_FLAKE, RECURRING_FAILURE, NEW_FAILURE, INCONCLUSIVE, and NOT_FAILED. No audit executes repository code. RunVerdict and FlakeVerdict never trigger, rerun, cancel, approve, or otherwise mutate CI. Invalid or failed checks are not settled.
+
+FlakeVerdict reuse guidance: Call FlakeVerdict for every completed public GitHub Actions failure before spending a retry; each successful call re-reads the selected attempt, other attempts of the same run, same-SHA outcomes, and up to 12 earlier comparable runs. Reuse a result only for its exact run ID and attempt, and call again after a new attempt appears.
 
 Check the manifest status before attempting a purchase. Buy only when it is `active` and the x402 challenge matches the declared network, asset, recipient, and atomic cap.
 

@@ -3,8 +3,14 @@ import { checkBountyPortfolio, type PortfolioVerdict } from "./portfolio.ts";
 import { checkGithubHarness, HarnessError, type HarnessAudit } from "./harness.ts";
 import { checkGithubSkill, type SkillAudit } from "./skill.ts";
 import { diagnoseGithubRun, type RunDiagnosis } from "./run.ts";
+import {
+  diagnoseGithubFlake,
+  FLAKE_SERVICE_REUSE,
+  type FlakeResult,
+  type FlakeVerdict,
+} from "./flake.ts";
 
-export const CANARY_PRODUCTS = ["single", "portfolio", "harness", "skill", "run"] as const;
+export const CANARY_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "flake"] as const;
 export type CanaryProduct = typeof CANARY_PRODUCTS[number];
 
 export const CANARY_FIXTURES = {
@@ -19,6 +25,10 @@ export const CANARY_FIXTURES = {
     path: "skills/diagnose-github-actions",
   },
   run: "https://github.com/openai/codex/actions/runs/29728148711",
+  flake: {
+    run: "https://github.com/actions/runner/actions/runs/29423388605",
+    attempt: 1,
+  },
 } as const;
 
 export interface CanaryEnvironment {
@@ -41,6 +51,7 @@ interface CanaryDependencies {
   checkHarness: (url: string, env: CanaryEnvironment) => Promise<HarnessAudit>;
   checkSkill: (url: string, path: string, env: CanaryEnvironment) => Promise<SkillAudit>;
   diagnoseRun: (url: string, env: CanaryEnvironment) => Promise<RunDiagnosis>;
+  diagnoseFlake: (url: string, attempt: number, env: CanaryEnvironment) => Promise<FlakeResult>;
   now: () => Date;
   monotonic: () => number;
 }
@@ -51,6 +62,7 @@ const DEFAULT_DEPENDENCIES: CanaryDependencies = {
   checkHarness: (url, env) => checkGithubHarness(url, env),
   checkSkill: (url, path, env) => checkGithubSkill(url, path, env),
   diagnoseRun: (url, env) => diagnoseGithubRun(url, env),
+  diagnoseFlake: (url, attempt, env) => diagnoseGithubFlake(url, attempt, env),
   now: () => new Date(),
   monotonic: () => performance.now(),
 };
@@ -70,6 +82,15 @@ function validDate(value: string): boolean {
 function validCommit(value: string): boolean {
   return /^[0-9a-f]{40}$/i.test(value);
 }
+
+const FLAKE_VERDICTS = new Set<FlakeVerdict>([
+  "CONFIRMED_FLAKE",
+  "LIKELY_FLAKE",
+  "RECURRING_FAILURE",
+  "NEW_FAILURE",
+  "INCONCLUSIVE",
+  "NOT_FAILED",
+]);
 
 export function assertServiceReuseGuidance(value: unknown, expectedProduct: string): void {
   const reuse = value as Partial<{
@@ -211,7 +232,7 @@ export async function runFunctionalCanary(
       github_rate_limit_remaining: audit.coverage.github_rate_limit_remaining,
       reuse_guidance: audit.service_reuse.guidance,
     };
-  } else {
+  } else if (product === "run") {
     const diagnosis = await dependencies.diagnoseRun(CANARY_FIXTURES.run, env);
     requireCondition(diagnosis.product === "RunVerdict" && diagnosis.version === "1.0", "Run product contract changed.");
     requireCondition(diagnosis.run.id === "29728148711", "Run result does not match its fixture.");
@@ -234,6 +255,70 @@ export async function runFunctionalCanary(
       log_bytes_read: diagnosis.coverage.log_bytes_read,
       github_rate_limit_remaining: diagnosis.coverage.github_rate_limit_remaining,
       reuse_guidance: diagnosis.service_reuse.guidance,
+    };
+  } else {
+    const fixture = CANARY_FIXTURES.flake;
+    const classification = await dependencies.diagnoseFlake(fixture.run, fixture.attempt, env);
+    requireCondition(classification.product === "FlakeVerdict" && classification.version === "1.0", "Flake product contract changed.");
+    requireCondition(classification.target.id === "29423388605", "Flake result does not match its fixture run.");
+    requireCondition(
+      classification.target.attempt === fixture.attempt && classification.target.current_attempt >= 2,
+      "Flake result does not match fixture attempt 1 or no longer proves a multi-attempt run.",
+    );
+    requireCondition(
+      classification.target.status === "completed" && classification.target.conclusion === "failure",
+      "Flake fixture attempt 1 no longer proves a completed failure.",
+    );
+    requireCondition(
+      FLAKE_VERDICTS.has(classification.verdict) && classification.verdict !== "NOT_FAILED" &&
+      ["high", "medium", "low"].includes(classification.decision.confidence) &&
+      classification.decision.reason_codes.length > 0,
+      "Flake verdict or decision type is invalid for the failed fixture.",
+    );
+    requireCondition(
+      classification.decision.retry === "NO" && classification.target.attempt !== classification.target.current_attempt,
+      "Flake selected an obsolete attempt but did not preserve the no-retry safety invariant.",
+    );
+    requireCondition(
+      classification.coverage.target_jobs_reported > 0 &&
+      classification.coverage.target_jobs_total === classification.coverage.target_jobs_reported &&
+      !classification.coverage.target_jobs_truncated &&
+      classification.coverage.target_failed_jobs > 0,
+      "Flake target-attempt job coverage is incomplete or truncated.",
+    );
+    requireCondition(
+      classification.coverage.same_run_attempts_available >= 1 &&
+      classification.coverage.same_run_attempts_checked >= 1 &&
+      classification.coverage.same_run_attempts_checked <= classification.coverage.same_run_attempts_available &&
+      classification.same_run_attempts.length === classification.coverage.same_run_attempts_checked &&
+      classification.same_run_attempts.some(({ attempt }) => attempt !== fixture.attempt),
+      "Flake fixture no longer proves comparison across at least two attempts of the same run.",
+    );
+    requireCondition(validDate(classification.checked_at), "Flake result has no valid check time.");
+    assertServiceReuseGuidance(classification.service_reuse, "FlakeVerdict");
+    requireCondition(
+      JSON.stringify(classification.service_reuse) === JSON.stringify(FLAKE_SERVICE_REUSE),
+      "Flake service reuse guidance changed.",
+    );
+    source = fixture.run;
+    result = {
+      verdict: classification.verdict,
+      confidence: classification.decision.confidence,
+      retry: classification.decision.retry,
+      reason_codes: classification.decision.reason_codes,
+      run_id: classification.target.id,
+      target_attempt: classification.target.attempt,
+      current_attempt: classification.target.current_attempt,
+      target_failed_jobs: classification.coverage.target_failed_jobs,
+      target_jobs_reported: classification.coverage.target_jobs_reported,
+      same_run_attempts_available: classification.coverage.same_run_attempts_available,
+      same_run_attempts_checked: classification.coverage.same_run_attempts_checked,
+      same_run_attempts: classification.same_run_attempts.map(({ attempt, conclusion }) => ({ attempt, conclusion })),
+      same_sha_runs_checked: classification.coverage.same_sha_runs_checked,
+      earlier_comparable_runs_checked: classification.coverage.earlier_comparable_runs_checked,
+      partial_failures: classification.coverage.partial_failures.length,
+      github_rate_limit_remaining: classification.coverage.github_rate_limit_remaining,
+      reuse_guidance: classification.service_reuse.guidance,
     };
   }
 

@@ -9,6 +9,7 @@ import {
 } from "../src/canary.ts";
 import app from "../src/index.ts";
 import { SERVICE_REUSE } from "../src/reuse.ts";
+import { FLAKE_SERVICE_REUSE, type FlakeResult } from "../src/flake.ts";
 
 const now = new Date("2026-07-20T12:00:00.000Z");
 const base = {
@@ -137,4 +138,137 @@ test("harness, skill, and run canaries enforce commit, file, and log coverage", 
       checked_at: now.toISOString(), limitations: [],
     }),
   }), /failed-job evidence/);
+});
+
+function flakeFixtureResult(overrides: Partial<FlakeResult> = {}): FlakeResult {
+  return {
+    product: "FlakeVerdict",
+    version: "1.0",
+    verdict: "CONFIRMED_FLAKE",
+    summary: "The selected failed attempt recovered on attempt 2.",
+    service_reuse: FLAKE_SERVICE_REUSE,
+    decision: {
+      confidence: "high",
+      retry: "NO",
+      reason_codes: ["SAME_RUN_JOB_SUCCEEDED"],
+    },
+    target: {
+      url: CANARY_FIXTURES.flake.run,
+      repository: "actions/runner",
+      id: "29423388605",
+      attempt: 1,
+      current_attempt: 2,
+      workflow_id: 3200,
+      workflow: "Runner CI",
+      workflow_path: ".github/workflows/build.yml",
+      event: "pull_request",
+      head_branch: "test-label-managers",
+      head_sha: "6b74a3cb775dcae48bd7a906ca18f766d6b36423",
+      status: "completed",
+      conclusion: "failure",
+      created_at: "2026-07-15T14:24:12Z",
+      updated_at: "2026-07-15T14:35:13Z",
+    },
+    failure_signatures: [{
+      fingerprint: "d".repeat(64),
+      job_name: "Test",
+      conclusion: "failure",
+      failed_steps: ["Run tests"],
+      evidence_url: `${CANARY_FIXTURES.flake.run}/job/1`,
+      log_status: "scanned",
+    }],
+    same_run_attempts: [{
+      attempt: 2,
+      conclusion: "success",
+      matching_jobs_succeeded: ["Test"],
+      matching_jobs_failed: [],
+    }],
+    same_sha_runs: [],
+    historical_matches: [],
+    coverage: {
+      target_jobs_reported: 12,
+      target_jobs_total: 12,
+      target_jobs_truncated: false,
+      target_failed_jobs: 1,
+      target_logs_selected: 1,
+      target_logs_scanned: 1,
+      target_logs_unavailable: 0,
+      target_log_bytes_read: 1200,
+      target_logs_truncated: 0,
+      same_run_attempts_available: 1,
+      same_run_attempts_checked: 1,
+      same_run_attempts_truncated: false,
+      same_sha_runs_listed: 0,
+      same_sha_runs_checked: 0,
+      same_sha_runs_truncated: false,
+      earlier_comparable_runs_available: 7,
+      earlier_comparable_runs_checked: 7,
+      earlier_comparable_runs_truncated: false,
+      historical_job_pages: 7,
+      github_rate_limit_remaining: 4900,
+      partial_failures: [],
+      deadline_ms: 25_000,
+    },
+    checked_at: now.toISOString(),
+    limitations: [],
+    ...overrides,
+  };
+}
+
+test("flake canary pins attempt 1 while proving multi-attempt coverage and refusing an obsolete retry", async () => {
+  let observedUrl = "";
+  let observedAttempt = 0;
+  const result = await runFunctionalCanary("flake", {}, {
+    ...base,
+    diagnoseFlake: async (url, attempt) => {
+      observedUrl = url;
+      observedAttempt = attempt;
+      return flakeFixtureResult();
+    },
+  });
+
+  assert.equal(observedUrl, CANARY_FIXTURES.flake.run);
+  assert.equal(observedAttempt, 1);
+  assert.equal(result.source, CANARY_FIXTURES.flake.run);
+  assert.equal(result.result.verdict, "CONFIRMED_FLAKE");
+  assert.equal(result.result.retry, "NO");
+  assert.equal(result.result.target_attempt, 1);
+  assert.equal(result.result.current_attempt, 2);
+  assert.equal(result.result.same_run_attempts_checked, 1);
+  assert.equal(result.result.reuse_guidance, FLAKE_SERVICE_REUSE.guidance);
+});
+
+test("flake canary rejects incomplete attempt coverage, altered reuse guidance, and unsafe retries", async () => {
+  await assert.rejects(() => runFunctionalCanary("flake", {}, {
+    ...base,
+    diagnoseFlake: async () => flakeFixtureResult({
+      same_run_attempts: [],
+      coverage: {
+        ...flakeFixtureResult().coverage,
+        same_run_attempts_checked: 0,
+      },
+    }),
+  }), /at least two attempts/);
+
+  await assert.rejects(() => runFunctionalCanary("flake", {}, {
+    ...base,
+    diagnoseFlake: async () => flakeFixtureResult({
+      service_reuse: {
+        ...FLAKE_SERVICE_REUSE,
+        guidance: `${FLAKE_SERVICE_REUSE.guidance} Changed.`,
+      },
+    }),
+  }), /reuse guidance changed/);
+
+  await assert.rejects(() => runFunctionalCanary("flake", {}, {
+    ...base,
+    diagnoseFlake: async () => flakeFixtureResult({
+      verdict: "LIKELY_FLAKE",
+      decision: {
+        confidence: "medium",
+        retry: "ONCE",
+        reason_codes: ["SAME_SHA_JOB_SUCCEEDED"],
+      },
+    }),
+  }), /no-retry safety invariant/);
 });

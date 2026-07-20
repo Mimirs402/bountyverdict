@@ -9,6 +9,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     harness: "$0.03",
     skill: "$0.06",
     run: "$0.04",
+    flake: "$0.07",
   });
   const operation = spec.paths["/api/verdict"].get;
   assert.equal(operation["x-x402"].price, "$0.05");
@@ -20,6 +21,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     spec.paths["/api/harness"].get,
     spec.paths["/api/skill"].get,
     spec.paths["/api/run"].get,
+    spec.paths["/api/flake"].get,
   ];
   for (const paid of paidOperations) {
     assert.ok(paid.responses["200"].content["application/json"].schema.required.includes("service_reuse"));
@@ -32,6 +34,9 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.deepEqual(spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.name), ["repo_url", "skill_path"]);
   assert.equal(spec.paths["/api/run"].get["x-x402"].price, "$0.04");
   assert.deepEqual(spec.paths["/api/run"].get.parameters.map((parameter) => parameter.name), ["run_url"]);
+  assert.equal(spec.paths["/api/flake"].get["x-x402"].price, "$0.07");
+  assert.deepEqual(spec.paths["/api/flake"].get.parameters.map((parameter) => parameter.name), ["run_url", "attempt"]);
+  assert.equal(spec.paths["/api/flake"].get.responses["429"].description.includes("not settled"), true);
   assert.match(spec.externalDocs.url, /agent-manifest\.json$/);
 
   const llms = createLlmsText("https://agent.example");
@@ -44,6 +49,9 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.match(llms, /SkillVerdict/);
   assert.match(llms, /\$0\.04 USDC/);
   assert.match(llms, /RunVerdict/);
+  assert.match(llms, /\$0\.07 USDC/);
+  assert.match(llms, /FlakeVerdict/);
+  assert.match(llms, /RECURRING_FAILURE/);
   assert.match(llms, /service_reuse guidance/);
   assert.match(llms, /preflight-github-bounties\/SKILL\.md/);
   assert.match(llms, /AI-work bans/);

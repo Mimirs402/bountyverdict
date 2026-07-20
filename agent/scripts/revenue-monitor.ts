@@ -1,6 +1,10 @@
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { base, baseSepolia } from "viem/chains";
-import { summarizeRevenue, type SettlementTransfer } from "../src/revenue.ts";
+import {
+  OWNER_CONTROLLED_CANARY_PAYER,
+  summarizeRevenue,
+  type SettlementTransfer,
+} from "../src/revenue.ts";
 
 const USDC = {
   mainnet: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -10,12 +14,16 @@ const network = process.env.NETWORK === "sepolia" ? "sepolia" : "mainnet";
 const chain = network === "sepolia" ? baseSepolia : base;
 const wallet = process.env.REVENUE_WALLET;
 const startBlockInput = process.env.START_BLOCK;
+const settlementBuyer = process.env.SETTLEMENT_BUYER_ADDRESS;
 
 if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
   throw new Error("REVENUE_WALLET must be the public EVM address receiving x402 payments.");
 }
 if (!startBlockInput || !/^[0-9]+$/.test(startBlockInput)) {
   throw new Error("START_BLOCK must be the deployment block number; this keeps scans bounded.");
+}
+if (settlementBuyer && !/^0x[a-fA-F0-9]{40}$/.test(settlementBuyer)) {
+  throw new Error("SETTLEMENT_BUYER_ADDRESS must be an EVM address when configured.");
 }
 
 const client = createPublicClient({ chain, transport: http(process.env.RPC_URL) });
@@ -46,8 +54,9 @@ for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSiz
     toBlock,
   });
   for (const log of logs) {
-    if (log.args.value === undefined || !log.transactionHash || log.logIndex === null) continue;
+    if (log.args.from === undefined || log.args.value === undefined || !log.transactionHash || log.logIndex === null) continue;
     transfers.push({
+      from: log.args.from,
       amount: log.args.value,
       transaction_hash: log.transactionHash,
       log_index: log.logIndex,
@@ -55,7 +64,13 @@ for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSiz
   }
 }
 
-const summary = summarizeRevenue(transfers);
+const summary = summarizeRevenue(
+  transfers,
+  undefined,
+  settlementBuyer
+    ? [OWNER_CONTROLLED_CANARY_PAYER, settlementBuyer]
+    : [OWNER_CONTROLLED_CANARY_PAYER],
+);
 console.log(JSON.stringify({
   product: "BountyVerdict",
   network: chain.name,
@@ -64,6 +79,12 @@ console.log(JSON.stringify({
   scanned_blocks: { from: startBlock.toString(), to: latestBlock.toString() },
   ...summary,
   recognized_transfers: summary.recognized_transfers.map((transfer) => ({
+    ...transfer,
+    amount_atomic: transfer.amount.toString(),
+    amount: undefined,
+  })),
+  canary_transfer_count: summary.canary_transfers.length,
+  canary_transfers: summary.canary_transfers.map((transfer) => ({
     ...transfer,
     amount_atomic: transfer.amount.toString(),
     amount: undefined,

@@ -16,6 +16,11 @@
       "name": "CANARY_RATE_LIMITER",
       "namespace_id": "402701",
       "simple": { "limit": 1, "period": 60 }
+    },
+    {
+      "name": "FLAKE_RATE_LIMITER",
+      "namespace_id": "402703",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
   "env": {
@@ -30,6 +35,11 @@
           "name": "CANARY_RATE_LIMITER",
           "namespace_id": "402702",
           "simple": { "limit": 1, "period": 60 }
+        },
+        {
+          "name": "FLAKE_RATE_LIMITER",
+          "namespace_id": "402704",
+          "simple": { "limit": 10, "period": 60 }
         }
       ]
     }

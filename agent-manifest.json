@@ -62,6 +62,34 @@
       "price_usdc": "0.04",
       "reusable": true,
       "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/run.json"
+    },
+    {
+      "name": "FlakeVerdict",
+      "method": "GET",
+      "path": "/api/flake",
+      "query": {
+        "run_url": "required canonical public GitHub Actions run URL",
+        "attempt": "optional positive integer selecting a run attempt"
+      },
+      "price_usdc": "0.07",
+      "reusable": true,
+      "verdicts": [
+        "CONFIRMED_FLAKE",
+        "LIKELY_FLAKE",
+        "RECURRING_FAILURE",
+        "NEW_FAILURE",
+        "INCONCLUSIVE",
+        "NOT_FAILED"
+      ],
+      "bounds": {
+        "maximum_selected_failed_job_logs": 8,
+        "maximum_log_bytes": 4194304,
+        "maximum_earlier_comparable_runs": 12,
+        "public_github_actions_only": true,
+        "mutates_ci": false
+      },
+      "reuse_guidance": "Call FlakeVerdict for every completed public GitHub Actions failure before spending a retry; each successful call re-reads the selected attempt, other attempts of the same run, same-SHA outcomes, and up to 12 earlier comparable runs. Reuse a result only for its exact run ID and attempt, and call again after a new attempt appears.",
+      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/flake.json"
     }
   ],
   "skill": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
@@ -69,8 +97,9 @@
     "preflight_github_bounties": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
     "audit_agent_harness": "https://cristianmoroaica.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md",
     "preflight_agent_skills": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md",
-    "diagnose_github_actions": "https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md"
+    "diagnose_github_actions": "https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md",
+    "classify_github_flakes": "https://cristianmoroaica.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md"
   },
   "source": "https://github.com/cristianmoroaica/bountyverdict/tree/main/agent",
-  "updated_at": "2026-07-20T12:04:39.000Z"
+  "updated_at": "2026-07-20T12:51:26.000Z"
 }

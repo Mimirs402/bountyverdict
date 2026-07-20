@@ -2,11 +2,12 @@ import { outputSchema, portfolioOutputSchema } from "./discovery.ts";
 import { harnessOutputSchema } from "./harness-discovery.ts";
 import { skillOutputSchema } from "./skill-discovery.ts";
 import { runOutputSchema } from "./run-discovery.ts";
+import { flakeOutputSchema } from "./flake-discovery.ts";
 
 export function createOpenApi(
   origin: string,
   network: string,
-  prices: { single: string; portfolio: string; harness: string; skill: string; run: string },
+  prices: { single: string; portfolio: string; harness: string; skill: string; run: string; flake: string },
 ) {
   return {
     openapi: "3.1.0",
@@ -276,6 +277,56 @@ export function createOpenApi(
           "x-x402": { version: 2, scheme: "exact", network, price: prices.run, currency: "USDC" },
         },
       },
+      "/api/flake/sample": {
+        get: {
+          summary: "Inspect a representative FlakeVerdict retry decision without payment",
+          operationId: "getFlakeVerdictSample",
+          responses: {
+            "200": {
+              description: "Representative bounded flake classification",
+              content: { "application/json": { schema: flakeOutputSchema } },
+            },
+          },
+        },
+      },
+      "/api/flake": {
+        get: {
+          summary: "Classify a public GitHub Actions failure before retrying",
+          description: "Compares an exact run attempt with other attempts of the same run, same-SHA outcomes, exact job-and-failed-step fingerprints, and up to 12 earlier comparable workflow runs. It returns confirmed, likely, structurally recurring, new, inconclusive, or not-failed evidence without executing or rerunning CI.",
+          operationId: "classifyFlakeVerdict",
+          parameters: [
+            {
+              name: "run_url",
+              in: "query",
+              required: true,
+              description: "Canonical public GitHub Actions workflow run URL",
+              schema: { type: "string", pattern: "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+/actions/runs/[1-9][0-9]*$" },
+              example: "https://github.com/actions/runner/actions/runs/29423388605",
+            },
+            {
+              name: "attempt",
+              in: "query",
+              required: false,
+              description: "Exact positive run attempt; omit to classify the current attempt",
+              schema: { type: "integer", minimum: 1 },
+              example: 1,
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Bounded evidence-linked flake classification after x402 settlement",
+              content: { "application/json": { schema: flakeOutputSchema } },
+            },
+            "402": { description: "Payment required; inspect the PAYMENT-REQUIRED header" },
+            "400": { description: "Invalid workflow run URL or attempt; verified payment is not settled" },
+            "404": { description: "Public workflow run or requested attempt not found; verified payment is not settled" },
+            "429": { description: "Bounded upstream capacity exhausted; verified payment is not settled" },
+            "502": { description: "GitHub upstream failure; verified payment is not settled" },
+            "503": { description: "Temporary capacity, deadline, or service configuration failure; verified payment is not settled" },
+          },
+          "x-x402": { version: 2, scheme: "exact", network, price: prices.flake, currency: "USDC" },
+        },
+      },
     },
   };
 }
@@ -308,6 +359,10 @@ export function createLlmsText(origin: string): string {
 - Paid RunVerdict: GET ${origin}/api/run?run_url=<PUBLIC_GITHUB_ACTIONS_RUN_URL>
 - RunVerdict price: $0.04 USDC per bounded exact-attempt diagnosis
 - Run verdicts: PASS, WAIT, RETRY, FIX, INVESTIGATE
+- Free FlakeVerdict sample: ${origin}/api/flake/sample
+- Paid FlakeVerdict: GET ${origin}/api/flake?run_url=<PUBLIC_GITHUB_ACTIONS_RUN_URL>&attempt=<OPTIONAL_EXACT_ATTEMPT>
+- FlakeVerdict price: $0.07 USDC per bounded historical retry decision
+- Flake verdicts: CONFIRMED_FLAKE, LIKELY_FLAKE, RECURRING_FAILURE, NEW_FAILURE, INCONCLUSIVE, NOT_FAILED
 - Failed or invalid checks are not settled
 - Every successful result includes explicit service_reuse guidance so agents know when to call the same reliable bounded check again
 
@@ -322,6 +377,8 @@ HarnessVerdict audits the repository's recognized coding-agent instruction surfa
 SkillVerdict audits a requested public SKILL.md plus its bounded directory and repository context without execution. It detects high-confidence supply-chain hazards, redacts secret-like values, discloses observed capabilities and external domains, and pins every finding to the exact reviewed commit. LOW_RISK is not a safety guarantee; retain least privilege and inspect coverage before installation.
 
 RunVerdict diagnoses one public GitHub Actions run from exact-attempt job metadata and bounded failed-job logs. It distinguishes primary failures from downstream summary jobs, returns redacted evidence and root-cause families, and recommends whether to fix, investigate, wait, or retry without mutating CI.
+
+FlakeVerdict is the read-only retry gate before RunVerdict: it compares the selected attempt with same-run, same-SHA, and bounded historical workflow evidence. Only a currently failed CONFIRMED_FLAKE may recommend one retry; likely, recurring, new, and inconclusive evidence never authorizes an automatic rerun.
 
 ## Safety
 

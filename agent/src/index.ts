@@ -18,6 +18,9 @@ import { checkGithubSkill } from "./skill.ts";
 import { skillDiscoveryExtension, skillExample } from "./skill-discovery.ts";
 import { diagnoseGithubRun } from "./run.ts";
 import { runDiscoveryExtension, runExample } from "./run-discovery.ts";
+import { diagnoseGithubFlake, FlakeError } from "./flake.ts";
+import { flakeDiscoveryExtension, flakeExample } from "./flake-discovery.ts";
+import { PRODUCT_CATALOG } from "./product-catalog.ts";
 import {
   canaryErrorCode,
   isCanaryProduct,
@@ -34,20 +37,23 @@ interface Env {
   CDP_API_KEY_SECRET?: string;
   CANARY_TOKEN?: string;
   CANARY_RATE_LIMITER?: RateLimit;
+  FLAKE_RATE_LIMITER?: RateLimit;
 }
 
 type AppBindings = { Bindings: Env };
 
-const SINGLE_PRICE_USD = "$0.05";
-const PORTFOLIO_PRICE_USD = "$0.40";
-const HARNESS_PRICE_USD = "$0.03";
-const SKILL_PRICE_USD = "$0.06";
-const RUN_PRICE_USD = "$0.04";
-const SINGLE_ENDPOINT = "/api/verdict";
-const PORTFOLIO_ENDPOINT = "/api/portfolio";
-const HARNESS_ENDPOINT = "/api/harness";
-const SKILL_ENDPOINT = "/api/skill";
-const RUN_ENDPOINT = "/api/run";
+const SINGLE_PRICE_USD = PRODUCT_CATALOG.single.priceUsd;
+const PORTFOLIO_PRICE_USD = PRODUCT_CATALOG.portfolio.priceUsd;
+const HARNESS_PRICE_USD = PRODUCT_CATALOG.harness.priceUsd;
+const SKILL_PRICE_USD = PRODUCT_CATALOG.skill.priceUsd;
+const RUN_PRICE_USD = PRODUCT_CATALOG.run.priceUsd;
+const FLAKE_PRICE_USD = PRODUCT_CATALOG.flake.priceUsd;
+const SINGLE_ENDPOINT = PRODUCT_CATALOG.single.path;
+const PORTFOLIO_ENDPOINT = PRODUCT_CATALOG.portfolio.path;
+const HARNESS_ENDPOINT = PRODUCT_CATALOG.harness.path;
+const SKILL_ENDPOINT = PRODUCT_CATALOG.skill.path;
+const RUN_ENDPOINT = PRODUCT_CATALOG.run.path;
+const FLAKE_ENDPOINT = PRODUCT_CATALOG.flake.path;
 const TESTNET_NETWORK = "eip155:84532";
 const TESTNET_FACILITATOR = "https://x402.org/facilitator";
 const CDP_FACILITATOR = "https://api.cdp.coinbase.com/platform/v2/x402";
@@ -211,6 +217,31 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       },
     }),
   };
+  const flakeRouteConfig: RouteConfig = {
+    accepts: {
+      scheme: "exact",
+      price: FLAKE_PRICE_USD,
+      network: network as `${string}:${string}`,
+      payTo,
+    },
+    description: "Classify whether one completed public GitHub Actions failure is a confirmed or likely flake, a new or structurally recurring failure, or inconclusive by comparing exact run attempts, same-SHA outcomes, job-and-failed-step fingerprints, and up to 12 earlier matching workflow runs. Returns an evidence-linked retry decision and explicit coverage without rerunning or executing code.",
+    mimeType: "application/json",
+    serviceName: "FlakeVerdict",
+    tags: ["github-actions", "flaky-tests", "ci", "retry-decision", "regression-triage", "developer-tools", "agents"],
+    iconUrl: ICON_URL,
+    unpaidResponseBody: () => ({
+      contentType: "application/json",
+      body: {
+        error: "PAYMENT_REQUIRED",
+        product: "FlakeVerdict",
+        price: FLAKE_PRICE_USD,
+        currency: "USDC",
+        description: "Pay once to decide whether one public GitHub Actions failure merits exactly one retry or needs investigation.",
+        free_sample: PRODUCT_CATALOG.flake.samplePath,
+        documentation: PRODUCT_URL,
+      },
+    }),
+  };
   const middleware = paymentMiddleware(
     {
       [`GET ${SINGLE_ENDPOINT}`]: routeConfig,
@@ -218,6 +249,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       [`GET ${HARNESS_ENDPOINT}`]: harnessRouteConfig,
       [`GET ${SKILL_ENDPOINT}`]: skillRouteConfig,
       [`GET ${RUN_ENDPOINT}`]: runRouteConfig,
+      [`GET ${FLAKE_ENDPOINT}`]: flakeRouteConfig,
     },
     resourceServer,
   );
@@ -229,6 +261,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
   harnessRouteConfig.extensions = harnessDiscoveryExtension;
   skillRouteConfig.extensions = skillDiscoveryExtension;
   runRouteConfig.extensions = runDiscoveryExtension;
+  flakeRouteConfig.extensions = flakeDiscoveryExtension;
   middlewareCache.set(key, middleware);
   return middleware;
 }
@@ -277,6 +310,13 @@ app.get("/", (c) =>
         method: "GET",
         input: { run_url: "https://github.com/owner/repository/actions/runs/123456789" },
       },
+      {
+        name: "FlakeVerdict",
+        price: FLAKE_PRICE_USD,
+        endpoint: FLAKE_ENDPOINT,
+        method: "GET",
+        input: { run_url: "https://github.com/owner/repository/actions/runs/123456789", attempt: 1 },
+      },
     ],
     sample: "/api/sample",
     openapi: "/openapi.json",
@@ -292,6 +332,7 @@ app.get("/api/portfolio/sample", (c) => c.json(portfolioExample));
 app.get("/api/harness/sample", (c) => c.json(harnessExample));
 app.get("/api/skill/sample", (c) => c.json(skillExample));
 app.get("/api/run/sample", (c) => c.json(runExample));
+app.get("/api/flake/sample", (c) => c.json(flakeExample));
 
 app.get("/openapi.json", (c) => {
   const origin = new URL(c.req.url).origin;
@@ -301,6 +342,7 @@ app.get("/openapi.json", (c) => {
     harness: HARNESS_PRICE_USD,
     skill: SKILL_PRICE_USD,
     run: RUN_PRICE_USD,
+    flake: FLAKE_PRICE_USD,
   }));
 });
 
@@ -366,6 +408,7 @@ app.use(PORTFOLIO_ENDPOINT, paymentGate);
 app.use(HARNESS_ENDPOINT, paymentGate);
 app.use(SKILL_ENDPOINT, paymentGate);
 app.use(RUN_ENDPOINT, paymentGate);
+app.use(FLAKE_ENDPOINT, paymentGate);
 
 app.get(SINGLE_ENDPOINT, async (c) => {
   const issueUrl = c.req.query("issue_url") || "";
@@ -450,6 +493,34 @@ app.get(RUN_ENDPOINT, async (c) => {
     }
     console.error(error);
     return c.json({ error: "INTERNAL_ERROR", message: "The workflow run could not be diagnosed." }, 500);
+  }
+});
+
+app.get(FLAKE_ENDPOINT, async (c) => {
+  const runUrl = c.req.query("run_url") || "";
+  const attempt = c.req.query("attempt");
+  if (!c.env.FLAKE_RATE_LIMITER) {
+    console.error("FlakeVerdict rate limiter is not configured.");
+    return c.json({ error: "SERVICE_CONFIGURATION_ERROR", message: "FlakeVerdict capacity protection is unavailable." }, 503);
+  }
+  const rateLimit = await c.env.FLAKE_RATE_LIMITER.limit({ key: "flake:verified-global" });
+  if (!rateLimit.success) {
+    c.header("Retry-After", "60");
+    return c.json({ error: "FLAKE_RATE_LIMITED", message: "FlakeVerdict is temporarily at its bounded upstream capacity." }, 429);
+  }
+  try {
+    const verdict = await diagnoseGithubFlake(
+      runUrl,
+      attempt,
+      { GITHUB_TOKEN: c.env.GITHUB_TOKEN },
+    );
+    return c.json(verdict);
+  } catch (error) {
+    if (error instanceof FlakeError) {
+      return c.json({ error: error.code, message: error.message }, error.status as 400);
+    }
+    console.error(error);
+    return c.json({ error: "INTERNAL_ERROR", message: "The workflow flake classification could not be produced." }, 500);
   }
 });
 

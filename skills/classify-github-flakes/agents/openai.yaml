@@ -1,0 +1,4 @@
+interface:
+  display_name: "Classify GitHub Flakes"
+  short_description: "Gate CI retries with bounded run history"
+  default_prompt: "Use $classify-github-flakes to classify this completed public GitHub Actions failure before retrying CI."

@@ -5,6 +5,7 @@ import { discoveryExtension, portfolioDiscoveryExtension } from "../src/discover
 import { harnessDiscoveryExtension } from "../src/harness-discovery.ts";
 import { skillDiscoveryExtension } from "../src/skill-discovery.ts";
 import { runDiscoveryExtension } from "../src/run-discovery.ts";
+import { flakeDiscoveryExtension } from "../src/flake-discovery.ts";
 
 test("build-time method enrichment creates valid Bazaar metadata", () => {
   const extension = discoveryExtension.bazaar;
@@ -38,6 +39,13 @@ test("SkillVerdict GET declaration passes Bazaar schema and protocol validation"
 
 test("RunVerdict GET declaration passes Bazaar schema and protocol validation", () => {
   const extension = runDiscoveryExtension.bazaar;
+  assert.equal(extension.info.input.method, "GET");
+  assert.deepEqual(validateDiscoveryExtensionSpec(extension), { valid: true });
+  assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
+});
+
+test("FlakeVerdict GET declaration passes Bazaar schema and protocol validation", () => {
+  const extension = flakeDiscoveryExtension.bazaar;
   assert.equal(extension.info.input.method, "GET");
   assert.deepEqual(validateDiscoveryExtensionSpec(extension), { valid: true });
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });

@@ -1,4 +1,5 @@
-import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { x402Client, x402HTTPClient } from "@x402/core/client";
+import type { PaymentRequired } from "@x402/core/types";
 import { CdpX402Client } from "@coinbase/cdp-sdk/x402";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
@@ -7,6 +8,7 @@ import { validatePaymentChallenge } from "../src/payment-safety.ts";
 const defaultIssue = "https://github.com/typeorm/typeorm/issues/3357";
 const defaultRepo = "https://github.com/openai/codex";
 const defaultRun = "https://github.com/openai/codex/actions/runs/29728148711";
+const defaultFlakeRun = "https://github.com/actions/runner/actions/runs/29423388605";
 const defaultPayTo = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
 const defaultPortfolio = [
   "https://github.com/godotengine/godot/issues/70796",
@@ -22,11 +24,13 @@ const product = process.env.PRODUCT === "portfolio"
       ? "skill"
       : process.env.PRODUCT === "run"
         ? "run"
-        : "single";
+        : process.env.PRODUCT === "flake"
+          ? "flake"
+          : "single";
 const issueUrls = process.env.ISSUE_URLS
   ? process.env.ISSUE_URLS.split(",").map((value) => value.trim()).filter(Boolean)
   : defaultPortfolio;
-const url = new URL(product === "portfolio" ? "/api/portfolio" : product === "harness" ? "/api/harness" : product === "skill" ? "/api/skill" : product === "run" ? "/api/run" : "/api/verdict", baseUrl);
+const url = new URL(product === "portfolio" ? "/api/portfolio" : product === "harness" ? "/api/harness" : product === "skill" ? "/api/skill" : product === "run" ? "/api/run" : product === "flake" ? "/api/flake" : "/api/verdict", baseUrl);
 if (product === "single") url.searchParams.set("issue_url", issueUrl);
 if (product === "harness") url.searchParams.set("repo_url", process.env.REPO_URL || defaultRepo);
 if (product === "skill") {
@@ -34,13 +38,24 @@ if (product === "skill") {
   url.searchParams.set("skill_path", process.env.SKILL_PATH || "skills/agentic-wallet");
 }
 if (product === "run") url.searchParams.set("run_url", process.env.RUN_URL || defaultRun);
+if (product === "flake") {
+  url.searchParams.set("run_url", process.env.FLAKE_RUN_URL || defaultFlakeRun);
+  const attempt = process.env.FLAKE_ATTEMPT || process.env.ATTEMPT;
+  if (attempt) {
+    if (!/^[1-9][0-9]*$/.test(attempt) || !Number.isSafeInteger(Number(attempt))) {
+      throw new Error("FLAKE_ATTEMPT must be a positive safe integer.");
+    }
+    url.searchParams.set("attempt", attempt);
+  }
+}
 const requestInit: RequestInit = product === "portfolio"
   ? {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ issue_urls: issueUrls }),
+      redirect: "error",
     }
-  : { headers: { Accept: "application/json" } };
+  : { headers: { Accept: "application/json" }, redirect: "error" };
 
 function decodeHeader(value: string): any {
   return JSON.parse(Buffer.from(value, "base64").toString("utf8"));
@@ -53,12 +68,14 @@ if (unpaid.status !== 402) {
 const paymentHeader = unpaid.headers.get("payment-required");
 if (!paymentHeader) throw new Error("The 402 response omitted PAYMENT-REQUIRED.");
 const challenge = decodeHeader(paymentHeader);
-const expectedService = product === "portfolio" ? "BountyVerdict Portfolio" : product === "harness" ? "HarnessVerdict" : product === "skill" ? "SkillVerdict" : product === "run" ? "RunVerdict" : "BountyVerdict";
+const expectedService = product === "portfolio" ? "BountyVerdict Portfolio" : product === "harness" ? "HarnessVerdict" : product === "skill" ? "SkillVerdict" : product === "run" ? "RunVerdict" : product === "flake" ? "FlakeVerdict" : "BountyVerdict";
 const expectedMethod = product === "portfolio" ? "POST" : "GET";
 if (challenge.resource?.url !== url.href) throw new Error("The payment challenge resource URL does not match the requested operation.");
 if (challenge.resource?.serviceName !== expectedService) throw new Error(`The payment challenge service is not ${expectedService}.`);
 if (challenge.extensions?.bazaar?.info?.input?.method !== expectedMethod) throw new Error(`The payment challenge method is not ${expectedMethod}.`);
-const defaultMaximumAtomic = product === "portfolio" ? "400000" : product === "harness" ? "30000" : product === "skill" ? "60000" : product === "run" ? "40000" : "50000";
+if (challenge.accepts?.[0]?.scheme !== "exact") throw new Error("The payment challenge scheme is not exact.");
+const expectedAtomic = product === "portfolio" ? "400000" : product === "harness" ? "30000" : product === "skill" ? "60000" : product === "run" ? "40000" : product === "flake" ? "70000" : "50000";
+const defaultMaximumAtomic = expectedAtomic;
 const maximumAtomic = BigInt(process.env.MAX_PAYMENT_ATOMIC || defaultMaximumAtomic);
 const executePayment = process.env.EXECUTE_PAYMENT === "YES";
 const requirement = validatePaymentChallenge(challenge, {
@@ -66,6 +83,17 @@ const requirement = validatePaymentChallenge(challenge, {
   executePayment,
   allowMainnet: process.env.ALLOW_MAINNET_PAYMENT === "YES",
 });
+if (requirement.amount !== expectedAtomic) {
+  throw new Error(`The payment challenge amount is not the exact ${expectedAtomic} atomic-unit product price.`);
+}
+const expectedNetwork = process.env.EXPECTED_NETWORK;
+if (expectedNetwork && requirement.network !== expectedNetwork) {
+  throw new Error("The payment challenge network does not match EXPECTED_NETWORK.");
+}
+const expectedAsset = process.env.EXPECTED_ASSET;
+if (expectedAsset && requirement.asset.toLowerCase() !== expectedAsset.toLowerCase()) {
+  throw new Error("The payment challenge asset does not match EXPECTED_ASSET.");
+}
 const expectedPayTo = process.env.EXPECTED_PAY_TO || defaultPayTo;
 if (!/^0x[a-fA-F0-9]{40}$/.test(expectedPayTo) || requirement.payTo.toLowerCase() !== expectedPayTo.toLowerCase()) {
   throw new Error("The payment challenge recipient does not match EXPECTED_PAY_TO.");
@@ -120,8 +148,18 @@ if (hasCdpWallet) {
       requirements.filter((candidate) => BigInt(candidate.amount) <= maximumAtomic),
     );
 }
-const paidFetch = wrapFetchWithPayment(fetch, client);
-const paid = await paidFetch(url, requestInit);
+const httpClient = new x402HTTPClient(client);
+const paymentPayload = await httpClient.createPaymentPayload(challenge as PaymentRequired);
+const paidHeaders = new Headers(requestInit.headers);
+for (const [name, value] of Object.entries(httpClient.encodePaymentSignatureHeader(paymentPayload))) {
+  paidHeaders.set(name, value);
+}
+const paid = await fetch(url, { ...requestInit, headers: paidHeaders, redirect: "error" });
+const processed = await httpClient.processPaymentResult(
+  paymentPayload,
+  name => paid.headers.get(name),
+  paid.status,
+);
 const responseBody = await paid.json() as {
   verdict?: string;
   score?: number;
@@ -134,7 +172,15 @@ if (!paid.ok) {
 }
 const settlementHeader = paid.headers.get("payment-response");
 if (!settlementHeader) throw new Error("Successful response omitted PAYMENT-RESPONSE.");
-const settlement = decodeHeader(settlementHeader);
+const settlement = processed.settleResponse || decodeHeader(settlementHeader);
+if (
+  settlement.success !== true ||
+  settlement.network !== requirement.network ||
+  typeof settlement.transaction !== "string" ||
+  !/^0x[0-9a-fA-F]{64}$/.test(settlement.transaction)
+) {
+  throw new Error("PAYMENT-RESPONSE did not prove successful settlement on the requested network.");
+}
 
 console.log(JSON.stringify({
   phase: "payment_settled",

@@ -1,0 +1,94 @@
+{
+  "product": "FlakeVerdict",
+  "version": "1.0",
+  "verdict": "CONFIRMED_FLAKE",
+  "summary": "The same job succeeded on another attempt of this exact workflow run.",
+  "service_reuse": {
+    "reusable": true,
+    "fresh_result_per_successful_call": true,
+    "reliability": "bounded_live_check",
+    "guidance": "Call FlakeVerdict for every completed public GitHub Actions failure before spending a retry; each successful call re-reads the selected attempt, other attempts of the same run, same-SHA outcomes, and up to 12 earlier comparable runs. Reuse a result only for its exact run ID and attempt, and call again after a new attempt appears."
+  },
+  "decision": {
+    "confidence": "high",
+    "retry": "ONCE",
+    "reason_codes": ["SAME_RUN_JOB_SUCCEEDED"]
+  },
+  "target": {
+    "url": "https://github.com/acme/widget/actions/runs/123456789",
+    "repository": "acme/widget",
+    "id": "123456789",
+    "attempt": 2,
+    "current_attempt": 2,
+    "workflow_id": 314159,
+    "workflow": "CI",
+    "workflow_path": ".github/workflows/ci.yml",
+    "event": "pull_request",
+    "head_branch": "fix/widget-timeout",
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-07-20T10:00:00Z",
+    "updated_at": "2026-07-20T10:05:00Z"
+  },
+  "failure_signatures": [{
+    "fingerprint": "5f0d96b70ecd66cc8c537887b5cc0f6b99cfed4511429aab645de32bfde619d6",
+    "job_name": "tests / linux",
+    "conclusion": "failure",
+    "failed_steps": ["Run tests"],
+    "evidence_url": "https://github.com/acme/widget/actions/runs/123456789/job/987654321",
+    "log_status": "scanned"
+  }],
+  "same_run_attempts": [{
+    "attempt": 1,
+    "conclusion": "success",
+    "matching_jobs_succeeded": ["tests / linux"],
+    "matching_jobs_failed": []
+  }],
+  "same_sha_runs": [{
+    "run_id": "123456700",
+    "attempt": 1,
+    "conclusion": "success",
+    "matching_jobs_succeeded": ["tests / linux"],
+    "matching_fingerprints": [],
+    "html_url": "https://github.com/acme/widget/actions/runs/123456700"
+  }],
+  "historical_matches": [{
+    "run_id": "123450000",
+    "attempt": 1,
+    "head_sha": "abcdef0123456789abcdef0123456789abcdef01",
+    "created_at": "2026-07-18T10:00:00Z",
+    "matching_fingerprints": ["5f0d96b70ecd66cc8c537887b5cc0f6b99cfed4511429aab645de32bfde619d6"],
+    "recovered_by_later_success": false,
+    "html_url": "https://github.com/acme/widget/actions/runs/123450000"
+  }],
+  "coverage": {
+    "target_jobs_reported": 8,
+    "target_jobs_total": 8,
+    "target_jobs_truncated": false,
+    "target_failed_jobs": 1,
+    "target_logs_selected": 1,
+    "target_logs_scanned": 1,
+    "target_logs_unavailable": 0,
+    "target_log_bytes_read": 18240,
+    "target_logs_truncated": 0,
+    "same_run_attempts_available": 1,
+    "same_run_attempts_checked": 1,
+    "same_run_attempts_truncated": false,
+    "same_sha_runs_listed": 1,
+    "same_sha_runs_checked": 1,
+    "same_sha_runs_truncated": false,
+    "earlier_comparable_runs_available": 12,
+    "earlier_comparable_runs_checked": 12,
+    "earlier_comparable_runs_truncated": false,
+    "historical_job_pages": 1,
+    "github_rate_limit_remaining": 4970,
+    "partial_failures": [],
+    "deadline_ms": 14000
+  },
+  "checked_at": "2026-07-20T12:00:00.000Z",
+  "limitations": [
+    "FlakeVerdict compares bounded public GitHub Actions history and exact job-step fingerprints; it never reruns CI and cannot prove that an unseen failure is deterministic.",
+    "Failure fingerprints contain job and failed-step names, not error text; structural recurrence does not prove an identical root cause."
+  ]
+}

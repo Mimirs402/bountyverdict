@@ -6,3 +6,9 @@ GITHUB_TOKEN=
 
 # Strong random token for the hard-coded internal production canaries. Never commit the real value.
 CANARY_TOKEN=replace-with-at-least-32-random-characters
+
+# Public policy/account identifiers used by the disabled-by-default real-settlement canary.
+# Keep the credential values themselves only in .dev.vars or another private secret store.
+CDP_PROJECT_POLICY_ID=00000000-0000-4000-8000-000000000000
+CDP_ACCOUNT_POLICY_ID=00000000-0000-4000-8000-000000000000
+SETTLEMENT_BUYER_ADDRESS=0xYourPolicyBoundBuyerAddress

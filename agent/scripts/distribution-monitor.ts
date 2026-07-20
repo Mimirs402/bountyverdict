@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { base } from "viem/chains";
 import { validatePaymentChallenge } from "../src/payment-safety.ts";
-import { summarizeRevenue, type SettlementTransfer } from "../src/revenue.ts";
+import {
+  OWNER_CONTROLLED_CANARY_PAYER,
+  summarizeRevenue,
+  type SettlementTransfer,
+} from "../src/revenue.ts";
+import { PRODUCT_CATALOG } from "../src/product-catalog.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const DEFAULT_WALLET = "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614";
@@ -23,8 +28,11 @@ const canaryStateFile = process.env.CANARY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/functional-canary.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = process.env.TRACKED_COSTS_USDC || "0";
+const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";
+const settlementBuyer = process.env.SETTLEMENT_BUYER_ADDRESS;
+const settlementCanaryEnabled = process.env.SETTLEMENT_CANARY_ENABLED === "YES";
 const MAX_CANARY_AGE_MS = 8 * 60 * 60 * 1000;
-const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run"] as const;
+const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "flake"] as const;
 
 if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
   throw new Error("REVENUE_WALLET must be a public 20-byte EVM address.");
@@ -34,6 +42,15 @@ if (!/^\d+$/.test(startBlockInput)) {
 }
 if (!/^\d+(?:\.\d{1,6})?$/.test(trackedCostsInput)) {
   throw new Error("TRACKED_COSTS_USDC must be a non-negative decimal with at most six places.");
+}
+if (!/^\d+(?:\.\d{1,18})?$/.test(historicalTestGasEth)) {
+  throw new Error("HISTORICAL_TEST_GAS_ETH must be a non-negative decimal with at most 18 places.");
+}
+if (settlementBuyer && !/^0x[a-fA-F0-9]{40}$/.test(settlementBuyer)) {
+  throw new Error("SETTLEMENT_BUYER_ADDRESS must be an EVM address when configured.");
+}
+if (settlementCanaryEnabled && !settlementBuyer) {
+  throw new Error("SETTLEMENT_BUYER_ADDRESS is required when the settlement canary is enabled.");
 }
 
 async function atomicWrite(path: string, contents: string): Promise<void> {
@@ -60,7 +77,7 @@ function decodeChallenge(header: string): any {
 }
 
 async function inspectChallenge(
-  product: "single" | "portfolio" | "harness" | "skill" | "run",
+  product: "single" | "portfolio" | "harness" | "skill" | "run" | "flake",
 ): Promise<Record<string, unknown>> {
   const url = product === "single"
     ? `${api}/api/verdict?issue_url=${encodeURIComponent("https://github.com/typeorm/typeorm/issues/3357")}`
@@ -70,7 +87,9 @@ async function inspectChallenge(
         ? `${api}/api/skill?repo_url=${encodeURIComponent("https://github.com/coinbase/agentic-wallet-skills")}&skill_path=${encodeURIComponent("skills/agentic-wallet")}`
         : product === "run"
           ? `${api}/api/run?run_url=${encodeURIComponent("https://github.com/openai/codex/actions/runs/29728148711")}`
-      : `${api}/api/portfolio`;
+          : product === "flake"
+            ? `${api}/api/flake?run_url=${encodeURIComponent("https://github.com/actions/runner/actions/runs/29423388605")}&attempt=1`
+            : `${api}/api/portfolio`;
   const response = await monitoredFetch(url, product === "portfolio"
     ? {
         method: "POST",
@@ -89,7 +108,7 @@ async function inspectChallenge(
   const header = response.headers.get("payment-required");
   if (!header) throw new Error(`${product} endpoint omitted PAYMENT-REQUIRED.`);
   const challenge = decodeChallenge(header);
-  const expectedAmount = product === "single" ? 50_000n : product === "harness" ? 30_000n : product === "skill" ? 60_000n : product === "run" ? 40_000n : 400_000n;
+  const expectedAmount = PRODUCT_CATALOG[product].amountAtomic;
   const requirement = validatePaymentChallenge(challenge, {
     maximumAtomic: expectedAmount,
     executePayment: false,
@@ -135,6 +154,7 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
     "AGENTS.md CLAUDE.md repository instruction audit stale paths portability",
     "agent SKILL.md security supply chain pre-install audit credential exfiltration",
     "GitHub Actions failed run job logs root cause diagnosis retry",
+    "GitHub Actions flaky test historical runs same commit retry decision regression",
   ].map(async (query) => {
     const searchUrl = new URL(`${CDP_DISCOVERY}/search`);
     searchUrl.searchParams.set("query", query);
@@ -158,6 +178,7 @@ async function discoveryStatus(): Promise<Record<string, unknown>> {
     harness: `${api}/api/harness`,
     skill: `${api}/api/skill`,
     run: `${api}/api/run`,
+    flake: `${api}/api/flake`,
   };
   const indexedProducts = Object.fromEntries(Object.entries(expectedResources).map(([name, resource]) =>
     [name, merchantResources.has(resource)]
@@ -215,15 +236,22 @@ async function revenueStatus(): Promise<Record<string, unknown>> {
       toBlock,
     });
     for (const log of logs) {
-      if (log.args.value === undefined || !log.transactionHash || log.logIndex === null) continue;
+      if (log.args.from === undefined || log.args.value === undefined || !log.transactionHash || log.logIndex === null) continue;
       transfers.push({
+        from: log.args.from,
         amount: log.args.value,
         transaction_hash: log.transactionHash,
         log_index: log.logIndex,
       });
     }
   }
-  const summary = summarizeRevenue(transfers);
+  const summary = summarizeRevenue(
+    transfers,
+    undefined,
+    settlementBuyer
+      ? [OWNER_CONTROLLED_CANARY_PAYER, settlementBuyer]
+      : [OWNER_CONTROLLED_CANARY_PAYER],
+  );
   return {
     scanned_blocks: { from: startBlock.toString(), to: latestBlock.toString() },
     target_usdc: summary.target_usdc,
@@ -232,16 +260,32 @@ async function revenueStatus(): Promise<Record<string, unknown>> {
     progress_percent: summary.progress_percent,
     purchases: summary.purchases,
     recognized_transfers: summary.recognized_transfers.map((entry) => ({
+      from: entry.from,
+      transaction_hash: entry.transaction_hash,
+      log_index: entry.log_index,
+      amount_atomic: entry.amount.toString(),
+    })),
+    canary_transfer_count: summary.canary_transfers.length,
+    canary_usdc: summary.canary_usdc,
+    canary_transfers: summary.canary_transfers.map((entry) => ({
+      from: entry.from,
       transaction_hash: entry.transaction_hash,
       log_index: entry.log_index,
       amount_atomic: entry.amount.toString(),
     })),
     excluded_non_revenue_transfers: summary.excluded_transfers.map((entry) => ({
+      from: entry.from,
       transaction_hash: entry.transaction_hash,
       log_index: entry.log_index,
       amount_atomic: entry.amount.toString(),
     })),
-    unrelated_incoming_transfers: summary.unrecognized_transfers.length,
+    unrelated_incoming_transfer_count: summary.unrecognized_transfers.length,
+    unrelated_incoming_transfers: summary.unrecognized_transfers.map((entry) => ({
+      from: entry.from,
+      transaction_hash: entry.transaction_hash,
+      log_index: entry.log_index,
+      amount_atomic: entry.amount.toString(),
+    })),
   };
 }
 
@@ -314,23 +358,26 @@ function renderMonitorNote(report: Record<string, any>): string {
 
 - **STATUS:** ${status}
 - **Customer revenue:** ${money(revenueValue)} / $1,000.00
-- **Current profit:** ${money(profitValue)} (customer revenue minus ${money(costsValue)} tracked external costs)
+- **Current profit (recognized-USDC basis):** ${money(profitValue)} (customer revenue minus ${money(costsValue)} tracked USD costs)
+- **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Customer purchases:** ${Number(purchases.total || 0)}
+- **Owner canary settlements excluded:** ${Number(report.revenue?.canary_transfer_count || 0)} (${money(report.revenue?.canary_usdc || 0)})
+- **Unrelated incoming transfers:** ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
 - **Last refreshed:** ${report.checked_at}
 
-Owner-funded launch proofs are excluded from both customer revenue and profit. Wallet reserves are capital, not revenue.
+Owner-funded launch proofs and every settlement from the dedicated owner canary payer are excluded from both customer revenue and profit. Unrelated incoming transfers remain separate from purchases. Wallet reserves are capital, not revenue. Profit is not a full fiat-accounting figure until the separately reported historic gas is converted and entered as a tracked USD cost.
 
 ## Current milestone
 
-The reusable-result reliability release is live across all five Base-mainnet products. Every successful semantic result carries a precise \`service_reuse\` contract. Authenticated six-hour canaries exercise all real handlers behind an edge rate limit, while the 15-minute monitor verifies free routes, exact x402 challenges, global Bazaar discovery, and on-chain revenue.
+The reusable-result reliability release is live across all six Base-mainnet products. FlakeVerdict adds a bounded, read-only historical CI retry gate with six truthful outcomes, while every successful semantic result carries a precise \`service_reuse\` contract. Authenticated six-hour canaries exercise all real handlers behind an edge rate limit, and the 15-minute monitor verifies free routes, exact x402 challenges, global Bazaar discovery, and on-chain revenue.
 
 ## What is next
 
-1. Add a weekly rotating real-settlement canary to prove the complete x402 verification, handler, and settlement path without counting owner-funded tests as revenue.
-2. Build FlakeVerdict, the strongest currently validated underserved x402 opportunity: historical CI flake versus regression diagnosis.
+1. Replace both broad CDP typed-data policies with the prepared seller-and-$0.40-bound rule in the dashboard, then provision and fund the policy-bound buyer before enabling the once-weekly real-settlement canary.
+2. Measure FlakeVerdict's unbranded Bazaar rank and genuine paid calls; tune its discovery copy from observed demand, never owner-funded proofs.
 3. Improve unbranded marketplace rank for BountyVerdict and Portfolio while measuring only genuine customer settlements.
 4. Provision a one-account Cloudflare Workers Scripts Write CI token when available; production remains deployable through the authenticated local control plane.
-5. Reach the first unique paying agent, then optimize from observed calls rather than owner-funded proofs.
+5. Reach the first unique paying agent, then optimize from observed calls and continue the next underserved-tool build.
 
 ## Production health
 
@@ -351,6 +398,7 @@ ${errors}
 | HarnessVerdict | $0.03 | ${ranks.harness ?? "not found"} | ${indexed.harness ? "indexed" : "pending"} |
 | SkillVerdict | $0.06 | ${ranks.skill ?? "not found"} | ${indexed.skill ? "indexed" : "pending"} |
 | RunVerdict | $0.04 | ${ranks.run ?? "not found"} | ${indexed.run ? "indexed" : "pending"} |
+| FlakeVerdict | $0.07 | ${ranks.flake ?? "not found"} | ${indexed.flake ? "indexed" : "pending"} |
 
 ## Revenue detail
 
@@ -359,6 +407,9 @@ ${errors}
 - Harness purchases: ${Number(purchases.harness || 0)}
 - Skill purchases: ${Number(purchases.skill || 0)}
 - Run purchases: ${Number(purchases.run || 0)}
+- Flake purchases: ${Number(purchases.flake || 0)}
+- Owner canary settlement volume excluded: ${money(report.revenue?.canary_usdc || 0)} across ${Number(report.revenue?.canary_transfer_count || 0)} transfers
+- Unrelated incoming transfers: ${Number(report.revenue?.unrelated_incoming_transfer_count || 0)}
 - Remaining to first goal: ${money(report.revenue?.remaining_usdc)}
 
 This file is overwritten by the production monitor. Machine-readable state: \`~/.local/state/bountyverdict/distribution-status.json\`.
@@ -373,13 +424,14 @@ let revenue: Record<string, unknown> = {};
 let functional: Record<string, unknown> = {};
 
 try {
-  const [root, sample, portfolioSample, harnessSample, skillSample, runSample, openapi, llms, single, portfolio, harness, skill, run] = await Promise.all([
+  const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, openapi, llms, single, portfolio, harness, skill, run, flake] = await Promise.all([
     requireStatus("/"),
     requireStatus("/api/sample"),
     requireStatus("/api/portfolio/sample"),
     requireStatus("/api/harness/sample"),
     requireStatus("/api/skill/sample"),
     requireStatus("/api/run/sample"),
+    requireStatus("/api/flake/sample"),
     requireStatus("/openapi.json"),
     requireStatus("/llms.txt"),
     inspectChallenge("single"),
@@ -387,8 +439,9 @@ try {
     inspectChallenge("harness"),
     inspectChallenge("skill"),
     inspectChallenge("run"),
+    inspectChallenge("flake"),
   ]);
-  health = { root, sample, portfolio_sample: portfolioSample, harness_sample: harnessSample, skill_sample: skillSample, run_sample: runSample, openapi, llms, single, portfolio, harness, skill, run };
+  health = { root, sample, portfolio_sample: portfolioSample, harness_sample: harnessSample, skill_sample: skillSample, run_sample: runSample, flake_sample: flakeSample, openapi, llms, single, portfolio, harness, skill, run, flake };
 } catch (error) {
   errors.push(error instanceof Error ? error.message : String(error));
 }

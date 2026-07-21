@@ -70,8 +70,8 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
-  assert.equal(manifest.release_version, "1.1.4");
-  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.4$/);
+  assert.equal(manifest.release_version, "1.1.5");
+  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.5$/);
   assert.ok(["awaiting_production", "active"].includes(manifest.status));
   if (manifest.status === "awaiting_production") assert.equal(manifest.production_api, null);
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
@@ -82,7 +82,7 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
-  assert.equal(manifest.mcp.server_version, "1.1.4");
+  assert.equal(manifest.mcp.server_version, "1.1.5");
   assert.equal(manifest.mcp.machine_readable_output_contracts, true);
   assert.equal(manifest.ard_catalog, "https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json");
   assert.match(manifest.skill, /route-github-agent-checks\/SKILL\.md$/);

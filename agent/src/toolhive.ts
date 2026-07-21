@@ -1,5 +1,5 @@
 export const TOOLHIVE_SERVER_NAME = "io.github.stacklok/bountyverdict";
-export const TOOLHIVE_SERVER_VERSION = "1.1.4";
+export const TOOLHIVE_SERVER_VERSION = "1.1.5";
 export const TOOLHIVE_TOOLS = Object.freeze([
   "check_github_bounty",
   "rank_github_bounties",

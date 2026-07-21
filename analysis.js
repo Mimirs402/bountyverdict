@@ -120,11 +120,25 @@ function platformClaimState(comments, openPulls) {
 }
 
 function amountFromText(text) {
-  const match = String(text ?? "").match(/\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?\b/);
+  const match = String(text ?? "").match(
+    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(USDC|USD))?(?=\s|[.,;:)\]}]|$)/i,
+  );
   if (!match) return { amount: null, currency: null };
   const multiplier = match[2] ? 1_000 : 1;
   const amount = Number(match[1].replaceAll(",", "")) * multiplier;
-  return { amount: Number.isFinite(amount) ? amount : null, currency: "USD" };
+  return {
+    amount: Number.isFinite(amount) ? amount : null,
+    currency: String(match[3] || "USD").toUpperCase(),
+  };
+}
+
+function isAffirmativeRewardedLabel(value) {
+  const normalized = String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .trim();
+  return /^(?:(?:bounty|reward)\s*[:=/_-]?\s*)?rewarded$/i.test(normalized);
 }
 
 function rewardEvidence(issue, comments) {
@@ -211,7 +225,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const pulls = uniquePullRequests(timeline);
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
-  const rewardedLabels = issueLabelNames(issue).filter((label) => /\brewarded\b/i.test(label));
+  const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
   const currentPlatformClaim = platformClaimState(comments, openPulls);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
   const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));

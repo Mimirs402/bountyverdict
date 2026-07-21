@@ -67,7 +67,7 @@ const TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
 const GITHUB_REPOSITORY = "Mimirs402/bountyverdict";
 const MCP_REGISTRY_NAME = "io.github.Mimirs402/bountyverdict";
-const MCP_REGISTRY_VERSION = "1.1.4";
+const MCP_REGISTRY_VERSION = "1.1.5";
 const MCP_REGISTRY_TIMEOUT_MS = 45_000;
 const ONE_MCP_PACKAGE = "@1mcp/agent@0.34.3";
 const QT_MCP_REGISTRY = "https://qtccache.qt.io/mcp/registry.json";
@@ -1590,6 +1590,7 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
       github_pr_monitoring: state.github_pr_monitoring || null,
       skills_sh: state.skills_sh || null,
       skills_sh_dedicated: state.skills_sh_dedicated || null,
+      awesome_skills: state.awesome_skills || null,
       agenttool: state.agenttool || null,
       mcp_repository: state.mcp_repository || null,
       agentndx: state.agentndx || null,
@@ -2070,6 +2071,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const skillsShSearch = report.acquisition?.skills_sh?.search_index || {};
   const dedicatedSkillsSh = report.acquisition?.skills_sh_dedicated || {};
   const dedicatedSkillsShSearch = dedicatedSkillsSh.search_index || {};
+  const awesomeSkills = report.acquisition?.awesome_skills || {};
   const experiment = report.acquisition?.experiment || {};
   const publicDemand = report.acquisition?.public_demand_watch || {};
   const moltDemand = publicDemand.moltjobs || {};
@@ -2209,6 +2211,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **askill adapter:** ${report.acquisition?.askill?.listed ? `1 / 1 exact skill listed at ${report.acquisition.askill.listing_url}; task-first copy ${report.acquisition.askill.buyer_language_revision_live ? "live" : "pending"}; complete adapter revision ${report.acquisition.askill.adapter_revision_live ? "live" : "pending reindex"}; ${Number(report.acquisition.askill.favorites || 0)} public favorites; unbranded retrieval ${Number(report.acquisition.askill.buyer_query_benchmark?.found_queries || 0)} / ${Number(report.acquisition.askill.buyer_query_benchmark?.query_count || ASKILL_BUYER_QUERIES.length)} queries found and ${Number(report.acquisition.askill.buyer_query_benchmark?.top_three_queries || 0)} top-three` : report.acquisition?.askill?.status || "awaiting audited catalog refresh"}; exact install source ${report.acquisition?.askill?.install_source || "gh:cristianmoroaica/bountyverdict-mcp-skill@route-github-agent-decisions"} (fixed owner-run retrieval, listing, and favorites are not search volume, impressions, installs, tool calls, purchases, or revenue; askill exposes no public install counter)
 - **Dedicated askill adapter:** ${report.acquisition?.askill_dedicated?.listed ? `1 / 1 exact skill listed at ${report.acquisition.askill_dedicated.listing_url}; ${Number(report.acquisition.askill_dedicated.favorites || 0)} public favorites; unbranded retrieval ${Number(report.acquisition.askill_dedicated.buyer_query_benchmark?.found_queries || 0)} / ${Number(report.acquisition.askill_dedicated.buyer_query_benchmark?.query_count || ASKILL_BUYER_QUERIES.length)} queries found and ${Number(report.acquisition.askill_dedicated.buyer_query_benchmark?.top_three_queries || 0)} top-three` : report.acquisition?.askill_dedicated?.status || "awaiting audited catalog refresh"}; exact install source ${report.acquisition?.askill_dedicated?.install_source || "gh:Mimirs402/bountyverdict-mcp-skill@route-github-agent-decisions"} (separate dedicated-account placement; never merged into the frozen legacy experiment or treated as an install, purchase, or revenue)
 - **Dedicated Skills.sh adapter:** ${dedicatedSkillsSh.listed ? `listed at ${dedicatedSkillsSh.url}; exact search rank ${dedicatedSkillsShSearch.exact_rank || "unavailable"}; natural retrieval ${Number(dedicatedSkillsShSearch.natural_found || 0)} / ${Number(dedicatedSkillsShSearch.natural_expected || ASKILL_BUYER_QUERIES.length)} queries and ${Number(dedicatedSkillsShSearch.natural_top_three || 0)} top-three` : `${dedicatedSkillsSh.status || "awaiting audited catalog refresh"}; indexing request ${dedicatedSkillsSh.indexing_request?.issue_url || "https://github.com/vercel-labs/skills/issues/1754"}`} (upstream request, listing, and owner-run retrieval are not impressions, installs, tool calls, purchases, or revenue)
+- **Awesome Skills adapter:** ${awesomeSkills.contract_verified ? `listed with exact source, install command, task description, payment handoff, and ${Number(awesomeSkills.listed_tools || 0)} / ${Number(awesomeSkills.expected_tools || 6)} tools at ${awesomeSkills.url}` : awesomeSkills.status || "awaiting audited catalog refresh"} (account-free submission and listing contract are not impressions, installs, tool calls, purchases, or revenue)
 - **Agent-Skills.md adapter:** ${report.acquisition?.agent_skills_md?.status || "unavailable"} (${report.acquisition?.agent_skills_md?.contract_verified ? "task-first source and six-tool payment handoff verified" : "publication or contract verification pending"}; ${report.acquisition?.agent_skills_md?.listing_url || "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions"}; anonymous submission and listing presence are not impressions, installs, tool calls, purchases, or revenue)
 - **Glama release path:** build-ready secret-free stdio bridge to the existing six-tool remote; ${funnel.available ? `${Number(mcpGlama.initialize || 0)} source-marked initializations, ${Number(mcpGlama.tools_list || 0)} tool-list requests, ${Number(mcpGlama.payment_required || 0)} valid unpaid calls, ${Number(mcpGlama.payment_present || 0)} payment presentations` : "funnel unavailable"}; dashboard release and quality score pending (source marker and build checks are distribution evidence only, never installs, purchases, or revenue)
 - **Authenticated GitHub PR telemetry:** ${githubPrTelemetrySummary}
@@ -2337,6 +2340,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - skills.sh repository installs: ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"}
 - skills.sh search corpus: branded ${skillsShSearch.branded_found === true ? "found" : "not found"}; exact names ${Number(skillsShSearch.exact_found || 0)} / ${Number(skillsShSearch.exact_expected || 7)}; natural buyer queries ${Number(skillsShSearch.natural_found || 0)} / ${Number(skillsShSearch.natural_expected || 7)} (owner-run retrieval, never demand)
 - Dedicated Skills.sh adapter: ${dedicatedSkillsSh.status || "unavailable"}; exact search ${dedicatedSkillsShSearch.exact_found === true ? `found at rank ${dedicatedSkillsShSearch.exact_rank}` : "not found"}; natural buyer queries ${Number(dedicatedSkillsShSearch.natural_found || 0)} / ${Number(dedicatedSkillsShSearch.natural_expected || ASKILL_BUYER_QUERIES.length)} (${dedicatedSkillsSh.indexing_request?.issue_url || "https://github.com/vercel-labs/skills/issues/1754"}; request and owner-run retrieval are never demand or revenue)
+- Awesome Skills adapter: ${awesomeSkills.status || "unavailable"}; contract ${awesomeSkills.contract_verified ? "verified" : "not verified"}; ${Number(awesomeSkills.listed_tools || 0)} / ${Number(awesomeSkills.expected_tools || 6)} tools (${awesomeSkills.url || "https://www.awesomeskills.dev/en/skill/bountyverdict-mcp-skill-route-github-agent-decisions"}; submission and listing presence are never demand or revenue)
 - Router installs: ${Number(skillInstalls["route-github-agent-checks"] || 0)}
 - SkillVerdict workflow installs: ${Number(skillInstalls["preflight-agent-skills"] || 0)}
 - AgentTool: ${report.acquisition?.agenttool?.status || (report.acquisition?.agenttool?.listed ? "listed" : "unavailable")}

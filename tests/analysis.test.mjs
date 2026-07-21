@@ -63,6 +63,36 @@ test("a rewarded bounty label is a hard stop even when the issue stays open", ()
   assert.ok(output.signals.some((item) => item.label === "Bounty is already rewarded" && item.hardStop));
 });
 
+test("qualified rewarded labels never fabricate a paid hard stop", () => {
+  for (const label of ["Maybe Rewarded", "Not Rewarded", "Reward Pending"]) {
+    const output = analyzeBounty({
+      issue: {
+        ...healthyIssue,
+        labels: [{ name: label }],
+        body: "A funded $25 USDC bounty campaign pays after an accepted fix with the complete acceptance criteria below.",
+      },
+      repository: healthyRepo,
+      now,
+    });
+    assert.equal(output.reward.state, "PROMISED", label);
+    assert.equal(output.reward.amount, 25, label);
+    assert.equal(output.reward.currency, "USDC", label);
+    assert.ok(!output.signals.some((item) => item.label === "Bounty is already rewarded"), label);
+  }
+});
+
+test("only explicit affirmative rewarded status labels hard-stop the bounty", () => {
+  for (const label of ["Rewarded", "💰 Rewarded", "Bounty: Rewarded", "Reward - Rewarded"]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, labels: [{ name: label }] },
+      repository: healthyRepo,
+      now,
+    });
+    assert.equal(output.reward.state, "PAID_OR_AWARDED", label);
+    assert.equal(output.verdict, "AVOID", label);
+  }
+});
+
 test("a non-maintainer bounty claim cannot establish reward provenance", () => {
   const output = analyzeBounty({
     issue: { ...healthyIssue, author_association: "NONE", title: "$5,000 bounty", body: "Payable somehow after this issue is solved." },

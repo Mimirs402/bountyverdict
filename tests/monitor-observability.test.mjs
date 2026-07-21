@@ -72,6 +72,23 @@ test("directory monitoring tracks the dedicated Skills.sh adapter and indexing r
   assert.match(distribution, /request and owner-run retrieval are never demand or revenue/);
 });
 
+test("directory monitoring verifies the account-free Awesome Skills listing without claiming demand", async () => {
+  const [directory, distribution, parser] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../agent/src/awesome-skills.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(directory, /async function awesomeSkillsStatus/);
+  assert.match(directory, /awesome_skills: awesomeSkills/);
+  assert.match(directory, /account_free_public_repository_url/);
+  assert.match(directory, /readBoundedText\(response, AWESOME_SKILLS_MAX_PAGE_BYTES\)/);
+  assert.match(parser, /bountyverdict-mcp-skill-route-github-agent-decisions/);
+  assert.match(parser, /npx skills add/);
+  assert.match(parser, /check_mcp_tool_drift/);
+  assert.match(distribution, /Awesome Skills adapter/);
+  assert.match(distribution, /submission and listing presence are never demand or revenue/);
+});
+
 test("directory monitoring tracks the exact AgentSkills.in adapter and source cohort without claiming demand", async () => {
   const [directory, distribution, parser] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),
@@ -428,7 +445,7 @@ test("directory monitoring tracks ToolHive review and exact in-agent remote cont
   assert.match(distribution, /ToolHive in-agent catalog/);
   assert.match(distribution, /exact six-tool remote contract/);
   assert.match(parser, /io\.github\.stacklok\/bountyverdict/);
-  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.4"/);
+  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.5"/);
 });
 
 test("directory monitoring tracks Gemini CLI gallery propagation without claiming demand", async () => {
@@ -514,7 +531,7 @@ test("Gemini CLI extension exposes only the hosted paid MCP without secrets", as
   const manifest = JSON.parse(await readFile(geminiExtensionUrl, "utf8"));
   assert.deepEqual(manifest, {
     name: "bountyverdict",
-    version: "1.1.4",
+    version: "1.1.5",
     description: "Paid GitHub bounty selection, CI diagnosis, flaky-run triage, agent-instruction audits, and MCP compatibility checks for autonomous coding agents.",
     mcpServers: {
       bountyverdict: {

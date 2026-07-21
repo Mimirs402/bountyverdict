@@ -50,6 +50,11 @@ import {
   SKILLS_SH_DEDICATED_SKILL,
   SKILLS_SH_DEDICATED_SOURCE,
 } from "../src/skills-sh.ts";
+import {
+  AWESOME_SKILLS_MAX_PAGE_BYTES,
+  AWESOME_SKILLS_URL,
+  parseAwesomeSkillsPage,
+} from "../src/awesome-skills.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
@@ -61,6 +66,7 @@ const skillsUrl = "https://skills.sh/Mimirs402/bountyverdict";
 const skillsDedicatedUrl = "https://skills.sh/Mimirs402/bountyverdict-mcp-skill";
 const skillsDedicatedIssueUrl = "https://github.com/vercel-labs/skills/issues/1754";
 const skillsDedicatedIssueTitle = "Listing: Request indexing for Mimirs402/bountyverdict-mcp-skill";
+const awesomeSkillsSubmittedAt = "2026-07-21T23:44:27Z";
 const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-skills-security/pull/38";
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
@@ -141,7 +147,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-21T15:54:20Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.1.4";
+const githubSkillReleaseTag = "v1.1.5";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
@@ -273,6 +279,34 @@ async function atomicWrite(path: string, contents: string): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, contents, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+async function readBoundedText(response: Response, maximumBytes: number): Promise<string> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maximumBytes)) {
+    throw new Error("Remote page declared an invalid or oversized body.");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maximumBytes) {
+      await reader.cancel();
+      throw new Error("Remote page exceeded its bounded body limit.");
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
 }
 
 async function skillsShStatus(): Promise<Record<string, unknown>> {
@@ -444,6 +478,40 @@ async function skillsShDedicatedStatus(): Promise<Record<string, unknown>> {
       listed: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function awesomeSkillsStatus(): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(AWESOME_SKILLS_URL, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error(`Awesome Skills returned HTTP ${response.status}.`);
+    const parsed = parseAwesomeSkillsPage(await readBoundedText(response, AWESOME_SKILLS_MAX_PAGE_BYTES));
+    return {
+      url: AWESOME_SKILLS_URL,
+      http_status: response.status,
+      status: parsed.contract_verified ? "listed" : parsed.listed ? "contract_drift" : "not_listed",
+      ...parsed,
+      submission: {
+        submitted_at: awesomeSkillsSubmittedAt,
+        method: "account_free_public_repository_url",
+        result: "submitted",
+        slug: "bountyverdict-mcp-skill-route-github-agent-decisions",
+      },
+      measurement: "account_free_submission_and_exact_listing_contract_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: AWESOME_SKILLS_URL,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "account_free_submission_and_exact_listing_contract_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   }
 }
@@ -1406,7 +1474,7 @@ async function geminiCliGalleryStatus(
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
     const contractVerified = Boolean(entry && entry.url === repository && entry.extensionName === "bountyverdict" &&
-      entry.extensionVersion === "1.1.4" && entry.hasMCP === true);
+      entry.extensionVersion === "1.1.5" && entry.hasMCP === true);
     return {
       url: "https://geminicli.com/extensions/",
       catalog_url: geminiCliGalleryUrl,
@@ -2697,6 +2765,7 @@ try {
 const [
   skills,
   skillsDedicated,
+  awesomeSkills,
   agenttool,
   mcpRepository,
   agentNdx,
@@ -2740,6 +2809,7 @@ const [
 ] = await Promise.all([
   skillsShStatus(),
   skillsShDedicatedStatus(),
+  awesomeSkillsStatus(),
   agentToolStatus(),
   mcpRepositoryStatus(),
   agentNdxStatus(),
@@ -2969,6 +3039,7 @@ const state = {
   github_pr_monitoring: githubPrMonitoring,
   skills_sh: skills,
   skills_sh_dedicated: skillsDedicated,
+  awesome_skills: awesomeSkills,
   agenttool,
   mcp_repository: mcpRepository,
   agentndx: agentNdx,

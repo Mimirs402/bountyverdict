@@ -168,7 +168,7 @@ export function parseMcpubSearchLiveResponse(value: unknown, expectedEndpoint: s
     listed: matching.length === 1,
     status: matching.length === 1 ? "verified_alive" : "not_live_verified",
     endpoint: expectedEndpoint,
-    live_catalog_size: result.total,
+    matching_live_results: result.total,
     returned_results: result.results.length,
     description: matching.length === 1 ? matching[0].description : null,
   };

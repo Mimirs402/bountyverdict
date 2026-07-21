@@ -108,7 +108,7 @@ test("distinguishes MCPub archive registration from exact live verification", ()
     listed: false,
     status: "not_live_verified",
     endpoint,
-    live_catalog_size: 0,
+    matching_live_results: 0,
     returned_results: 0,
     description: null,
   });
@@ -116,7 +116,7 @@ test("distinguishes MCPub archive registration from exact live verification", ()
     listed: true,
     status: "verified_alive",
     endpoint,
-    live_catalog_size: 12,
+    matching_live_results: 12,
     returned_results: 1,
     description: "GitHub Actions failure diagnosis",
   });

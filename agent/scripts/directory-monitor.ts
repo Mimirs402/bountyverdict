@@ -13,7 +13,7 @@ import {
   parseAgentToolsCloudListing,
 } from "../src/agent-tools-cloud.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "../src/product-catalog.ts";
-import { parseMcpObservatoryDetail } from "../src/mcp-downstreams.ts";
+import { parseAwesomeMcpServersReadme, parseMcpObservatoryDetail } from "../src/mcp-downstreams.ts";
 
 const repository = "https://github.com/cristianmoroaica/bountyverdict";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
@@ -50,6 +50,9 @@ const lobeHubIssueNumber = 17401;
 const lobeHubIssueUrl = `https://github.com/lobehub/lobehub/issues/${lobeHubIssueNumber}`;
 const lobeHubListingId = "io-github-cristianmoroaica-bountyverdict";
 const lobeHubListingUrl = `https://market.lobehub.com/s/plugins/${lobeHubListingId}`;
+const awesomeMcpServersPrNumber = 10554;
+const awesomeMcpServersPrUrl = `https://github.com/punkpeye/awesome-mcp-servers/pull/${awesomeMcpServersPrNumber}`;
+const awesomeMcpServersReadmeUrl = "https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md";
 const index402Listings = Object.freeze([
   { product: "single", id: "82c992cc-1a4f-44ea-b742-e798784b6a14", path: "/api/verdict", method: "GET" },
   { product: "portfolio", id: "057ea175-ec64-4c2e-8553-1f747455e6bf", path: "/api/portfolio", method: "POST" },
@@ -326,6 +329,74 @@ async function lobeHubStatus(
       listed: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function awesomeMcpServersStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [review, catalogResponse] = await Promise.all([
+      githubPrStatus(
+        "punkpeye",
+        "awesome-mcp-servers",
+        awesomeMcpServersPrNumber,
+        awesomeMcpServersPrUrl,
+      ),
+      fetch(awesomeMcpServersReadmeUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (!catalogResponse.ok) {
+      return {
+        url: awesomeMcpServersPrUrl,
+        catalog_url: awesomeMcpServersReadmeUrl,
+        pr_status: review.status || "unknown",
+        catalog_http_status: catalogResponse.status,
+        listed: false,
+        contract_verified: false,
+        status: "catalog_unavailable",
+        measurement: "submission_and_catalog_presence_not_impressions_tool_calls_purchases_or_revenue",
+      };
+    }
+    const parsed = parseAwesomeMcpServersReadme(await catalogResponse.text(), repository, `${productionOrigin}/mcp`);
+    const prStatus = String(review.status || "unknown");
+    const status = parsed.contract_verified
+      ? "catalog_listed"
+      : parsed.listed
+        ? "catalog_contract_drift"
+        : prStatus === "merged"
+          ? "pr_merged_awaiting_catalog"
+          : prStatus === "open"
+            ? "pr_open"
+            : prStatus === "closed"
+              ? "pr_closed_without_catalog"
+              : "pr_status_unknown";
+    return {
+      url: awesomeMcpServersPrUrl,
+      catalog_url: awesomeMcpServersReadmeUrl,
+      pr_status: prStatus,
+      pr_merged_at: review.merged_at || null,
+      pr_draft: review.draft === true,
+      pr_mergeable: review.mergeable ?? null,
+      catalog_http_status: catalogResponse.status,
+      ...parsed,
+      status,
+      first_listed_at: parsed.contract_verified ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "submission_and_catalog_presence_not_impressions_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: awesomeMcpServersPrUrl,
+      catalog_url: awesomeMcpServersReadmeUrl,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_catalog_presence_not_impressions_tool_calls_purchases_or_revenue",
     };
   }
 }
@@ -1097,6 +1168,7 @@ const [
   agentPluginsCatalog,
   awesomeCopilot,
   lobeHub,
+  awesomeMcpServers,
   agent402,
   x402scout,
   x402scan,
@@ -1119,6 +1191,7 @@ const [
   agentPluginsCatalogStatus(),
   awesomeCopilotStatus(previous.awesome_copilot || {}, new Date().toISOString()),
   lobeHubStatus(previous.lobehub || {}, new Date().toISOString()),
+  awesomeMcpServersStatus(previous.awesome_mcp_servers || {}, new Date().toISOString()),
   agent402Status(),
   x402ScoutStatus(),
   x402ScanStatus(),
@@ -1187,6 +1260,7 @@ const state = {
   agent_plugins_catalog: agentPluginsCatalog,
   awesome_copilot: awesomeCopilot,
   lobehub: lobeHub,
+  awesome_mcp_servers: awesomeMcpServers,
   agent402,
   x402scout,
   x402scan,

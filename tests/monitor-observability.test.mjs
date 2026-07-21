@@ -74,6 +74,22 @@ test("directory monitoring tracks LobeHub review and exact listing without calli
   assert.match(distribution, /submission or catalog presence is never an impression, tool call, purchase, or revenue/);
 });
 
+test("directory monitoring tracks Awesome MCP Servers without contaminating the frozen experiment", async () => {
+  const [directory, distribution, acquisition] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(acquisitionUrl, "utf8"),
+  ]);
+  assert.match(directory, /async function awesomeMcpServersStatus/);
+  assert.match(directory, /const awesomeMcpServersPrNumber = 10554/);
+  assert.match(directory, /parseAwesomeMcpServersReadme/);
+  assert.match(directory, /awesome_mcp_servers: awesomeMcpServers/);
+  assert.match(distribution, /Awesome MCP Servers/);
+  assert.match(distribution, /placement only, never an impression, tool call, purchase, or revenue/);
+  assert.match(distribution, /awesome_mcp_servers: state\.awesome_mcp_servers/);
+  assert.doesNotMatch(acquisition, /catalog_listed/);
+});
+
 test("directory monitoring retains MCPRepository validation without calling it demand", async () => {
   const directory = await readFile(directoryMonitorUrl, "utf8");
   const distribution = await readFile(distributionUrl, "utf8");

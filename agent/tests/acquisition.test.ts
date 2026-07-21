@@ -99,6 +99,15 @@ test("earned placement experiment waits for real directory exposure", () => {
   assert.equal(result.next_action.code, "secure_verified_placement");
 });
 
+test("non-target catalog telemetry cannot start the SkillVerdict experiment", () => {
+  const result = evaluateEarnedPlacementExperiment({
+    ...baselineExperiment,
+    placements: [{ status: "catalog_listed", exposed_at: "2026-07-20T16:37:12.000Z" }],
+  });
+  assert.equal(result.status, "awaiting_placement");
+  assert.equal(result.started_at, null);
+});
+
 test("earned placement experiment starts at the first merge and stays running before the boundary", () => {
   const result = evaluateEarnedPlacementExperiment({
     ...baselineExperiment,

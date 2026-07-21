@@ -1,11 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseMcpObservatoryDetail, parseMcpubGetResponse, parseMcpubSearchLiveResponse, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
+import {
+  canReuseMcpDownstreamStatus,
+  glamaConnectorStatus,
+  parseAwesomeMcpServersReadme,
+  parseMcpObservatoryDetail,
+  parseMcpubGetResponse,
+  parseMcpubSearchLiveResponse,
+  parseOneMcpRegistryShow,
+  parseQtMcpRegistry,
+} from "../src/mcp-downstreams.ts";
 
 const name = "io.github.cristianmoroaica/bountyverdict";
 const version = "1.1.0";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
 const repository = "https://github.com/cristianmoroaica/bountyverdict";
+
+test("recognizes only the exact bounded Awesome MCP Servers contract", () => {
+  const entry = `- [cristianmoroaica/bountyverdict](${repository}) 📇 ☁️ - Six read-only tools. Remote [endpoint](${endpoint}) over x402.`;
+  assert.deepEqual(parseAwesomeMcpServersReadme(`# Developer Tools\n${entry}\n`, repository, endpoint), {
+    listed: true,
+    contract_verified: true,
+    skillverdict_contamination_risk: false,
+    repository,
+    endpoint,
+  });
+
+  const wrongEndpoint = parseAwesomeMcpServersReadme(
+    `${entry.replace(endpoint, "https://wrong.example/mcp")}\n`,
+    repository,
+    endpoint,
+  );
+  assert.equal(wrongEndpoint.listed, true);
+  assert.equal(wrongEndpoint.contract_verified, false);
+
+  const contaminated = parseAwesomeMcpServersReadme(`${entry} Includes SkillVerdict and /api/skill.\n`, repository, endpoint);
+  assert.equal(contaminated.skillverdict_contamination_risk, true);
+  assert.equal(contaminated.contract_verified, false);
+
+  assert.throws(() => parseAwesomeMcpServersReadme(`${entry}\n${entry}\n`, repository, endpoint), /duplicated/);
+  assert.throws(() => parseAwesomeMcpServersReadme("x".repeat(2_000_001), repository, endpoint), /unbounded/);
+});
 
 test("classifies exact MCP Observatory repository metadata without inventing agent readiness", () => {
   const payload = {

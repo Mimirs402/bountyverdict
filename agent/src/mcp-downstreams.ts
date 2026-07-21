@@ -24,6 +24,52 @@ export type McpObservatoryStatus = {
   tool_schemas_exposed: boolean;
 };
 
+export type AwesomeMcpServersStatus = {
+  listed: boolean;
+  contract_verified: boolean;
+  skillverdict_contamination_risk: boolean;
+  repository: string;
+  endpoint: string;
+};
+
+export function parseAwesomeMcpServersReadme(
+  markdown: unknown,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): AwesomeMcpServersStatus {
+  if (typeof markdown !== "string" || markdown.length > 2_000_000) {
+    throw new Error("Awesome MCP Servers README is invalid or unbounded.");
+  }
+  const lines = markdown.split("\n");
+  if (lines.length > 50_000 || lines.some((line) => line.length > 50_000)) {
+    throw new Error("Awesome MCP Servers README lines are unbounded.");
+  }
+  const anchor = `[cristianmoroaica/bountyverdict](${expectedRepository})`;
+  const matches = lines.filter((line) => line.startsWith(`- ${anchor}`));
+  if (matches.length > 1) throw new Error("Awesome MCP Servers duplicated the exact BountyVerdict listing.");
+  if (matches.length === 0) {
+    return {
+      listed: false,
+      contract_verified: false,
+      skillverdict_contamination_risk: false,
+      repository: expectedRepository,
+      endpoint: expectedEndpoint,
+    };
+  }
+  const listing = matches[0];
+  const skillverdictContaminationRisk = /skillverdict|\/api\/skill|preflight-agent-skills/i.test(listing);
+  const contractVerified = listing.includes("📇") && listing.includes("☁️") &&
+    listing.includes(expectedEndpoint) && /\bx402\b/i.test(listing) &&
+    !skillverdictContaminationRisk;
+  return {
+    listed: true,
+    contract_verified: contractVerified,
+    skillverdict_contamination_risk: skillverdictContaminationRisk,
+    repository: expectedRepository,
+    endpoint: expectedEndpoint,
+  };
+}
+
 function boundedStrings(value: unknown, limit: number, maxLength: number, label: string): string[] {
   if (!Array.isArray(value) || value.length > limit ||
     value.some((entry) => typeof entry !== "string" || !entry || entry.length > maxLength)) {

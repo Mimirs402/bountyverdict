@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A read-only remote MCP server that diagnoses public GitHub Actions failures and decides whether a failed run is flaky enough to retry once." />
+    <meta name="theme-color" content="#101510" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GitHub Actions Failure Diagnosis MCP Server" />
+    <meta property="og:description" content="Typed root-cause and flaky-retry decisions for public GitHub Actions runs, paid per result through x402 Base USDC." />
+    <meta property="og:url" content="https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html" />
+    <link rel="canonical" href="https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html" />
+    <title>GitHub Actions Failure Diagnosis MCP Server</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Service",
+        "name": "GitHub Actions Failure Diagnosis MCP Server",
+        "description": "Read-only MCP tools for diagnosing a completed failed public GitHub Actions run and deciding whether its exact failure merits one retry.",
+        "url": "https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html",
+        "provider": {
+          "@type": "Organization",
+          "name": "BountyVerdict",
+          "url": "https://github.com/cristianmoroaica/bountyverdict"
+        },
+        "offers": [
+          { "@type": "Offer", "name": "RunVerdict", "price": "0.04", "priceCurrency": "USDC" },
+          { "@type": "Offer", "name": "FlakeVerdict", "price": "0.07", "priceCurrency": "USDC" }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <header class="nav shell">
+      <a class="brand" href="./"><span>BV</span>BountyVerdict</a>
+      <nav aria-label="Primary"><a href="agents.html">All agent tools</a><a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest">MCP Registry</a><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json">OpenAPI</a></nav>
+    </header>
+
+    <main>
+      <section class="agent-hero shell">
+        <p class="kicker">Remote MCP · GitHub Actions · read-only</p>
+        <h1>GitHub Actions Failure Diagnosis <em>MCP Server</em></h1>
+        <p class="lede">Give an autonomous coding agent an evidence-linked root cause before it changes code—or a conservative retry decision before it spends another CI run. Both tools inspect public GitHub Actions data, never mutate GitHub, and state exactly when to call again.</p>
+        <p class="install-command"><code>{ "mcpServers": { "github-actions-diagnosis": { "type": "http", "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp" } } }</code></p>
+        <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>
+      </section>
+
+      <section class="agent-catalog shell" aria-labelledby="choose-title">
+        <p class="kicker">Choose by decision, not keyword</p>
+        <h2 id="choose-title">Diagnose first. Retry only when justified.</h2>
+        <div class="catalog-table" role="region" aria-label="GitHub Actions MCP tools" tabindex="0">
+          <table>
+            <thead><tr><th>Use when</th><th>MCP tool</th><th>Typed result</th><th>Price</th><th>Inspect free</th></tr></thead>
+            <tbody>
+              <tr><td>You need the root cause and next action for one completed public workflow run.</td><td><code>diagnose_github_actions_run</code></td><td>Verdict, failed jobs and steps, bounded log evidence, recommendation, reuse rule</td><td>$0.04 USDC</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample">Run sample ↗</a></td></tr>
+              <tr><td>You already have a failed run and must choose retry once, fix first, or gather more evidence.</td><td><code>classify_github_actions_flake</code></td><td>Flake class, retry action, exact attempt fingerprint, comparison coverage, reuse rule</td><td>$0.07 USDC</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/flake/sample">Flake sample ↗</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="method shell" aria-labelledby="contract-title">
+        <div><p class="kicker">Exact contract</p><h2 id="contract-title">Built for unattended agents.</h2></div>
+        <div class="method-grid">
+          <article><span>INPUT</span><h3>One canonical run URL</h3><p>Both tools accept a public <code>https://github.com/owner/repository/actions/runs/123</code> URL. Flake classification may also pin an exact attempt.</p></article>
+          <article><span>OUTPUT</span><h3>Machine-readable decisions</h3><p><code>tools/list</code> publishes compact success schemas. Results return identical JSON text and structured content with a stable product identity and <code>service_reuse</code> rule.</p></article>
+          <article><span>SAFETY</span><h3>No workflow mutation</h3><p>The server reads bounded public jobs and failed-step logs. It does not rerun workflows, write repository data, expose private runs, or execute repository code.</p></article>
+          <article><span>PAYMENT</span><h3>Pay only after validation</h3><p>Malformed or unsupported input fails before payment. Valid calls return an exact x402 v2 Base-USDC requirement; no account or API key is needed.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer shell"><p>Official MCP name: <code>io.github.cristianmoroaica/bountyverdict</code></p><p><a href="agents.html">All tools</a> · <a href="https://github.com/cristianmoroaica/bountyverdict/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/cristianmoroaica/bountyverdict">Source ↗</a></p></footer>
+  </body>
+</html>

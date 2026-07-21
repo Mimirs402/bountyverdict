@@ -10,7 +10,7 @@ test("every production deployment probe identifies as owner automation", async (
   const canary = await readFile(canaryUrl, "utf8");
   assert.match(workflow, /owner_curl\(\)/);
   assert.match(workflow, /curl --user-agent "bountyverdict-owner-audit\/1\.0"/);
-  assert.equal((workflow.match(/\n\s+owner_curl --/g) || []).length, 12);
+  assert.equal((workflow.match(/\n\s+owner_curl --/g) || []).length, 13);
   assert.doesNotMatch(workflow, /\n\s+curl --(?:fail|silent|show-error)/);
   assert.match(canary, /"User-Agent": "bountyverdict-owner-audit\/1\.0"/);
 });

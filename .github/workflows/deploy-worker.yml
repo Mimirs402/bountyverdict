@@ -140,6 +140,14 @@ jobs:
               if (value.discovery?.agentSkill !== "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
             });
           '
+          owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/mcp.json" | node -e '
+            let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
+              const value = JSON.parse(body);
+              if (value.name !== "io.github.cristianmoroaica/bountyverdict" || value.url !== `${process.env.PRODUCTION_API_URL}/mcp`) process.exit(1);
+              if (value.transport !== "streamable-http" || value.protocol_version !== "2025-11-25") process.exit(1);
+              if (value.payment?.protocol !== "x402" || value.payment?.network !== "eip155:8453" || value.payment?.currency !== "USDC") process.exit(1);
+            });
+          '
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);

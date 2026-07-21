@@ -298,6 +298,34 @@ test("learns agent discovery surfaces including useful missing-convention probes
   assert.equal(isFunnelSnapshot(snapshot), true);
 });
 
+test("attributes mcpub discovery and MCP enumeration to a registry crawler", () => {
+  const discovery = classifyDiscoveryTailEvent(event(
+    "/.well-known/mcp.json",
+    200,
+    { "user-agent": "mcp-spider/0.2" },
+  ));
+  assert.ok(discovery);
+  assert.equal(discovery.surface, "well_known_mcp_probe");
+  assert.equal(discovery.client_class, "registry_crawler");
+  assert.equal(discovery.source, "known_directory");
+  assert.equal(discovery.channel, "registry_or_directory");
+
+  const enumeration = event("/mcp", 200, { "user-agent": "mcp-spider/0.2" }, "POST");
+  Object.assign(enumeration, { logs: [{ message: [JSON.stringify({
+    type: "bountyverdict_mcp_funnel",
+    schema_version: 2,
+    stage: "tools_list",
+    product: null,
+    source: "external",
+    client_family: "not_applicable",
+  })] }] });
+  const observations = classifyMcpTailEvents(enumeration);
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].client_class, "registry_crawler");
+  assert.equal(observations[0].source, "known_directory");
+  assert.equal(observations[0].channel, "registry_or_directory");
+});
+
 test("ignores irrelevant discovery paths and non-GET probes", () => {
   assert.equal(classifyDiscoveryTailEvent(event("/favicon.ico", 302)), null);
   assert.equal(classifyDiscoveryTailEvent(event("/openapi.json", 405, {}, "POST")), null);

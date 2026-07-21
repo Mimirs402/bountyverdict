@@ -1,11 +1,9 @@
 [Unit]
-Description=Check BountyVerdict agent directories hourly
+Description=Run the audited BountyVerdict directory retrieval window every six hours
 
 [Timer]
-OnActiveSec=15min
-OnUnitActiveSec=1h
-RandomizedDelaySec=5min
-Persistent=true
+OnCalendar=*-*-* 05,11,17,23:15:00
+RandomizedDelaySec=30s
 Unit=bountyverdict-directory-monitor.service
 
 [Install]

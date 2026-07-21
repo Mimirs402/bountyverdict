@@ -224,6 +224,28 @@ test("agent landing page exposes all seven self-serve products", async () => {
     assert.match(page, new RegExp(`\\$${price}`));
   }
   assert.equal((page.match(/https:\/\/skills\.sh\/cristianmoroaica\/bountyverdict\//g) || []).length, 8);
+  assert.match(page, /mcp-github-actions-diagnosis\.html/);
+});
+
+test("GitHub Actions MCP intent page is crawlable, bounded, and excludes the frozen product", async () => {
+  const [page, sitemap, readme] = await Promise.all([
+    readFile(new URL("../mcp-github-actions-diagnosis.html", import.meta.url), "utf8"),
+    readFile(new URL("../sitemap.xml", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /<title>GitHub Actions Failure Diagnosis MCP Server<\/title>/);
+  assert.match(page, /rel="canonical" href="https:\/\/cristianmoroaica\.github\.io\/bountyverdict\/mcp-github-actions-diagnosis\.html"/);
+  assert.match(page, /application\/ld\+json/);
+  assert.match(page, /diagnose_github_actions_run/);
+  assert.match(page, /classify_github_actions_flake/);
+  assert.match(page, /\$0\.04 USDC/);
+  assert.match(page, /\$0\.07 USDC/);
+  assert.match(page, /does not rerun workflows/);
+  assert.match(page, /service_reuse/);
+  assert.match(page, /io\.github\.cristianmoroaica\/bountyverdict/);
+  assert.doesNotMatch(page, /SkillVerdict|preflight-agent-skills|\/api\/skill/);
+  assert.match(sitemap, /mcp-github-actions-diagnosis\.html/);
+  assert.match(readme, /GitHub Actions Failure Diagnosis MCP Server/);
 });
 
 test("human landing page links directly to the measurable router funnel", async () => {

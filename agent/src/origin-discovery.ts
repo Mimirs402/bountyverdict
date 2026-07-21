@@ -158,6 +158,33 @@ export function createOriginAgentManifest(originInput: string, network: string, 
   };
 }
 
+export function createMcpWellKnown(originInput: string, network: string) {
+  const origin = canonicalOrigin(originInput);
+  const paymentNetwork = networkLabel(network);
+  return {
+    name: "io.github.cristianmoroaica/bountyverdict",
+    title: "BountyVerdict Agent Decision APIs",
+    description: "Six paid, read-only tools for GitHub bounty triage, repository-instruction audits, Actions diagnosis, flaky-retry decisions, and MCP schema-change gates.",
+    url: `${origin}/mcp`,
+    transport: "streamable-http",
+    protocol_version: "2025-11-25",
+    authentication: "none",
+    payment: {
+      protocol: "x402",
+      version: 2,
+      network,
+      network_name: paymentNetwork,
+      currency: "USDC",
+      price_range_usdc: { minimum: "0.02", maximum: "0.40" },
+    },
+    registry: {
+      name: "io.github.cristianmoroaica/bountyverdict",
+      latest: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest",
+    },
+    repository: REPOSITORY,
+  };
+}
+
 export function createOriginSkillMarkdown(originInput: string, network: string, payTo?: string): string {
   const origin = canonicalOrigin(originInput);
   const manifest = createOriginAgentManifest(origin, network, payTo);
@@ -201,6 +228,7 @@ ${products}
 - Manifest: ${origin}/agent-manifest.json
 - OpenAPI: ${origin}/openapi.json
 - x402 resources: ${origin}/.well-known/x402
+- MCP endpoint metadata: ${origin}/.well-known/mcp.json
 - Agent guide: ${origin}/llms.txt
 - Remote MCP server: ${origin}/mcp
 

@@ -513,6 +513,7 @@ export function createLlmsText(origin: string): string {
 - x402 seller manifest: ${origin}/.well-known/x402
 - OpenAPI 3.1 contract: ${origin}/openapi.json
 - Remote MCP server: ${origin}/mcp (MCP 2025-11-25 Streamable HTTP; six paid read-only tools; SkillVerdict excluded)
+- MCP endpoint metadata: ${origin}/.well-known/mcp.json
 - MCP Registry name: io.github.cristianmoroaica/bountyverdict
 - Umbrella routing skill: https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md
 - Install router: npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y

@@ -23,7 +23,9 @@ export function canReuseMcpDownstreamStatus(
     nowMs >= checkedAt && nowMs - checkedAt < intervalMs &&
     status.registry_name === expectedName &&
     status.registry_version === expectedVersion &&
-    status.registry_endpoint === expectedEndpoint;
+    status.registry_endpoint === expectedEndpoint &&
+    Boolean(status.mcpub && typeof status.mcpub === "object" && !Array.isArray(status.mcpub) &&
+      (status.mcpub as Record<string, unknown>).listed === true);
 }
 
 export function parseOneMcpRegistryShow(value: unknown): Record<string, unknown> {
@@ -33,6 +35,35 @@ export function parseOneMcpRegistryShow(value: unknown): Record<string, unknown>
   const parsed = JSON.parse(value.slice(start)) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("1MCP registry output is not an object.");
   return parsed as Record<string, unknown>;
+}
+
+export function parseMcpubGetResponse(value: unknown, expectedEndpoint: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("mcpub response is not an object.");
+  const response = value as Record<string, any>;
+  const content = response.result?.content;
+  if (response.jsonrpc !== "2.0" || !Array.isArray(content) || content.length !== 1 ||
+    content[0]?.type !== "text" || typeof content[0]?.text !== "string" || content[0].text.length > 10_000) {
+    throw new Error("mcpub response has an invalid MCP result envelope.");
+  }
+  const parsed = JSON.parse(content[0].text) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("mcpub result is not an object.");
+  const entry = parsed as Record<string, unknown>;
+  if (entry.status === "not_found" && entry.url === expectedEndpoint && Object.keys(entry).length === 2) {
+    return { listed: false, status: "not_found", endpoint: expectedEndpoint };
+  }
+  if (entry.url !== expectedEndpoint || typeof entry.description !== "string" || entry.description.length > 500 ||
+    !Number.isSafeInteger(entry.submitted_at) || Number(entry.submitted_at) <= 0 ||
+    (entry.source !== "archive" && entry.source !== "live (verified alive)")) {
+    throw new Error("mcpub did not return the exact registered endpoint.");
+  }
+  return {
+    listed: true,
+    status: entry.source === "live (verified alive)" ? "verified_alive" : "registered",
+    endpoint: expectedEndpoint,
+    description: entry.description,
+    submitted_at_unix: entry.submitted_at,
+    source: entry.source,
+  };
 }
 
 export function parseQtMcpRegistry(

@@ -74,6 +74,7 @@ export const FUNNEL_DISCOVERY_SURFACES = Object.freeze([
   "sample_flake",
   "sample_mcpdrift",
   "well_known_x402_probe",
+  "well_known_mcp_probe",
   "well_known_agent_probe",
   "skill_md_probe",
   "agent_manifest_probe",
@@ -240,6 +241,7 @@ const DISCOVERY_SURFACE_BY_PATH = new Map<string, FunnelDiscoverySurface>([
   ["/api/flake/sample", "sample_flake"],
   ["/api/mcp-drift/sample", "sample_mcpdrift"],
   ["/.well-known/x402", "well_known_x402_probe"],
+  ["/.well-known/mcp.json", "well_known_mcp_probe"],
   ["/.well-known/agent.json", "well_known_agent_probe"],
   ["/SKILL.md", "skill_md_probe"],
   ["/agent-manifest.json", "agent_manifest_probe"],
@@ -328,7 +330,7 @@ function clientClass(userAgent: string, signed: boolean): FunnelClientClass {
   }
   if (/agent402/i.test(userAgent)) return "agent402";
   if (/x402-observer/i.test(userAgent)) return "x402_observer";
-  if (/(?:opendexter|x402gle|402index|tollbooth|x402dash|x402scan|x402scout)/i.test(userAgent)) {
+  if (/(?:opendexter|x402gle|402index|tollbooth|x402dash|x402scan|x402scout|mcp-spider)/i.test(userAgent)) {
     return "registry_crawler";
   }
   if (signed || /(?:\bawal\b|agentkit|modelcontextprotocol|\bmcp\b|claude|codex|openai|gemini|langchain|crewai|autogpt|eliza|x402-client)/i.test(userAgent)) {
@@ -835,11 +837,11 @@ export function loadFunnelSnapshot(value: unknown, now = new Date().toISOString(
       privacy: FUNNEL_PRIVACY,
       discovery_totals: existing.discovery_totals || emptyCounters(),
       by_channel: { ...countersRecord(FUNNEL_CHANNELS), ...((existing.by_channel as object) || {}) },
-      by_discovery_surface: existing.by_discovery_surface || countersRecord(FUNNEL_DISCOVERY_SURFACES),
+      by_discovery_surface: { ...countersRecord(FUNNEL_DISCOVERY_SURFACES), ...((existing.by_discovery_surface as object) || {}) },
       by_discovery_source: existing.by_discovery_source || countersRecord(FUNNEL_SOURCE_CATEGORIES),
       by_discovery_client_class: existing.by_discovery_client_class || countersRecord(FUNNEL_CLIENT_CLASSES),
       by_discovery_channel: { ...countersRecord(FUNNEL_CHANNELS), ...((existing.by_discovery_channel as object) || {}) },
-      by_discovery_surface_source: existing.by_discovery_surface_source || discoverySurfaceSourceRecord(),
+      by_discovery_surface_source: { ...discoverySurfaceSourceRecord(), ...((existing.by_discovery_surface_source as object) || {}) },
       cohort_capture_started_at: existing.cohort_capture_started_at || now,
       by_cohort: existing.by_cohort || {},
       by_discovery_cohort: existing.by_discovery_cohort || {},

@@ -37,7 +37,7 @@ import {
 } from "./mcp-drift-discovery.ts";
 import { PRODUCT_CATALOG } from "./product-catalog.ts";
 import { createX402ServiceManifest } from "./x402-service-manifest.ts";
-import { createOriginAgentManifest, createOriginSkillMarkdown } from "./origin-discovery.ts";
+import { createMcpWellKnown, createOriginAgentManifest, createOriginSkillMarkdown } from "./origin-discovery.ts";
 import {
   canaryErrorCode,
   isCanaryProduct,
@@ -596,6 +596,11 @@ app.get("/.well-known/x402", (c) => {
     c.env.X402_NETWORK || TESTNET_NETWORK,
     c.env.PAY_TO_ADDRESS,
   ));
+});
+
+app.get("/.well-known/mcp.json", (c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.json(createMcpWellKnown(origin, c.env.X402_NETWORK || TESTNET_NETWORK));
 });
 
 app.get("/agent-manifest.json", (c) => {

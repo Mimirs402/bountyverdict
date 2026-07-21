@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
-import { createOriginAgentManifest, createOriginSkillMarkdown } from "../src/origin-discovery.ts";
+import { createMcpWellKnown, createOriginAgentManifest, createOriginSkillMarkdown } from "../src/origin-discovery.ts";
 import { PRODUCT_CATALOG } from "../src/product-catalog.ts";
 
 const origin = "https://bountyverdict-agent-production.mimirslab.workers.dev";
@@ -64,6 +64,21 @@ test("origin skill uses the runtime testnet instead of inventing mainnet", () =>
   assert.throws(() => createOriginSkillMarkdown(origin, "eip155:1"), /supported Base network/);
 });
 
+test("well-known MCP metadata resolves the exact paid remote without secrets", async () => {
+  const metadata = createMcpWellKnown(origin, "eip155:8453");
+  assert.equal(metadata.name, "io.github.cristianmoroaica/bountyverdict");
+  assert.equal(metadata.url, `${origin}/mcp`);
+  assert.equal(metadata.transport, "streamable-http");
+  assert.equal(metadata.protocol_version, "2025-11-25");
+  assert.deepEqual(metadata.payment.price_range_usdc, { minimum: "0.02", maximum: "0.40" });
+  assert.doesNotMatch(JSON.stringify(metadata), /secret|private.?key|api.?key/i);
+
+  const response = await app.request(`${origin}/.well-known/mcp.json`, {}, { X402_NETWORK: "eip155:8453" });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /^application\/json/);
+  assert.deepEqual(await response.json(), metadata);
+});
+
 test("Worker serves origin-native manifest and skill with exact content types", async () => {
   const env = {
     X402_NETWORK: "eip155:8453",
@@ -91,5 +106,7 @@ test("Worker serves origin-native manifest and skill with exact content types", 
 test("origin discovery rejects non-origin or non-HTTPS identities", () => {
   for (const value of ["http://example.com", "https://example.com/path", "https://user:pass@example.com"]) {
     assert.throws(() => createOriginAgentManifest(value, "eip155:8453"), /exact HTTPS origin/);
+    assert.throws(() => createMcpWellKnown(value, "eip155:8453"), /exact HTTPS origin/);
   }
+  assert.throws(() => createMcpWellKnown("https://example.com", "eip155:1"), /supported Base network/);
 });

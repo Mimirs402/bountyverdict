@@ -1,0 +1,26 @@
+[Unit]
+Description=BountyVerdict audited marketplace retrieval and distribution pass
+After=network-online.target bountyverdict-funnel-tail.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=AUDITED_MONITOR=distribution
+Environment=PRODUCTION_API_URL=https://bountyverdict-agent-production.mimirslab.workers.dev
+Environment=REVENUE_WALLET=0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614
+Environment=START_BLOCK=48876000
+Environment=SETTLEMENT_CANARY_ENABLED=NO
+Environment=TRACKED_COSTS_USDC=1.01
+EnvironmentFile=-%h/.config/bountyverdict/settlement-buyer.env
+EnvironmentFile=%h/.config/bountyverdict/the402.env
+EnvironmentFile=%h/.config/bountyverdict/near-market.env
+EnvironmentFile=%h/.config/bountyverdict/payan.env
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/run-audited-monitor.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

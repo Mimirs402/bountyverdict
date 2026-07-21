@@ -44,6 +44,8 @@ Task-specific skills are the least-privilege path. Install all seven only when n
 
 MCP-compatible agents can instead connect to the production Streamable HTTP server at `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`. It exposes six real paid tools matching the independently distributed products; SkillVerdict remains excluded from this channel. `tools/list` publishes task-selection boundaries, canonical input patterns, and compact machine-readable success contracts covering each verdict or action and its reuse rule. Invalid input is rejected before payment, while a valid selected tool returns an exact x402 USDC requirement. The official registry contract is [`server.json`](server.json) under `io.github.cristianmoroaica/bountyverdict`; its publisher metadata includes unbranded task keywords, use cases, prices, and result summaries so downstream MCP aggregators can index what each tool actually solves.
 
+For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP Server](https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html) guide compares the root-cause and flaky-retry tools, publishes the remote client configuration, exact prices, free samples, typed outputs, and mutation boundary.
+
 ## Inspect before paying
 
 Every product has a free sample, a machine-readable OpenAPI contract, a declared price, and a successful-result `service_reuse` rule. Invalid inputs and upstream failures are not settled. Start with the [agent page](https://cristianmoroaica.github.io/bountyverdict/agents.html), [`agent-manifest.json`](agent-manifest.json), the production [`openapi.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json), or the remote MCP server above.

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the audited BountyVerdict marketplace retrieval window every six hours
+
+[Timer]
+OnCalendar=*-*-* 05,11,17,23:17:00
+RandomizedDelaySec=30s
+Unit=bountyverdict-marketplace-audit.service
+
+[Install]
+WantedBy=timers.target

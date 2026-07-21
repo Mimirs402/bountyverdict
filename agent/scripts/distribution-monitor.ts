@@ -33,7 +33,7 @@ import {
   normalizeThe402ServiceOutcome,
 } from "../src/marketplace-telemetry.ts";
 import { loadDistributionMonitorConfiguration } from "../src/monitor-configuration.ts";
-import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
+import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseMcpubGetResponse, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const AGENTIC_MARKET_SERVICE =
@@ -48,6 +48,8 @@ const MCP_REGISTRY_VERSION = "1.1.0";
 const ONE_MCP_PACKAGE = "@1mcp/agent@0.34.3";
 const QT_MCP_REGISTRY = "https://qtccache.qt.io/mcp/registry.json";
 const GLAMA_MCP_CONNECTOR = `https://glama.ai/mcp/connectors/${MCP_REGISTRY_NAME}`;
+const MCPUB_MCP = "https://mcpub.dev/mcp";
+const MCP_INTENT_PAGE = "https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html";
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const configuration = loadDistributionMonitorConfiguration(process.env);
@@ -245,15 +247,45 @@ async function mcpRegistryStatus(): Promise<Record<string, unknown>> {
   };
 }
 
+async function mcpIntentPageStatus(): Promise<Record<string, unknown>> {
+  const response = await monitoredFetch(MCP_INTENT_PAGE);
+  if (!response.ok) throw new Error(`MCP intent page returned HTTP ${response.status}.`);
+  const declaredLength = Number(response.headers.get("content-length") || "0");
+  if (Number.isFinite(declaredLength) && declaredLength > 100_000) throw new Error("MCP intent page is unexpectedly large.");
+  const body = await response.text();
+  if (body.length > 100_000 || !body.includes("<title>GitHub Actions Failure Diagnosis MCP Server</title>") ||
+    !body.includes("diagnose_github_actions_run") || !body.includes("classify_github_actions_flake") ||
+    !body.includes("io.github.cristianmoroaica/bountyverdict")) {
+    throw new Error("MCP intent page content is incomplete or drifted.");
+  }
+  return {
+    live: true,
+    url: MCP_INTENT_PAGE,
+    checked_at: new Date().toISOString(),
+    scope: ["diagnose_github_actions_run", "classify_github_actions_flake"],
+    accounting_note: "Availability is distribution evidence only; this owner-run check is not an impression, purchase, or revenue.",
+  };
+}
+
 async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<Record<string, unknown>> {
   const now = new Date();
   const endpoint = `${api}/mcp`;
   if (canReuseMcpDownstreamStatus(previous, MCP_REGISTRY_NAME, MCP_REGISTRY_VERSION, endpoint, now.getTime(), MCP_DOWNSTREAM_CHECK_INTERVAL_MS)) {
     return { ...previous, reused_at: now.toISOString() };
   }
-  const [qtResponse, glamaResponse, oneMcp] = await Promise.all([
+  const [qtResponse, glamaResponse, mcpubResponse, oneMcp] = await Promise.all([
     monitoredFetch(QT_MCP_REGISTRY),
     monitoredFetch(GLAMA_MCP_CONNECTOR, { redirect: "manual" }),
+    monitoredFetch(MCPUB_MCP, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "get", arguments: { url: endpoint } },
+      }),
+    }),
     execFileAsync("npx", ["-y", ONE_MCP_PACKAGE, "registry", "show", MCP_REGISTRY_NAME, "--format", "json"], {
       timeout: TIMEOUT_MS,
       maxBuffer: 1_000_000,
@@ -261,6 +293,7 @@ async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<
     }),
   ]);
   if (!qtResponse.ok) throw new Error(`Qt Creator MCP mirror returned HTTP ${qtResponse.status}.`);
+  if (!mcpubResponse.ok) throw new Error(`mcpub returned HTTP ${mcpubResponse.status}.`);
   const oneMcpEntry = parseOneMcpRegistryShow(oneMcp.stdout);
   if (oneMcpEntry.name !== MCP_REGISTRY_NAME || oneMcpEntry.version !== MCP_REGISTRY_VERSION ||
     !Array.isArray(oneMcpEntry.remotes) || !oneMcpEntry.remotes.some((remote) => remote && typeof remote === "object" &&
@@ -269,6 +302,7 @@ async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<
   }
   const qt = parseQtMcpRegistry(await qtResponse.json(), MCP_REGISTRY_NAME, MCP_REGISTRY_VERSION, endpoint);
   const glama = glamaConnectorStatus(glamaResponse.status, GLAMA_MCP_CONNECTOR);
+  const mcpub = parseMcpubGetResponse(await mcpubResponse.json(), endpoint);
   return {
     checked_at: now.toISOString(),
     check_interval_hours: MCP_DOWNSTREAM_CHECK_INTERVAL_MS / 3_600_000,
@@ -296,6 +330,11 @@ async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<
     glama: {
       ...glama,
       methodology: "official_registry_ingestion",
+    },
+    mcpub: {
+      ...mcpub,
+      directory_mcp: MCPUB_MCP,
+      accounting_note: "Registration and crawler verification are distribution evidence, never impressions, purchases, or revenue.",
     },
     accounting_note: "Downstream propagation checks are bounded owner-run distribution audits and never purchase or revenue evidence.",
   };
@@ -1572,7 +1611,8 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external discovery hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
 - **MCP agent funnel:** ${funnel.available ? `${Number(funnel.mcp_external?.initialize || 0)} initializations; ${Number(funnel.mcp_external?.tools_list || 0)} tool-list requests; ${Number(funnel.mcp_external?.payment_required || 0)} valid unpaid tool calls; ${Number(funnel.mcp_external?.payment_present || 0)} payment presentations; ${Number(funnel.mcp_external?.paid_success || 0)} paid successes` : "unavailable"} (${funnel.mcp_learning_stage || "not started"}; owner automation excluded)
 - **Official MCP Registry:** ${report.acquisition?.mcp_registry?.listed ? `${report.acquisition.mcp_registry.name}@${report.acquisition.mcp_registry.version} listed at the exact production Streamable HTTP endpoint` : `unavailable (${report.acquisition?.mcp_registry?.error || "not checked"})`} (placement only, never a purchase)
-- **MCP downstream propagation:** 1MCP ${mcpDownstreams.one_mcp?.status === "confirmed_direct_official_registry_consumer" ? "confirmed" : "unavailable"}; MCPProxy ${mcpDownstreams.mcp_proxy?.status === "direct_official_registry_consumer" ? "available through direct official lookup" : "unavailable"}; Qt Creator ${mcpDownstreams.qt_creator?.listed ? "listed" : "pending scheduled mirror"}; Glama ${mcpDownstreams.glama?.listed ? "listed" : "pending registry ingestion"} (bounded owner-run checks, never impressions or purchases)
+- **GitHub Actions MCP intent page:** ${report.acquisition?.mcp_intent_page?.live ? "live with root-cause and flaky-retry routing" : `unavailable (${report.acquisition?.mcp_intent_page?.error || "not checked"})`} (owner-checked availability, never an impression or purchase)
+- **MCP downstream propagation:** 1MCP ${mcpDownstreams.one_mcp?.status === "confirmed_direct_official_registry_consumer" ? "confirmed" : "unavailable"}; MCPProxy ${mcpDownstreams.mcp_proxy?.status === "direct_official_registry_consumer" ? "available through direct official lookup" : "unavailable"}; mcpub ${mcpDownstreams.mcpub?.listed ? "registered" : "pending registration"}; Qt Creator ${mcpDownstreams.qt_creator?.listed ? "listed" : "pending scheduled mirror"}; Glama ${mcpDownstreams.glama?.listed ? "listed" : "pending registry ingestion"} (bounded owner-run checks, never impressions or purchases)
 - **Measurement boundary:** ${funnel.trusted_measurement_eligible === false ? `draining owner-triggered downstream probes; ${Number(funnel.provisional_external_discovery_requests || 0)} discovery and ${Number(funnel.provisional_external_402_challenges || 0)} challenge signals are excluded until a stable new epoch activates` : `epoch ${Number(funnel.trusted_epoch_id || 1)} eligible`}
 - **Current funnel diagnosis:** ${funnel.learning_stage || "unavailable"}
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
@@ -1606,12 +1646,12 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six independently distributed non-SkillVerdict contracts are exposed as paid MCP 2025-11-25 tools through one stateless Streamable HTTP endpoint and listed in the official MCP Registry as \`io.github.cristianmoroaica/bountyverdict@${MCP_REGISTRY_VERSION}\`. The latest immutable entry carries unbranded task keywords and six exact tool summaries; 1MCP already retrieves it and MCPProxy can query the official registry directly, while scheduled Qt Creator and Glama propagation remains pending. These are distribution facts, not impressions or purchases. SkillVerdict remains excluded while its earned-placement experiment is frozen. Privacy-safe edge capture distinguishes both REST and MCP discovery, validation, challenge, payment-presentation, and success stages and now reduces declared initialize client names to an allowlisted family before discarding the original name and version. Distribution is the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six independently distributed non-SkillVerdict contracts are exposed as paid MCP 2025-11-25 tools through one stateless Streamable HTTP endpoint and listed in the official MCP Registry as \`io.github.cristianmoroaica/bountyverdict@${MCP_REGISTRY_VERSION}\`. The latest immutable entry carries unbranded task keywords and six exact tool summaries; 1MCP retrieves it, MCPProxy can query the official registry directly, and ${mcpDownstreams.mcpub?.listed ? "mcpub has registered the exact endpoint for agent-native search" : "mcpub registration is pending"}, while scheduled Qt Creator and Glama propagation remains pending. A crawlable GitHub Actions diagnosis page gives broad buyer intent a stable root-cause-versus-retry landing surface without changing a tool or price. These are distribution facts, not impressions or purchases. SkillVerdict remains excluded while its earned-placement experiment is frozen. Privacy-safe edge capture distinguishes both REST and MCP discovery, validation, challenge, payment-presentation, and success stages, identifies the mcpub crawler as directory traffic, and reduces declared initialize client names to an allowlisted family before discarding the original name and version. Distribution is the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers.
 
 ## What is next
 
 1. Keep the SkillVerdict earned-placement experiment isolated through its seven-day exposure window; do not change price or positioning mid-test.
-2. Measure whether agents discover the official MCP Registry entry, call \`tools/list\`, select a specific tool, and present payment; watch scheduled Qt Creator and Glama propagation plus whether Agent Tools Cloud adds MCPDriftVerdict or broadens its incomplete suite metadata. Do not confuse registry presence or owner verification with buyer demand.
+2. Measure whether agents discover the official MCP Registry entry, mcpub registration, or GitHub Actions intent page, call \`tools/list\`, select a specific tool, and present payment; watch scheduled Qt Creator and Glama propagation plus whether Agent Tools Cloud adds MCPDriftVerdict or broadens its incomplete suite metadata. Do not confuse registry presence, crawler verification, or owner checks with buyer demand.
 3. Monitor GitHub Skill, AgentTool, AgentSkill, Agent Plugins PR/catalog activation, and skills.sh indexing; keep retries bounded and do not generate fake install telemetry.
 4. Monitor the six signed the402 listings, six NEAR services, six PayanAgent offers, Agent402 listing and unbranded retrieval, all seven x402scan routes, six 402 Index listings, x402gle synthesized skills, Monetize Your Agent and 402directory reviews, Agentic Market's automatic mirror, guarded buyer-request feed, edge challenges, and exact receipt attribution.
 5. Use the neutral buyer-query benchmark and edge funnel—not best-case phrase ranks—to decide the next distribution change after the frozen experiment. Do not build an eighth product before ten external purchases are recognized.
@@ -1842,6 +1882,17 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
   errors.push(`MCP Registry: ${message}`);
+}
+
+try {
+  acquisition = {
+    ...acquisition,
+    mcp_intent_page: await mcpIntentPageStatus(),
+  };
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  acquisition = { ...acquisition, mcp_intent_page: { live: false, checked_at: checkedAt, error: message } };
+  errors.push(`MCP intent page: ${message}`);
 }
 
 try {

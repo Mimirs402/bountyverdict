@@ -9,6 +9,8 @@ const agentToolsCloudUrl = new URL("../agent/src/agent-tools-cloud.ts", import.m
 const acquisitionUrl = new URL("../agent/src/acquisition.ts", import.meta.url);
 const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.url);
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
+const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
+const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 
 test("frequent reporting samples merchant activity without semantic retrieval while full audits establish a drain", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
@@ -99,6 +101,17 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.match(snapshotService, /AUDITED_MONITOR=directory[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.match(snapshotService, /AUDITED_MONITOR=distribution[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.doesNotMatch(snapshotService, /ExecStart=.*scripts\/(?:directory|distribution)-monitor\.ts/);
+});
+
+test("broad retrieval audits share a bounded six-hour measurement window", async () => {
+  const [directoryTimer, marketplaceTimer] = await Promise.all([
+    readFile(directoryTimerUrl, "utf8"),
+    readFile(marketplaceTimerUrl, "utf8"),
+  ]);
+  assert.match(directoryTimer, /OnCalendar=\*-\*-\* 05,11,17,23:15:00/);
+  assert.match(marketplaceTimer, /OnCalendar=\*-\*-\* 05,11,17,23:17:00/);
+  assert.doesNotMatch(directoryTimer, /OnUnitActiveSec=1h|hourly/i);
+  assert.doesNotMatch(marketplaceTimer, /OnUnitActiveSec=1h|hourly/i);
 });
 
 test("the normal distribution timer is report-only and retains explicit accounting identity", async () => {

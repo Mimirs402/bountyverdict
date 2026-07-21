@@ -33,6 +33,7 @@ import {
   normalizeThe402ServiceOutcome,
 } from "../src/marketplace-telemetry.ts";
 import { loadDistributionMonitorConfiguration } from "../src/monitor-configuration.ts";
+import { glamaConnectorStatus, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const AGENTIC_MARKET_SERVICE =
@@ -44,6 +45,9 @@ const execFileAsync = promisify(execFile);
 const GITHUB_REPOSITORY = "cristianmoroaica/bountyverdict";
 const MCP_REGISTRY_NAME = "io.github.cristianmoroaica/bountyverdict";
 const MCP_REGISTRY_VERSION = "1.0.1";
+const QT_MCP_REGISTRY = "https://qtccache.qt.io/mcp/registry.json";
+const GLAMA_MCP_CONNECTOR = `https://glama.ai/mcp/connectors/${MCP_REGISTRY_NAME}`;
+const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const configuration = loadDistributionMonitorConfiguration(process.env);
 const api = configuration.productionApi;
@@ -237,6 +241,46 @@ async function mcpRegistryStatus(): Promise<Record<string, unknown>> {
     endpoint,
     checked_at: new Date().toISOString(),
     accounting_note: "Registry presence is distribution evidence only; it is not an impression, purchase, or revenue.",
+  };
+}
+
+async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<Record<string, unknown>> {
+  const now = new Date();
+  const previousCheck = typeof previous.checked_at === "string" ? Date.parse(previous.checked_at) : Number.NaN;
+  if (Number.isFinite(previousCheck) && now.getTime() >= previousCheck && now.getTime() - previousCheck < MCP_DOWNSTREAM_CHECK_INTERVAL_MS) {
+    return { ...previous, reused_at: now.toISOString() };
+  }
+  const [qtResponse, glamaResponse] = await Promise.all([
+    monitoredFetch(QT_MCP_REGISTRY),
+    monitoredFetch(GLAMA_MCP_CONNECTOR, { redirect: "manual" }),
+  ]);
+  if (!qtResponse.ok) throw new Error(`Qt Creator MCP mirror returned HTTP ${qtResponse.status}.`);
+  const qt = parseQtMcpRegistry(await qtResponse.json(), MCP_REGISTRY_NAME, MCP_REGISTRY_VERSION, `${api}/mcp`);
+  const glama = glamaConnectorStatus(glamaResponse.status, GLAMA_MCP_CONNECTOR);
+  return {
+    checked_at: now.toISOString(),
+    check_interval_hours: MCP_DOWNSTREAM_CHECK_INTERVAL_MS / 3_600_000,
+    one_mcp: {
+      status: "confirmed_direct_official_registry_consumer",
+      verified_version: MCP_REGISTRY_VERSION,
+      verified_at: "2026-07-21T02:31:08.804Z",
+      accounting_note: "One owner-run CLI retrieval proved availability; it is not an impression or purchase.",
+    },
+    mcp_proxy: {
+      status: "direct_official_registry_consumer",
+      available_version: MCP_REGISTRY_VERSION,
+      accounting_note: "Availability follows the active official entry; it is not an independently mirrored impression.",
+    },
+    qt_creator: {
+      ...qt,
+      status: qt.listed ? "listed" : "pending_scheduled_mirror",
+      registry_url: QT_MCP_REGISTRY,
+    },
+    glama: {
+      ...glama,
+      methodology: "official_registry_ingestion",
+    },
+    accounting_note: "Downstream propagation checks are bounded owner-run distribution audits and never purchase or revenue evidence.",
   };
 }
 
@@ -1472,6 +1516,7 @@ function renderMonitorNote(report: Record<string, any>): string {
     ? `${Number(buyerQuerySummary.found_queries || 0)} / ${Number(buyerQuerySummary.query_count)} unbranded buyer-query variants found; ${Number(buyerQuerySummary.top_three_queries || 0)} rank in the top 3`
     : "unavailable";
   const funnel = report.funnel || {};
+  const mcpDownstreams = report.acquisition?.mcp_downstreams || {};
   const githubTraffic = report.acquisition?.github_traffic || {};
   const the402OutcomeTotals = report.marketplaces?.the402?.service_outcome_totals || {};
   const cdpMerchantQuality = report.discovery?.cdp_merchant_quality || {};
@@ -1510,6 +1555,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external discovery hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
 - **MCP agent funnel:** ${funnel.available ? `${Number(funnel.mcp_external?.initialize || 0)} initializations; ${Number(funnel.mcp_external?.tools_list || 0)} tool-list requests; ${Number(funnel.mcp_external?.payment_required || 0)} valid unpaid tool calls; ${Number(funnel.mcp_external?.payment_present || 0)} payment presentations; ${Number(funnel.mcp_external?.paid_success || 0)} paid successes` : "unavailable"} (${funnel.mcp_learning_stage || "not started"}; owner automation excluded)
 - **Official MCP Registry:** ${report.acquisition?.mcp_registry?.listed ? `${report.acquisition.mcp_registry.name}@${report.acquisition.mcp_registry.version} listed at the exact production Streamable HTTP endpoint` : `unavailable (${report.acquisition?.mcp_registry?.error || "not checked"})`} (placement only, never a purchase)
+- **MCP downstream propagation:** 1MCP ${mcpDownstreams.one_mcp?.status === "confirmed_direct_official_registry_consumer" ? "confirmed" : "unavailable"}; MCPProxy ${mcpDownstreams.mcp_proxy?.status === "direct_official_registry_consumer" ? "available through direct official lookup" : "unavailable"}; Qt Creator ${mcpDownstreams.qt_creator?.listed ? "listed" : "pending scheduled mirror"}; Glama ${mcpDownstreams.glama?.listed ? "listed" : "pending registry ingestion"} (bounded owner-run checks, never impressions or purchases)
 - **Measurement boundary:** ${funnel.trusted_measurement_eligible === false ? `draining owner-triggered downstream probes; ${Number(funnel.provisional_external_discovery_requests || 0)} discovery and ${Number(funnel.provisional_external_402_challenges || 0)} challenge signals are excluded until a stable new epoch activates` : `epoch ${Number(funnel.trusted_epoch_id || 1)} eligible`}
 - **Current funnel diagnosis:** ${funnel.learning_stage || "unavailable"}
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
@@ -1779,6 +1825,22 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
   errors.push(`MCP Registry: ${message}`);
+}
+
+try {
+  acquisition = {
+    ...acquisition,
+    mcp_downstreams: await mcpDownstreamStatus(previousReport.acquisition?.mcp_downstreams || {}),
+  };
+} catch (error) {
+  acquisition = {
+    ...acquisition,
+    mcp_downstreams: {
+      ...(previousReport.acquisition?.mcp_downstreams || {}),
+      last_failed_at: checkedAt,
+      last_error: error instanceof Error ? error.message : String(error),
+    },
+  };
 }
 
 try {

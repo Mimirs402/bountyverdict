@@ -78,11 +78,11 @@ const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
   id: "mcp-selection-preview-parity-v2",
-  started_at: "2026-07-21T22:01:43.197Z",
+  started_at: "2026-07-21T22:04:03.330Z",
   release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99",
   baseline: Object.freeze({
-    initialize: 252,
-    tools_list: 203,
+    initialize: 257,
+    tools_list: 208,
     validation_error: 6,
     capacity_rejected: 0,
     payment_required: 0,

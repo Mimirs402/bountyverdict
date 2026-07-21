@@ -113,8 +113,8 @@ test("distribution monitoring measures the MCP selection-preview rollout from an
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /mcp-selection-preview-parity-v2/);
   assert.match(distribution, /release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99"/);
-  assert.match(distribution, /initialize: 252/);
-  assert.match(distribution, /tools_list: 203/);
+  assert.match(distribution, /initialize: 257/);
+  assert.match(distribution, /tools_list: 208/);
   assert.match(distribution, /valid_call_per_tools_list_percent/);
   assert.match(distribution, /invalid_call_share_percent/);
   assert.match(distribution, /payment_present_per_valid_call_percent/);

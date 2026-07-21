@@ -65,6 +65,8 @@ export const TASKMARKET_TRACKED_SUBMISSIONS = Object.freeze([
     reward_atomic: "19000000",
     expected_net_atomic: "17575000",
     operator_estimated_net_atomic: "110000",
+    terminal_reward_atomic: "1135136",
+    terminal_net_reward_atomic: "1050000",
   }),
   Object.freeze({
     task_id: "0xb572510c687f254cb763989553a74a9dff1c76687579f8507335c2461de1ab1a",
@@ -109,6 +111,8 @@ export type TaskmarketTrackedSpecification = Readonly<{
   reward_atomic: string;
   expected_net_atomic: string;
   operator_estimated_net_atomic?: string;
+  terminal_reward_atomic?: string;
+  terminal_net_reward_atomic?: string;
   public_proof?: Readonly<{
     service_origin: string;
     note_id: string;
@@ -364,7 +368,8 @@ function parseDetail(value: unknown): { task: TaskmarketTask; awards: Taskmarket
 }
 
 export function taskmarketAwardSettlementHashes(value: unknown): string[] {
-  return parseDetail(value).awards.map(({ settlementTxHash }) => settlementTxHash);
+  const hashes = parseDetail(value).awards.map(({ settlementTxHash }) => settlementTxHash);
+  return [...new Map(hashes.map((hash) => [hash.toLowerCase(), hash])).values()];
 }
 
 export function verifyTaskmarketSettlementReceipt(input: {
@@ -569,6 +574,20 @@ export function reconcileTaskmarketTracked(input: {
     const expectedReward = atomic(expected.reward_atomic, "Taskmarket expected reward");
     const expectedNet = atomic(expected.expected_net_atomic, "Taskmarket expected net reward");
     if (expectedNet > expectedReward) throw new Error("Taskmarket expected net reward exceeds the task reward.");
+    const terminalReward = expected.terminal_reward_atomic === undefined
+      ? undefined
+      : atomic(expected.terminal_reward_atomic, "Taskmarket terminal reward");
+    const terminalNet = expected.terminal_net_reward_atomic === undefined
+      ? undefined
+      : atomic(expected.terminal_net_reward_atomic, "Taskmarket terminal net reward");
+    if ((terminalReward === undefined) !== (terminalNet === undefined)) {
+      throw new Error("Taskmarket terminal reward contract must pin both gross and net amounts.");
+    }
+    if (terminalReward !== undefined && terminalNet !== undefined &&
+      (expected.operator_estimated_net_atomic === undefined || terminalNet > terminalReward ||
+        terminalReward > expectedReward || terminalNet > expectedNet)) {
+      throw new Error("Taskmarket terminal pool settlement exceeds or lacks its initial bounded pool contract.");
+    }
     const potentialNet = atomic(expected.operator_estimated_net_atomic ?? expected.expected_net_atomic, "Taskmarket potential net award");
     const potentialGross = expected.operator_estimated_net_atomic === undefined
       ? expectedReward
@@ -579,8 +598,12 @@ export function reconcileTaskmarketTracked(input: {
     const payload = payloads.get(expectedTaskId.toLowerCase());
     if (!payload) throw new Error("Taskmarket tracked task detail is missing.");
     const { task, awards } = parseDetail(payload.detail);
-    if (task.id.toLowerCase() !== expectedTaskId.toLowerCase() || BigInt(task.rewardAtomic) !== expectedReward ||
-      BigInt(task.netRewardAtomic) !== expectedNet) {
+    const liveReward = BigInt(task.rewardAtomic);
+    const liveNet = BigInt(task.netRewardAtomic);
+    const initialContract = liveReward === expectedReward && liveNet === expectedNet;
+    const terminalPoolContract = task.status === "completed" && terminalReward !== undefined && terminalNet !== undefined &&
+      liveReward === terminalReward && liveNet === terminalNet;
+    if (task.id.toLowerCase() !== expectedTaskId.toLowerCase() || (!initialContract && !terminalPoolContract)) {
       throw new Error("Taskmarket tracked task identity or reward contract drifted.");
     }
     const submissions = parseSubmissions(payload.submissions, expectedTaskId);
@@ -665,6 +688,11 @@ export function reconcileTaskmarketTracked(input: {
       submission_state: submissionState,
       rejected_at: submission.rejectedAt,
       escrow_reward_usdc: atomicToDecimal(expectedReward),
+      current_task_reward_usdc: atomicToDecimal(liveReward),
+      current_task_net_reward_usdc: atomicToDecimal(liveNet),
+      reward_contract_state: terminalPoolContract
+        ? "pinned_terminal_pool_award_aggregate_with_initial_escrow_preserved"
+        : "initial_escrow_contract",
       potential_gross_usdc: atomicToDecimal(potentialGross),
       potential_net_usdc: atomicToDecimal(potentialNet),
       potential_basis: expected.operator_estimated_net_atomic === undefined

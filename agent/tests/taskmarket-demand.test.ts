@@ -4,6 +4,7 @@ import {
   analyzeTaskmarket,
   parseTaskmarketPage,
   reconcileTaskmarketTracked,
+  taskmarketAwardSettlementHashes,
   TASKMARKET_TRACKED_SUBMISSIONS,
   TASKMARKET_WORKER_ADDRESS,
   verifyTaskmarketSettlementReceipt,
@@ -158,6 +159,8 @@ test("Taskmarket production tracker pins the isolated worker and all six public 
       reward_atomic: "19000000",
       expected_net_atomic: "17575000",
       operator_estimated_net_atomic: "110000",
+      terminal_reward_atomic: "1135136",
+      terminal_net_reward_atomic: "1050000",
     },
     {
       task_id: "0xb572510c687f254cb763989553a74a9dff1c76687579f8507335c2461de1ab1a",
@@ -216,6 +219,82 @@ test("Taskmarket pool gross estimate derives the task-specific fee ratio", () =>
   });
   assert.equal(result.pending_gross_potential_usdc, "0.5");
   assert.equal(result.pending_net_potential_usdc, "0.45");
+});
+
+test("Taskmarket preserves a pool's initial escrow while pinning its smaller terminal award aggregate", () => {
+  const result = reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked: [{
+      task_id: taskId,
+      submission_id: submissionId,
+      submit_tx_hash: submitTx,
+      reward_atomic: "19000000",
+      expected_net_atomic: "17575000",
+      operator_estimated_net_atomic: "110000",
+      terminal_reward_atomic: "1135136",
+      terminal_net_reward_atomic: "1050000",
+    }],
+    payloads: [{
+      task_id: taskId,
+      detail: rawTask({
+        status: "completed",
+        submissionWindowOpen: false,
+        reward: "1135136",
+        netReward: "1050000",
+      }),
+      submissions: [rawSubmission()],
+    }],
+    agent_stats: rawStats(),
+  });
+  assert.equal(result.pending_submissions, 0);
+  assert.equal(result.not_awarded_submissions, 1);
+  assert.equal(result.pending_net_potential_usdc, "0");
+  const submission = (result.submissions as Array<Record<string, unknown>>)[0];
+  assert.equal(submission.escrow_reward_usdc, "19");
+  assert.equal(submission.current_task_reward_usdc, "1.135136");
+  assert.equal(submission.current_task_net_reward_usdc, "1.05");
+  assert.equal(submission.reward_contract_state, "pinned_terminal_pool_award_aggregate_with_initial_escrow_preserved");
+  assert.equal(submission.submission_state, "not_awarded");
+
+  assert.throws(() => reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked: [{
+      task_id: taskId,
+      submission_id: submissionId,
+      submit_tx_hash: submitTx,
+      reward_atomic: "19000000",
+      expected_net_atomic: "17575000",
+      operator_estimated_net_atomic: "110000",
+      terminal_reward_atomic: "1135135",
+      terminal_net_reward_atomic: "1050000",
+    }],
+    payloads: [{
+      task_id: taskId,
+      detail: rawTask({ status: "completed", submissionWindowOpen: false, reward: "1135136", netReward: "1050000" }),
+      submissions: [rawSubmission()],
+    }],
+    agent_stats: rawStats(),
+  }), /reward contract drifted/);
+});
+
+test("Taskmarket fetches one settlement receipt when a pool pays several awards in one transaction", () => {
+  const sharedAward = {
+    workerAddress: worker,
+    grossAmount: "150000",
+    workerPayment: "138750",
+    platformFee: "11250",
+    settlementTxHash: settlementTx,
+    settledAt: "2026-07-21T11:00:00.000Z",
+  };
+  assert.deepEqual(taskmarketAwardSettlementHashes(rawTask({
+    status: "completed",
+    submissionWindowOpen: false,
+    awardCount: 2,
+    awards: [
+      sharedAward,
+      { ...sharedAward, workerAddress: "0x2222222222222222222222222222222222222222" },
+    ],
+  })), [settlementTx]);
 });
 
 test("Taskmarket open feed validates escrow evidence and strict pagination bounds", () => {

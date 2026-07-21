@@ -132,6 +132,7 @@ export function createOpenApi(
             },
             "402": { description: "Payment required; inspect the PAYMENT-REQUIRED header. Standard x402 authorizes this resource URL, not the POST body; resend the exact validated body." },
             "400": { description: "Invalid JSON or GitHub issue URL; no payment challenge is issued" },
+            "410": { description: "GitHub reports that the issue was deleted; a stale marketplace listing must not be pursued and verified payment is not settled" },
             "413": { description: "Request body exceeds 4,096 bytes; no payment challenge is issued" },
             "502": { description: "GitHub upstream failure; verified payment is not settled" },
             "503": { description: "Temporary capacity or service configuration failure" },
@@ -177,6 +178,7 @@ export function createOpenApi(
             },
             "402": { description: "Payment required; inspect the PAYMENT-REQUIRED header" },
             "400": { description: "Invalid GitHub issue URL; verified payment is not settled" },
+            "410": { description: "GitHub reports that the issue was deleted; a stale marketplace listing must not be pursued and verified payment is not settled" },
             "502": { description: "GitHub upstream failure; verified payment is not settled" },
             "503": { description: "Temporary capacity or service configuration failure" },
           },
@@ -740,7 +742,7 @@ ${nearMarketServices}
 
 ## Differentiation
 
-BountyVerdict checks up to 300 issue comments, first and newest timeline pages, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. Important signals include public evidence URLs and coverage counts.
+BountyVerdict checks the first and newest bounded comment windows, up to four bounded timeline pages, current Algora status tables, rewarded labels, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. It reports truncation explicitly and never returns VIABLE from incomplete evidence. Important signals include public evidence URLs and coverage counts.
 
 The portfolio product runs the full check on every submitted candidate, ranks VIABLE before CAUTION before AVOID, recommends the strongest candidate, and reports partial upstream failures.
 

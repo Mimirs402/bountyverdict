@@ -1,4 +1,5 @@
 const MAINTAINER_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const TRUSTED_BOUNTY_APPS = new Set(["algora-pbc"]);
 
 const NEGATIVE_MAINTAINER_PATTERNS = [
   /ai[ -]slop/i,
@@ -10,7 +11,6 @@ const NEGATIVE_MAINTAINER_PATTERNS = [
   /do not (?:work|submit|open)/i,
   /don['’]?t (?:work|submit|open)/i,
   /stop (?:working|submitting)/i,
-  /spam(?:my|med|ming)?/i,
   /bounty hunters?.*(?:noise|slop|spam)/i
 ];
 
@@ -80,7 +80,129 @@ function signal(label, impact, detail, evidenceUrl = null, hardStop = false) {
   return { label, impact, detail, evidenceUrl, hardStop };
 }
 
-export function analyzeBounty({ issue, repository, comments = [], timeline = [], policyDocuments = [], now = new Date() }) {
+function issueLabelNames(issue) {
+  return Array.isArray(issue.labels)
+    ? issue.labels.map((label) => typeof label === "string" ? label : label?.name).filter(Boolean)
+    : [];
+}
+
+function commentTime(comment) {
+  const value = comment.updated_at ?? comment.created_at;
+  const time = typeof value === "string" ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function platformClaimState(comments, openPulls) {
+  const official = comments.filter((comment) => TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug));
+  const stateComments = official
+    .filter((comment) => /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(comment.body ?? "") || /bounty is (?:now )?up for grabs/i.test(comment.body ?? ""))
+    .sort((left, right) => commentTime(right) - commentTime(left));
+  const current = stateComments[0];
+  if (current && !/bounty is (?:now )?up for grabs/i.test(current.body ?? "") && /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(current.body ?? "")) {
+    return {
+      detail: "The current Algora status table lists at least one active attempt or submitted solution.",
+      evidenceUrl: current.html_url ?? null,
+    };
+  }
+
+  for (const pull of openPulls) {
+    const claim = official.find((comment) =>
+      (comment.body ?? "").includes(pull.url) && /(?:claims? the bounty|submitted a pull request)/i.test(comment.body ?? "")
+    );
+    if (claim) {
+      return {
+        detail: "Algora links an existing open pull request that claims this bounty.",
+        evidenceUrl: claim.html_url ?? pull.url,
+      };
+    }
+  }
+  return null;
+}
+
+function amountFromText(text) {
+  const match = String(text ?? "").match(/\$\s*([\d][\d,]*(?:\.\d{1,2})?)/);
+  if (!match) return { amount: null, currency: null };
+  const amount = Number(match[1].replaceAll(",", ""));
+  return { amount: Number.isFinite(amount) ? amount : null, currency: "USD" };
+}
+
+function rewardEvidence(issue, comments) {
+  const officialAlgora = comments.find((comment) =>
+    TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug) &&
+    /##\s*💎\s*\$[\d,.]+\s+bounty\b/i.test(comment.body ?? "")
+  );
+  if (officialAlgora) {
+    return {
+      state: "LISTED",
+      verification: "TRUSTED_PLATFORM_APP",
+      platform: "Algora",
+      ...amountFromText(officialAlgora.body),
+      evidenceUrl: officialAlgora.html_url ?? issue.html_url,
+    };
+  }
+
+  const issueText = `${issue.title ?? ""}\n${issue.body ?? ""}`;
+  const maintainerIssue = MAINTAINER_ASSOCIATIONS.has(issue.author_association) && /(?:bounty|reward)/i.test(issueText);
+  const maintainerComment = comments.find((comment) =>
+    MAINTAINER_ASSOCIATIONS.has(comment.author_association) && /(?:bounty|reward)/i.test(comment.body ?? "") &&
+    /(?:\$\s*[\d]|\bpaid?\b|\breceive\b)/i.test(comment.body ?? "")
+  );
+  if (maintainerIssue || maintainerComment) {
+    const source = maintainerComment?.body ?? issueText;
+    return {
+      state: "PROMISED",
+      verification: "MAINTAINER_STATEMENT",
+      platform: null,
+      ...amountFromText(source),
+      evidenceUrl: maintainerComment?.html_url ?? issue.html_url,
+    };
+  }
+
+  const labels = issueLabelNames(issue);
+  if (/(?:bounty|reward)/i.test(issueText) || labels.some((label) => /(?:bounty|reward)/i.test(label))) {
+    return {
+      state: "UNVERIFIED",
+      verification: "UNVERIFIED",
+      platform: null,
+      ...amountFromText(issueText),
+      evidenceUrl: issue.html_url,
+    };
+  }
+  return {
+    state: "NOT_FOUND",
+    verification: "NONE",
+    platform: null,
+    amount: null,
+    currency: null,
+    evidenceUrl: issue.html_url,
+  };
+}
+
+function activeSoftLockClaims(issue, comments, now) {
+  const ttlMatch = String(issue.body ?? "").match(/soft[ -]?lock.{0,40}?([1-9]\d?)\s*days?/i);
+  if (!ttlMatch) return [];
+  const ttlDays = Number(ttlMatch[1]);
+  const states = new Map();
+  const ordered = [...comments].sort((left, right) => commentTime(left) - commentTime(right));
+  for (const comment of ordered) {
+    const login = comment.user?.login;
+    if (!login) continue;
+    const body = comment.body ?? "";
+    if (/(?:withdraw(?:ing)?|cancel(?:l?ing)?).{0,40}(?:attempt|claim)|no longer (?:working|claiming)/i.test(body)) {
+      states.delete(login);
+      continue;
+    }
+    if (/^\s*(?:\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)|#{1,3}\s*claim\b|taking this\b)/im.test(body)) {
+      states.set(login, comment);
+    }
+  }
+  const cutoff = now.getTime() - ttlDays * 86_400_000;
+  return [...states.entries()].flatMap(([login, comment]) =>
+    commentTime(comment) >= cutoff ? [{ login, comment, ttlDays }] : []
+  );
+}
+
+export function analyzeBounty({ issue, repository, comments = [], timeline = [], policyDocuments = [], coverage = {}, now = new Date() }) {
   const signals = [];
   const assignees = Array.isArray(issue.assignees)
     ? issue.assignees.filter((assignee) => typeof assignee?.login === "string" && assignee.login.trim())
@@ -88,10 +210,21 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const pulls = uniquePullRequests(timeline);
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
-  const attempts = comments.filter((comment) => /^\s*\/(?:try|attempt|claim)\b/im.test(comment.body ?? ""));
+  const rewardedLabels = issueLabelNames(issue).filter((label) => /\brewarded\b/i.test(label));
+  const currentPlatformClaim = platformClaimState(comments, openPulls);
+  const activeClaims = activeSoftLockClaims(issue, comments, now);
+  const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = matchingComments(comments, WITHDRAWAL_PATTERNS, false);
+  const reward = rewardEvidence(issue, comments);
+  if (rewardedLabels.length) {
+    reward.state = "PAID_OR_AWARDED";
+    reward.evidenceUrl = issue.html_url;
+  } else if (withdrawals.length) {
+    reward.state = "WITHDRAWN";
+    reward.evidenceUrl = withdrawals.at(-1)?.html_url ?? issue.html_url;
+  }
   const aiPolicyBlocks = policyDocuments.filter((document) =>
     AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );
@@ -126,6 +259,73 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   }
 
+  if (rewardedLabels.length) {
+    score -= 100;
+    signals.push(signal(
+      "Bounty is already rewarded",
+      -100,
+      `GitHub currently labels this issue ${JSON.stringify(rewardedLabels[0])}; do not treat an open issue as an unpaid opportunity.`,
+      issue.html_url,
+      true,
+    ));
+  }
+
+  if (currentPlatformClaim) {
+    score -= 70;
+    signals.push(signal(
+      "Bounty platform reports active competition",
+      -70,
+      currentPlatformClaim.detail,
+      currentPlatformClaim.evidenceUrl,
+      true,
+    ));
+  }
+
+  if (activeClaims.length) {
+    score -= 70;
+    const latest = activeClaims.sort((left, right) => commentTime(right.comment) - commentTime(left.comment))[0];
+    signals.push(signal(
+      "Active soft-lock claim",
+      -70,
+      `${activeClaims.length} claimant${activeClaims.length === 1 ? " is" : "s are"} still within the repository's ${latest.ttlDays}-day soft-lock window.`,
+      latest.comment.html_url ?? issue.html_url,
+      true,
+    ));
+  }
+
+  if (reward.state === "LISTED") {
+    score += 5;
+    signals.push(signal(
+      "Trusted platform listing found",
+      5,
+      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a $${reward.amount} USD`} reward, but acceptance and payout are still not guaranteed.`,
+      reward.evidenceUrl,
+    ));
+  } else if (reward.state === "PROMISED") {
+    signals.push(signal(
+      "Maintainer reward promise found",
+      0,
+      "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
+      reward.evidenceUrl,
+    ));
+  } else if (reward.state === "UNVERIFIED") {
+    score -= 25;
+    signals.push(signal(
+      "Reward is unverified",
+      -25,
+      "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
+      reward.evidenceUrl,
+    ));
+  } else if (reward.state === "NOT_FOUND") {
+    score -= 25;
+    signals.push(signal(
+      "No reward evidence found",
+      -25,
+      "No trusted platform listing or maintainer-authored reward statement appeared in the bounded GitHub evidence.",
+      reward.evidenceUrl,
+    ));
+  }
+
   if (repository.archived) {
     score -= 100;
     signals.push(signal("Repository is archived", -100, "Archived repositories no longer accept normal development work.", repository.html_url, true));
@@ -145,13 +345,15 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Issue is stale", -12, `The issue has not changed for ${issueAge} days.`, issue.html_url));
   }
 
-  if (openPulls.length === 0) {
+  if (openPulls.length === 0 && !coverage.timelineTruncated) {
     score += 10;
-    signals.push(signal("No linked open PR found", 10, "No open pull request appeared in the first 100 timeline events."));
+    signals.push(signal("No linked open PR found", 10, "No open pull request appeared in the complete scanned timeline."));
   } else {
-    const impact = -Math.min(50, openPulls.length * 25);
-    score += impact;
-    signals.push(signal("Competing open PR", impact, `${openPulls.length} linked pull request${openPulls.length === 1 ? " is" : "s are"} still open.`, openPulls[0].url));
+    if (openPulls.length) {
+      const impact = -Math.min(50, openPulls.length * 25);
+      score += impact;
+      signals.push(signal("Competing open PR", impact, `${openPulls.length} linked pull request${openPulls.length === 1 ? " is" : "s are"} still open.`, openPulls[0].url));
+    }
   }
 
   if (closedPulls.length >= 3) {
@@ -193,9 +395,24 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Thin specification", -10, "The issue body is too short to provide strong acceptance criteria.", issue.html_url));
   }
 
+  if (coverage.commentsTruncated || coverage.timelineTruncated) {
+    score -= 5;
+    const truncated = [
+      coverage.commentsTruncated ? "comments" : null,
+      coverage.timelineTruncated ? "timeline" : null,
+    ].filter(Boolean).join(" and ");
+    signals.push(signal(
+      "Evidence coverage is truncated",
+      -5,
+      `The bounded GitHub ${truncated} window is incomplete, so absence of competition cannot establish viability.`,
+      issue.html_url,
+    ));
+  }
+
   score = Math.max(0, Math.min(100, score));
   const hasHardStop = signals.some((item) => item.hardStop);
-  const verdict = hasHardStop || score < 45 ? "AVOID" : score < 75 ? "CAUTION" : "VIABLE";
+  const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated;
+  const verdict = hasHardStop || score < 45 ? "AVOID" : score < 75 || incompleteCoverage ? "CAUTION" : "VIABLE";
 
   return {
     verdict,
@@ -208,6 +425,8 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     withdrawals,
     aiPolicyBlocks,
     aiPolicyRequirements,
+    reward,
+    activeClaims,
     signals: signals.sort((left, right) => left.impact - right.impact)
   };
 }

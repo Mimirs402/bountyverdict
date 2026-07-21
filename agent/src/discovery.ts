@@ -3,7 +3,7 @@ import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const BOUNTY_DISCOVERY_DESCRIPTION =
-  "GitHub bounty eligibility and claimability preflight for one public issue before coding. Determines whether it is still open, already assigned or claimed, blocked by linked pull requests, affected by a withdrawn reward or maintainer rejection, crowded by failed attempts, or restricted by repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and bounded coverage.";
+  "GitHub bounty eligibility, reward provenance, and claimability preflight for one public issue before coding. Checks open, transferred, or deleted state; whether it is already assigned or claimed; explicit soft locks; trusted bounty-app competition; paid, withdrawn, or unverified rewards; linked pull requests; failed-attempt crowding; and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, newest evidence windows, and explicit truncation.";
 
 export const exampleVerdict = {
   product: "BountyVerdict",
@@ -14,6 +14,8 @@ export const exampleVerdict = {
   service_reuse: SERVICE_REUSE.single,
   issue: {
     url: "https://github.com/typeorm/typeorm/issues/3357",
+    submitted_url: "https://github.com/typeorm/typeorm/issues/3357",
+    transferred: false,
     title: "Migration generation drops and creates columns instead of altering resulting in data loss",
     state: "open",
     repository: "typeorm/typeorm",
@@ -48,6 +50,20 @@ export const exampleVerdict = {
       hard_stop: true,
     },
     {
+      label: "Competing open PR",
+      impact: -50,
+      detail: "2 linked pull requests are still open.",
+      evidence_url: "https://github.com/typeorm/typeorm/pull/11620",
+      hard_stop: false,
+    },
+    {
+      label: "Closed-PR swarm",
+      impact: -35,
+      detail: "35 linked pull requests were closed without merging.",
+      evidence_url: "https://github.com/typeorm/typeorm/pull/4461",
+      hard_stop: false,
+    },
+    {
       label: "Attempt swarm",
       impact: -12,
       detail: "4 distinct users posted try, attempt, or claim commands.",
@@ -59,13 +75,6 @@ export const exampleVerdict = {
       impact: 10,
       detail: "The repository was pushed to 1 day ago.",
       evidence_url: "https://github.com/typeorm/typeorm",
-      hard_stop: false,
-    },
-    {
-      label: "No linked open PR found",
-      impact: 10,
-      detail: "No open pull request appeared in the first 100 timeline events.",
-      evidence_url: null,
       hard_stop: false,
     },
     {
@@ -85,10 +94,24 @@ export const exampleVerdict = {
       },
     ],
   },
+  reward: {
+    state: "WITHDRAWN",
+    verification: "NONE",
+    platform: null,
+    amount: null,
+    currency: null,
+    evidence_url: "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437",
+  },
   coverage: {
     comments_scanned: 96,
-    timeline_events_scanned: 105,
-    linked_pull_requests_found: 1,
+    comments_total: 96,
+    comment_pages_scanned: 1,
+    comments_truncated: false,
+    timeline_events_scanned: 205,
+    timeline_events_total: 205,
+    timeline_pages_scanned: 3,
+    timeline_truncated: false,
+    linked_pull_requests_found: 37,
     policy_documents_scanned: 1,
     github_rate_limit_remaining: 38,
   },
@@ -96,7 +119,9 @@ export const exampleVerdict = {
   limitations: [
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-    "The check reads at most 300 comments plus the first and newest timeline pages.",
+    "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+    "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
+    "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
   ],
 };
@@ -113,11 +138,13 @@ export const outputSchema = {
       type: "object",
       properties: {
         url: { type: "string" },
+        submitted_url: { type: "string" },
+        transferred: { type: "boolean" },
         title: { type: "string" },
         state: { type: "string" },
         repository: { type: "string" },
       },
-      required: ["url", "title", "state", "repository"],
+      required: ["url", "submitted_url", "transferred", "title", "state", "repository"],
     },
     signals: {
       type: "array",
@@ -154,18 +181,42 @@ export const outputSchema = {
       },
       required: ["ai_use", "documents"],
     },
+    reward: {
+      type: "object",
+      properties: {
+        state: { type: "string", enum: ["LISTED", "PROMISED", "UNVERIFIED", "NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED"] },
+        verification: { type: "string", enum: ["TRUSTED_PLATFORM_APP", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE"] },
+        platform: { type: ["string", "null"] },
+        amount: { type: ["number", "null"], minimum: 0 },
+        currency: { type: ["string", "null"] },
+        evidence_url: { type: ["string", "null"] },
+      },
+      required: ["state", "verification", "platform", "amount", "currency", "evidence_url"],
+    },
     coverage: {
       type: "object",
       properties: {
         comments_scanned: { type: "integer", minimum: 0 },
+        comments_total: { type: "integer", minimum: 0 },
+        comment_pages_scanned: { type: "integer", minimum: 1, maximum: 3 },
+        comments_truncated: { type: "boolean" },
         timeline_events_scanned: { type: "integer", minimum: 0 },
+        timeline_events_total: { type: "integer", minimum: 0 },
+        timeline_pages_scanned: { type: "integer", minimum: 1, maximum: 4 },
+        timeline_truncated: { type: "boolean" },
         linked_pull_requests_found: { type: "integer", minimum: 0 },
         policy_documents_scanned: { type: "integer", minimum: 0 },
         github_rate_limit_remaining: { type: ["integer", "null"] },
       },
       required: [
         "comments_scanned",
+        "comments_total",
+        "comment_pages_scanned",
+        "comments_truncated",
         "timeline_events_scanned",
+        "timeline_events_total",
+        "timeline_pages_scanned",
+        "timeline_truncated",
         "linked_pull_requests_found",
         "policy_documents_scanned",
         "github_rate_limit_remaining",
@@ -184,6 +235,7 @@ export const outputSchema = {
     "issue",
     "signals",
     "contribution_policy",
+    "reward",
     "coverage",
     "checked_at",
     "limitations",
@@ -216,11 +268,13 @@ const portfolioAssignedVerdict = {
   product: "BountyVerdict",
   version: "1.0",
   verdict: "AVOID",
-  score: 23,
+  score: 0,
   summary: "A public hard stop or severe risk signal makes this issue an unsafe bounty target.",
   service_reuse: SERVICE_REUSE.single,
   issue: {
     url: "https://github.com/tenstorrent/tt-metal/issues/50522",
+    submitted_url: "https://github.com/tenstorrent/tt-metal/issues/50522",
+    transferred: false,
     title: "[Bounty $1500] ModernBERT bring up using TTNN APIs",
     state: "open",
     repository: "tenstorrent/tt-metal",
@@ -241,6 +295,13 @@ const portfolioAssignedVerdict = {
       hard_stop: false,
     },
     {
+      label: "Reward is unverified",
+      impact: -25,
+      detail: "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
+      evidence_url: "https://github.com/tenstorrent/tt-metal/issues/50522",
+      hard_stop: false,
+    },
+    {
       label: "Repository is active",
       impact: 10,
       detail: "The repository was pushed to 0 days ago.",
@@ -250,7 +311,7 @@ const portfolioAssignedVerdict = {
     {
       label: "No linked open PR found",
       impact: 10,
-      detail: "No open pull request appeared in the first 100 timeline events.",
+      detail: "No open pull request appeared in the complete scanned timeline.",
       evidence_url: null,
       hard_stop: false,
     },
@@ -275,9 +336,23 @@ const portfolioAssignedVerdict = {
       },
     ],
   },
+  reward: {
+    state: "UNVERIFIED",
+    verification: "UNVERIFIED",
+    platform: null,
+    amount: 1500,
+    currency: "USD",
+    evidence_url: "https://github.com/tenstorrent/tt-metal/issues/50522",
+  },
   coverage: {
     comments_scanned: 3,
+    comments_total: 3,
+    comment_pages_scanned: 1,
+    comments_truncated: false,
     timeline_events_scanned: 19,
+    timeline_events_total: 19,
+    timeline_pages_scanned: 1,
+    timeline_truncated: false,
     linked_pull_requests_found: 0,
     policy_documents_scanned: 2,
     github_rate_limit_remaining: 40,
@@ -286,7 +361,9 @@ const portfolioAssignedVerdict = {
   limitations: [
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-    "The check reads at most 300 comments plus the first and newest timeline pages.",
+    "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+    "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
+    "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
   ],
 };

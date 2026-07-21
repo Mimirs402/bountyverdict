@@ -22,6 +22,8 @@ export interface AgentVerdict {
   service_reuse: ServiceReuseGuidance;
   issue: {
     url: string;
+    submitted_url: string;
+    transferred: boolean;
     title: string;
     state: string;
     repository: string;
@@ -31,9 +33,23 @@ export interface AgentVerdict {
     ai_use: "BLOCKED" | "DISCLOSURE_REQUIRED" | "NO_EXPLICIT_RULE_FOUND";
     documents: Array<{ path: string; url: string }>;
   };
+  reward: {
+    state: "LISTED" | "PROMISED" | "UNVERIFIED" | "NOT_FOUND" | "WITHDRAWN" | "PAID_OR_AWARDED";
+    verification: "TRUSTED_PLATFORM_APP" | "MAINTAINER_STATEMENT" | "UNVERIFIED" | "NONE";
+    platform: string | null;
+    amount: number | null;
+    currency: string | null;
+    evidence_url: string | null;
+  };
   coverage: {
     comments_scanned: number;
+    comments_total: number;
+    comment_pages_scanned: number;
+    comments_truncated: boolean;
     timeline_events_scanned: number;
+    timeline_events_total: number;
+    timeline_pages_scanned: number;
+    timeline_truncated: boolean;
     linked_pull_requests_found: number;
     policy_documents_scanned: number;
     github_rate_limit_remaining: number | null;
@@ -50,6 +66,14 @@ interface AnalysisResult {
   pullRequests: unknown[];
   aiPolicyBlocks: unknown[];
   aiPolicyRequirements: unknown[];
+  reward: {
+    state: AgentVerdict["reward"]["state"];
+    verification: AgentVerdict["reward"]["verification"];
+    platform: string | null;
+    amount: number | null;
+    currency: string | null;
+    evidenceUrl: string | null;
+  };
   signals: Array<{
     label: string;
     impact: number;
@@ -122,6 +146,13 @@ async function githubJson(
     if (response.status === 404) {
       throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
     }
+    if (response.status === 410) {
+      throw new CheckError(
+        "GitHub reports that this issue was deleted; any marketplace listing for it is stale.",
+        410,
+        "ISSUE_DELETED",
+      );
+    }
     if (response.status === 403 && remaining === 0) {
       throw new CheckError("GitHub API capacity is temporarily exhausted.", 503, "GITHUB_RATE_LIMITED");
     }
@@ -180,6 +211,44 @@ function lastPageFromLink(link: string | null): number {
   return match ? Number(match[1]) : 1;
 }
 
+function boundedEvidencePages(lastPage: number, limit: number): number[] {
+  if (lastPage <= limit) return Array.from({ length: lastPage }, (_, index) => index + 1);
+  return [1, ...Array.from({ length: limit - 1 }, (_, index) => lastPage - index)].sort((a, b) => a - b);
+}
+
+function canonicalIssueCoordinates(
+  issue: any,
+  fallback: { owner: string; repo: string; number: number },
+): { owner: string; repo: string; number: number } {
+  if (typeof issue?.repository_url !== "string") return fallback;
+  let url: URL;
+  try {
+    url = new URL(issue.repository_url);
+  } catch {
+    throw new CheckError("GitHub returned an invalid canonical repository URL.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  const parts = url.pathname.split("/").filter(Boolean);
+  const number = Number(issue.number);
+  if (
+    url.protocol !== "https:" || url.hostname !== "api.github.com" ||
+    parts.length !== 3 || parts[0] !== "repos" || !parts[1] || !parts[2] ||
+    !Number.isSafeInteger(number) || number < 1
+  ) {
+    throw new CheckError("GitHub returned invalid canonical issue coordinates.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  return { owner: parts[1], repo: parts[2], number };
+}
+
+function deduplicateEvidence(items: any[]): any[] {
+  const seen = new Set<string>();
+  return items.filter((item, index) => {
+    const key = String(item?.id ?? item?.node_id ?? item?.html_url ?? `${item?.event ?? "item"}:${index}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function summarize(verdict: AgentVerdict["verdict"]): string {
   if (verdict === "VIABLE") {
     return "No obvious public hard stop was found. Confirm reward terms and reproduce the issue before coding.";
@@ -207,21 +276,19 @@ export async function checkGithubIssue(
     );
   }
 
-  const { owner, repo, number } = parsed;
+  const submitted = parsed;
+  const submittedBase = `/repos/${encodeURIComponent(submitted.owner)}/${encodeURIComponent(submitted.repo)}`;
+  const issueResponse = await githubJson(`${submittedBase}/issues/${submitted.number}`, env, fetchImpl);
+  const canonical = canonicalIssueCoordinates(issueResponse.data, submitted);
+  const { owner, repo, number } = canonical;
   const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-  const [issueResponse, repoResponse] = await Promise.all([
-    githubJson(`${base}/issues/${number}`, env, fetchImpl),
-    githubJson(base, env, fetchImpl),
-  ]);
+  const repoResponse = await githubJson(base, env, fetchImpl);
   if (repoResponse.data?.private === true) {
     throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
   }
 
   const commentPageCount = Math.max(1, Math.ceil(issueResponse.data.comments / 100));
-  const commentPages = Array.from(
-    { length: Math.min(3, commentPageCount) },
-    (_, index) => index + 1,
-  );
+  const commentPages = boundedEvidencePages(commentPageCount, 3);
   const [commentResponses, firstTimeline, policyResponses] = await Promise.all([
     Promise.all(
       commentPages.map((page) =>
@@ -235,17 +302,15 @@ export async function checkGithubIssue(
   ]);
 
   const timelineLastPage = lastPageFromLink(firstTimeline.link);
-  const lastTimeline = timelineLastPage > 1
-    ? await githubJson(
-        `${base}/issues/${number}/timeline?per_page=100&page=${timelineLastPage}`,
-        env,
-        fetchImpl,
-      )
-    : null;
-  const comments = commentResponses.flatMap((page) => page.data);
-  const timeline = lastTimeline
-    ? [...firstTimeline.data, ...lastTimeline.data]
-    : firstTimeline.data;
+  const timelinePages = boundedEvidencePages(timelineLastPage, 4);
+  const additionalTimelineResponses = await Promise.all(
+    timelinePages.filter((page) => page !== 1).map((page) =>
+      githubJson(`${base}/issues/${number}/timeline?per_page=100&page=${page}`, env, fetchImpl)
+    ),
+  );
+  const timelineResponses = [firstTimeline, ...additionalTimelineResponses];
+  const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
+  const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
   const policyDocuments = policyResponses
     .map((result) => result.document)
     .filter((document): document is PolicyDocument => document !== null);
@@ -253,8 +318,7 @@ export async function checkGithubIssue(
     issueResponse,
     repoResponse,
     ...commentResponses,
-    firstTimeline,
-    lastTimeline,
+    ...timelineResponses,
     ...policyResponses.map((result) => result.response),
   ].filter((value): value is GithubResponse => value !== null);
   const remainingValues = responses
@@ -267,6 +331,10 @@ export async function checkGithubIssue(
     comments,
     timeline,
     policyDocuments,
+    coverage: {
+      commentsTruncated: commentPageCount > commentPages.length,
+      timelineTruncated: timelineLastPage > timelinePages.length,
+    },
     now,
   });
 
@@ -279,6 +347,9 @@ export async function checkGithubIssue(
     service_reuse: SERVICE_REUSE.single,
     issue: {
       url: issueResponse.data.html_url,
+      submitted_url: issueUrl,
+      transferred: owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+        repo.toLowerCase() !== submitted.repo.toLowerCase() || number !== submitted.number,
       title: issueResponse.data.title,
       state: issueResponse.data.state,
       repository: repoResponse.data.full_name,
@@ -301,9 +372,25 @@ export async function checkGithubIssue(
         url: document.html_url,
       })),
     },
+    reward: {
+      state: analysis.reward.state,
+      verification: analysis.reward.verification,
+      platform: analysis.reward.platform,
+      amount: analysis.reward.amount,
+      currency: analysis.reward.currency,
+      evidence_url: analysis.reward.evidenceUrl,
+    },
     coverage: {
       comments_scanned: comments.length,
+      comments_total: Number(issueResponse.data.comments) || 0,
+      comment_pages_scanned: commentPages.length,
+      comments_truncated: commentPageCount > commentPages.length,
       timeline_events_scanned: timeline.length,
+      timeline_events_total: timelineLastPage > 1
+        ? (timelineLastPage - 1) * 100 + timelineResponses.at(-1)!.data.length
+        : firstTimeline.data.length,
+      timeline_pages_scanned: timelinePages.length,
+      timeline_truncated: timelineLastPage > timelinePages.length,
       linked_pull_requests_found: analysis.pullRequests.length,
       policy_documents_scanned: policyDocuments.length,
       github_rate_limit_remaining: remainingValues.length
@@ -314,7 +401,9 @@ export async function checkGithubIssue(
     limitations: [
       "A VIABLE verdict is permission to investigate, not a payout guarantee.",
       "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-      "The check reads at most 300 comments plus the first and newest timeline pages.",
+      "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+      "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
+      "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
       "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
     ],
   };

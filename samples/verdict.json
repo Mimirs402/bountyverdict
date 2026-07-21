@@ -12,6 +12,8 @@
   },
   "issue": {
     "url": "https://github.com/typeorm/typeorm/issues/3357",
+    "submitted_url": "https://github.com/typeorm/typeorm/issues/3357",
+    "transferred": false,
     "title": "Migration generation drops and creates columns instead of altering resulting in data loss",
     "state": "open",
     "repository": "typeorm/typeorm"
@@ -46,6 +48,20 @@
       "hard_stop": true
     },
     {
+      "label": "Competing open PR",
+      "impact": -50,
+      "detail": "2 linked pull requests are still open.",
+      "evidence_url": "https://github.com/typeorm/typeorm/pull/11620",
+      "hard_stop": false
+    },
+    {
+      "label": "Closed-PR swarm",
+      "impact": -35,
+      "detail": "35 linked pull requests were closed without merging.",
+      "evidence_url": "https://github.com/typeorm/typeorm/pull/4461",
+      "hard_stop": false
+    },
+    {
       "label": "Attempt swarm",
       "impact": -12,
       "detail": "4 distinct users posted try, attempt, or claim commands.",
@@ -57,13 +73,6 @@
       "impact": 10,
       "detail": "The repository was pushed to 1 day ago.",
       "evidence_url": "https://github.com/typeorm/typeorm",
-      "hard_stop": false
-    },
-    {
-      "label": "No linked open PR found",
-      "impact": 10,
-      "detail": "No open pull request appeared in the first 100 timeline events.",
-      "evidence_url": null,
       "hard_stop": false
     },
     {
@@ -83,10 +92,24 @@
       }
     ]
   },
+  "reward": {
+    "state": "WITHDRAWN",
+    "verification": "NONE",
+    "platform": null,
+    "amount": null,
+    "currency": null,
+    "evidence_url": "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437"
+  },
   "coverage": {
     "comments_scanned": 96,
-    "timeline_events_scanned": 105,
-    "linked_pull_requests_found": 1,
+    "comments_total": 96,
+    "comment_pages_scanned": 1,
+    "comments_truncated": false,
+    "timeline_events_scanned": 205,
+    "timeline_events_total": 205,
+    "timeline_pages_scanned": 3,
+    "timeline_truncated": false,
+    "linked_pull_requests_found": 37,
     "policy_documents_scanned": 1,
     "github_rate_limit_remaining": 38
   },
@@ -94,7 +117,9 @@
   "limitations": [
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-    "The check reads at most 300 comments plus the first and newest timeline pages.",
+    "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+    "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
+    "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere."
   ]
 }

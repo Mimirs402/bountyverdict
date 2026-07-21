@@ -9,6 +9,25 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 export const TESTNET_X402_NETWORK = "eip155:84532";
 export const TESTNET_X402_FACILITATOR = "https://x402.org/facilitator";
 export const CDP_X402_FACILITATOR = "https://api.cdp.coinbase.com/platform/v2/x402";
+export const CDP_RESOURCE_DESCRIPTION_MAX_LENGTH = 500;
+
+/**
+ * CDP's live facilitator rejects v2 payment payloads whose copied resource
+ * description exceeds 500 characters. Fail at middleware construction so a
+ * marketing-copy change cannot leave discovery working while checkout fails.
+ */
+export function requireCdpResourceDescription(description: string): string {
+  if (
+    typeof description !== "string" ||
+    description.length === 0 ||
+    description.length > CDP_RESOURCE_DESCRIPTION_MAX_LENGTH
+  ) {
+    throw new Error(
+      `x402 resource descriptions must contain 1-${CDP_RESOURCE_DESCRIPTION_MAX_LENGTH} characters for CDP facilitator compatibility.`,
+    );
+  }
+  return description;
+}
 
 export interface X402ServerEnvironment {
   PAY_TO_ADDRESS?: string;

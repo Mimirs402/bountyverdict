@@ -12,6 +12,10 @@ import { harnessDiscoveryExtension } from "../src/harness-discovery.ts";
 import { skillDiscoveryExtension } from "../src/skill-discovery.ts";
 import { runDiscoveryExtension } from "../src/run-discovery.ts";
 import { flakeDiscoveryExtension } from "../src/flake-discovery.ts";
+import {
+  CDP_RESOURCE_DESCRIPTION_MAX_LENGTH,
+  requireCdpResourceDescription,
+} from "../src/x402-resource-server.ts";
 import app from "../src/index.ts";
 
 const crawlerEnv = {
@@ -20,6 +24,18 @@ const crawlerEnv = {
   X402_FACILITATOR_URL: "https://facilitator.invalid",
   FLAKE_RATE_LIMITER: { limit: async () => ({ success: true }) },
 };
+
+test("CDP facilitator resource descriptions enforce the live 500-character boundary", () => {
+  assert.equal(
+    requireCdpResourceDescription("a".repeat(CDP_RESOURCE_DESCRIPTION_MAX_LENGTH)).length,
+    CDP_RESOURCE_DESCRIPTION_MAX_LENGTH,
+  );
+  assert.throws(
+    () => requireCdpResourceDescription("a".repeat(CDP_RESOURCE_DESCRIPTION_MAX_LENGTH + 1)),
+    /1-500 characters/,
+  );
+  assert.throws(() => requireCdpResourceDescription(""), /1-500 characters/);
+});
 
 test("BountyVerdict canonical POST declaration passes Bazaar schema and protocol validation", () => {
   const extension = discoveryExtension.bazaar;
@@ -45,6 +61,7 @@ test("canonical BountyVerdict POST example survives preflight and returns a paya
   assert.ok(encoded);
   const challenge = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
   assert.equal(challenge.resource.url, "http://localhost/api/bounty-preflight");
+  assert.ok(challenge.resource.description.length <= CDP_RESOURCE_DESCRIPTION_MAX_LENGTH);
   assert.equal(challenge.extensions.bazaar.info.input.method, "POST");
   assert.equal(challenge.extensions.bazaar.info.input.bodyType, "json");
 });

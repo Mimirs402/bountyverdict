@@ -29,7 +29,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
     product: "single",
     service_id: "svc_5e36dabc8b434e95",
     name: "BountyVerdict",
-    description: "Is this public GitHub bounty worth pursuing? Check eligibility and claimability for one public issue before coding. Determine whether it is still open, already assigned or claimed, blocked by linked pull requests, or restricted by repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and bounded coverage. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
+    description: "Is this public GitHub bounty worth pursuing? Check live eligibility, reward provenance, and claimability before coding. Detect transferred or deleted issues, assignments, explicit soft locks, trusted Algora claim status, rewarded or unverified listings, competing pull requests, and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and explicit truncation. Documentation: https://cristianmoroaica.github.io/bountyverdict/agents.html",
     price: "$0.05",
     agent_price: "$0.053",
     tags: ["github", "bounty", "eligibility", "claimability", "due-diligence", "agent-decision"],

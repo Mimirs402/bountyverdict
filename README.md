@@ -88,7 +88,7 @@ Review the public [security policy](SECURITY.md) and [privacy/data-handling disc
 
 ## Free human bounty checker
 
-Visit [BountyVerdict](https://cristianmoroaica.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks issue and repository state, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
+Visit [BountyVerdict](https://cristianmoroaica.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks canonical/transferred issue state, assignments, explicit soft locks, trusted Algora status, reward provenance, rewarded labels, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
 
 ## Run locally
 
@@ -106,7 +106,7 @@ npm test
 
 ## Method and limits
 
-The score is deliberately conservative and deterministic. BountyVerdict currently reads up to 300 issue comments and the first and newest timeline pages. Very large threads may contain additional evidence it does not see. Anonymous GitHub API rate limits apply.
+The score is deliberately conservative and deterministic. BountyVerdict reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages. It reports total/scanned counts and truncation, and truncated evidence can never produce a `VIABLE` verdict. Anonymous GitHub API rate limits apply.
 
 Treat a `VIABLE` verdict as permission to investigate further—not permission to start coding. Reproduce the issue, read contribution and AI-use policies, confirm reward terms and payout eligibility, and establish acceptance criteria first.
 

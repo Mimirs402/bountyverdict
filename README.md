@@ -1,26 +1,19 @@
 # BountyVerdict Agent Decision APIs
 
-[![CI](https://github.com/cristianmoroaica/bountyverdict/actions/workflows/ci.yml/badge.svg)](https://github.com/cristianmoroaica/bountyverdict/actions/workflows/ci.yml) [![skills.sh](https://skills.sh/b/cristianmoroaica/bountyverdict)](https://skills.sh/cristianmoroaica/bountyverdict)
+[![CI](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml/badge.svg)](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml) [![legacy skills.sh placement](https://skills.sh/b/cristianmoroaica/bountyverdict)](https://skills.sh/cristianmoroaica/bountyverdict)
 
 Seven paid, bounded decision APIs for autonomous coding agents. Diagnose a failed GitHub Actions run, decide whether a failure is flaky, audit a third-party skill, check an agent instruction stack, compare GitHub bounties, or gate an MCP server upgrade. No account or API key is required; successful results are paid in Base USDC through x402.
 
 Install the router that selects the narrowest check and applies its payment safeguards:
 
 ```bash
-npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y
-```
-
-Or inspect and install the immutable v1.0.3 router with GitHub's native skill workflow:
-
-```bash
-gh skill preview cristianmoroaica/bountyverdict route-github-agent-checks@v1.0.3
-gh skill install cristianmoroaica/bountyverdict route-github-agent-checks --pin v1.0.3
+npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y
 ```
 
 GitHub Copilot CLI can install the repository as a plugin without a separate marketplace setup:
 
 ```bash
-copilot plugin install cristianmoroaica/bountyverdict
+copilot plugin install Mimirs402/bountyverdict
 ```
 
 That plugin exposes the five task-specific public GitHub, CI, and MCP workflow skills. SkillVerdict and the broad router remain separate least-privilege installs.
@@ -40,27 +33,27 @@ Then ask, for example:
 | Is this failure flaky: retry once or fix it? | FlakeVerdict | $0.07 | [`classify-github-flakes`](skills/classify-github-flakes/SKILL.md) |
 | Will an MCP tool-catalog change break the agent? | MCPDriftVerdict | $0.02 | [`check-mcp-tool-drift`](skills/check-mcp-tool-drift/SKILL.md) |
 
-Task-specific skills are the least-privilege path. Install all seven only when needed with `npx skills add cristianmoroaica/bountyverdict --skill '*' -y`.
+Task-specific skills are the least-privilege path. Install all seven only when needed with `npx skills add Mimirs402/bountyverdict --skill '*' -y`.
 
 For the six-tool remote MCP surface, install the task-first marketplace adapter directly from its public repository while directory indexing is pending:
 
 ```bash
-npx skills add cristianmoroaica/bountyverdict-mcp-skill --skill route-github-agent-decisions
+npx skills add Mimirs402/bountyverdict-mcp-skill --skill route-github-agent-decisions
 ```
 
 That adapter routes GitHub bounty, repository-readiness, GitHub Actions, flaky-retry, and MCP schema-drift requests to one exact tool, keeps SkillVerdict excluded, and uses a coarse source marker without storing prompts, tool arguments, or caller identities. A valid unsigned call is only a free payment preview; an x402-aware client must separately authorize the exact Base USDC amount before receiving a verdict.
 
-MCP-compatible agents can instead connect to the production Streamable HTTP server at `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`. It exposes six real paid tools matching the independently distributed products; SkillVerdict remains excluded from this channel. `tools/list` publishes task-selection boundaries, canonical input patterns, and compact machine-readable success contracts covering each verdict or action and its reuse rule. Invalid input is rejected before payment, while a valid selected tool returns an exact x402 USDC requirement. The official registry contract is [`server.json`](server.json) under `io.github.cristianmoroaica/bountyverdict`; its publisher metadata includes unbranded task keywords, use cases, prices, and result summaries so downstream MCP aggregators can index what each tool actually solves.
+MCP-compatible agents can instead connect to the production Streamable HTTP server at `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`. It exposes six real paid tools matching the independently distributed products; SkillVerdict remains excluded from this channel. `tools/list` publishes task-selection boundaries, canonical input patterns, and compact machine-readable success contracts covering each verdict or action and its reuse rule. Invalid input is rejected before payment, while a valid selected tool returns an exact x402 USDC requirement. The existing official Registry contract remains [`server.json`](server.json) under its legacy wire identifier `io.github.cristianmoroaica/bountyverdict`; source, support, and new installs are owned by [Mimir's Lab](https://github.com/Mimirs402/bountyverdict). Its publisher metadata includes unbranded task keywords, use cases, prices, and result summaries so downstream MCP aggregators can index what each tool actually solves.
 
 Use the client-specific [`llms-install.md`](llms-install.md) guide for Codex, Claude, Gemini, VS Code, Cursor, Cline, and Kilo. A remote MCP connection does not itself provide a wallet: direct automatic settlement requires an x402-aware MCP client, while standard hosts can use the versioned exact-HTTP handoff included in every valid unpaid tool response with a separately authorized x402 wallet.
 
 Agentic Resource Discovery crawlers can ingest the origin-owned [`ai-catalog.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json). It advertises the existing MCP server with six unbranded representative buyer queries for semantic retrieval; catalog fetches are measured separately from tool calls, payments, and purchases.
 
-For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP Server](https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html) guide compares the root-cause and flaky-retry tools, leads with the source-marked routing-adapter install, and publishes exact prices, free samples, typed outputs, and the mutation boundary.
+For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP Server](https://mimirs402.github.io/bountyverdict/mcp-github-actions-diagnosis.html) guide compares the root-cause and flaky-retry tools, leads with the source-marked routing-adapter install, and publishes exact prices, free samples, typed outputs, and the mutation boundary.
 
 ## Inspect before paying
 
-Every product has a free sample, a machine-readable OpenAPI contract, a declared price, and a successful-result `service_reuse` rule. Invalid inputs and upstream failures are not settled. Start with the [agent page](https://cristianmoroaica.github.io/bountyverdict/agents.html), [`agent-manifest.json`](agent-manifest.json), the production [`openapi.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json), or the remote MCP server above.
+Every product has a free sample, a machine-readable OpenAPI contract, a declared price, and a successful-result `service_reuse` rule. Invalid inputs and upstream failures are not settled. Start with the [agent page](https://mimirs402.github.io/bountyverdict/agents.html), [`agent-manifest.json`](agent-manifest.json), the production [`openapi.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json), or the remote MCP server above.
 
 The bounty samples are captured from real public issues rather than invented fixtures: the [single-check sample](samples/verdict.json) rejects an assigned, withdrawn, and maintainer-rejected TypeORM bounty, while the [portfolio sample](samples/portfolio.json) refuses to recommend either it or an open but already-assigned Tenstorrent `$1,500` bounty. Use the `$0.05` single check for one candidate; the fixed `$0.40` portfolio is economical for 8–10 candidates or when one ranked, partial-failure-aware response materially simplifies the workflow.
 
@@ -88,7 +81,7 @@ Review the public [security policy](SECURITY.md) and [privacy/data-handling disc
 
 ## Free human bounty checker
 
-Visit [BountyVerdict](https://cristianmoroaica.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks canonical/transferred issue state, assignments, explicit soft locks, trusted Algora status, reward provenance, rewarded labels, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
+Visit [BountyVerdict](https://mimirs402.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks canonical/transferred issue state, assignments, explicit soft locks, trusted Algora status, reward provenance, rewarded labels, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
 
 ## Run locally
 

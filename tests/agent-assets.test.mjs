@@ -321,7 +321,7 @@ test("human landing page links directly to the measurable router funnel", async 
 
 test("canonical README exposes the direct six-tool marketplace adapter before raw MCP setup", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-  const adapter = "npx skills add cristianmoroaica/bountyverdict-mcp-skill --skill route-github-agent-decisions";
+  const adapter = "npx skills add Mimirs402/bountyverdict-mcp-skill --skill route-github-agent-decisions";
   const rawEndpoint = "MCP-compatible agents can instead connect to the production Streamable HTTP server";
   assert.match(readme, new RegExp(adapter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.ok(readme.indexOf(adapter) < readme.indexOf(rawEndpoint));

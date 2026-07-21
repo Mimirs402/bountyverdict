@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ASKILL_BUYER_LANGUAGE_DESCRIPTION,
+  ASKILL_DEDICATED_IDENTITY,
+  ASKILL_DEDICATED_INSTALL_REF,
+  ASKILL_DEDICATED_OWNER,
+  ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
   ASKILL_FILE_PATH,
   ASKILL_BUYER_QUERIES,
   ASKILL_INSTALL_REF,
@@ -83,6 +87,30 @@ test("recognizes only the exact askill adapter listing", () => {
     buyer_language_revision_live: false,
     adapter_revision_live: false,
     status: "listed_pending_content_refresh",
+  });
+});
+
+test("tracks the dedicated Mimir's Lab askill listing without merging legacy telemetry", () => {
+  const dedicated = {
+    ...exactEntry,
+    id: 703722,
+    owner: ASKILL_DEDICATED_OWNER,
+    repoOwner: ASKILL_DEDICATED_OWNER,
+    installRef: ASKILL_DEDICATED_INSTALL_REF,
+    updatedAt: ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
+    lastPushed: ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
+  };
+  const combined = payload([dedicated, exactEntry]);
+  const parsed = parseAskillSearchPayload(combined, ASKILL_DEDICATED_IDENTITY);
+  assert.equal(parsed.listed, true);
+  assert.equal(parsed.entry_id, 703722);
+  assert.equal(parsed.install_source, ASKILL_DEDICATED_INSTALL_REF);
+  assert.equal(parsed.status, "listed");
+  assert.equal(parseAskillSearchPayload(payload([dedicated])).listed, false);
+  assert.deepEqual(parseAskillBuyerQueryPayload(combined, ASKILL_DEDICATED_IDENTITY), {
+    found: true,
+    rank: 1,
+    returned_results: 2,
   });
 });
 

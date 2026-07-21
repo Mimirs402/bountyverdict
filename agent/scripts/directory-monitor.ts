@@ -19,8 +19,11 @@ import { parseAgentSkillsInSearchPayload } from "../src/agentskills-in.ts";
 import { parseSkillsMdSearchPayload } from "../src/skillsmd.ts";
 import {
   ASKILL_BUYER_QUERIES,
+  ASKILL_DEDICATED_IDENTITY,
+  ASKILL_LEGACY_IDENTITY,
   parseAskillBuyerQueryPayload,
   parseAskillSearchPayload,
+  type AskillIdentity,
 } from "../src/askill.ts";
 import {
   parseAgentFinderCatalogEntry,
@@ -101,6 +104,30 @@ const askillSearchUrl = "https://askill.sh/api/v1/skills?q=route-github-agent-de
 const askillSubmittedAt = "2026-07-21T10:42:45.083Z";
 const askillRefreshRecordedAt = "2026-07-21T16:00:14Z";
 const askillRefreshResult = "existing_skill_skipped_zero_indexed";
+const askillDedicatedSearchUrl = "https://askill.sh/api/v1/skills?q=route-github-agent-decisions&owner=Mimirs402&repo=bountyverdict-mcp-skill&limit=20";
+const askillDedicatedSubmittedAt = "2026-07-21T21:37:35.000Z";
+const askillLegacyMonitor = Object.freeze({
+  searchUrl: askillSearchUrl,
+  submittedAt: askillSubmittedAt,
+  identity: ASKILL_LEGACY_IDENTITY,
+  submission: {
+    submitted_at: askillSubmittedAt,
+    indexed: true,
+    refresh_recorded_at: askillRefreshRecordedAt,
+    refresh_result: askillRefreshResult,
+  },
+});
+const askillDedicatedMonitor = Object.freeze({
+  searchUrl: askillDedicatedSearchUrl,
+  submittedAt: askillDedicatedSubmittedAt,
+  identity: ASKILL_DEDICATED_IDENTITY,
+  submission: {
+    submitted_at: askillDedicatedSubmittedAt,
+    indexed: true,
+    entry_id: 703722,
+    repository: "Mimirs402/bountyverdict-mcp-skill",
+  },
+});
 const agentSkillsMdSubmissionRecordedAt = "2026-07-21T15:54:20Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
@@ -2287,33 +2314,34 @@ async function skillsMdStatus(
 async function askillStatus(
   previousStatus: Record<string, any>,
   observedAt: string,
+  monitor: Readonly<{
+    searchUrl: string;
+    submittedAt: string;
+    identity: AskillIdentity;
+    submission: Readonly<Record<string, unknown>>;
+  }> = askillLegacyMonitor,
 ): Promise<Record<string, unknown>> {
   try {
-    const response = await fetch(askillSearchUrl, {
+    const response = await fetch(monitor.searchUrl, {
       headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       return {
         url: "https://askill.sh/",
-        search_url: askillSearchUrl,
+        search_url: monitor.searchUrl,
         http_status: response.status,
         listed: false,
         listed_skills: 0,
         expected_skills: 1,
         status: "catalog_unavailable",
-        submission: {
-          submitted_at: askillSubmittedAt,
-          indexed: true,
-          refresh_recorded_at: askillRefreshRecordedAt,
-          refresh_result: askillRefreshResult,
-        },
-        exposed_at: previousStatus.exposed_at || askillSubmittedAt,
+        submission: monitor.submission,
+        exposed_at: previousStatus.exposed_at || monitor.submittedAt,
         catalog_error: `askill search returned HTTP ${response.status}.`,
         measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
       };
     }
-    const catalog = parseAskillSearchPayload(await response.json());
+    const catalog = parseAskillSearchPayload(await response.json(), monitor.identity);
     const listed = catalog.listed === true;
     let buyerQueryBenchmark: Record<string, unknown>;
     try {
@@ -2326,7 +2354,7 @@ async function askillStatus(
           signal: AbortSignal.timeout(timeoutMs),
         });
         if (!queryResponse.ok) throw new Error(`askill buyer query returned HTTP ${queryResponse.status}.`);
-        return { query, ...parseAskillBuyerQueryPayload(await queryResponse.json()) };
+        return { query, ...parseAskillBuyerQueryPayload(await queryResponse.json(), monitor.identity) };
       }));
       const found = queryResults.filter((result) => result.found === true);
       buyerQueryBenchmark = {
@@ -2347,34 +2375,24 @@ async function askillStatus(
     }
     return {
       url: listed ? catalog.listing_url : "https://askill.sh/",
-      search_url: askillSearchUrl,
+      search_url: monitor.searchUrl,
       http_status: response.status,
       ...catalog,
-      submission: {
-        submitted_at: askillSubmittedAt,
-        indexed: true,
-        refresh_recorded_at: askillRefreshRecordedAt,
-        refresh_result: askillRefreshResult,
-      },
+      submission: monitor.submission,
       buyer_query_benchmark: buyerQueryBenchmark,
-      exposed_at: listed ? previousStatus.exposed_at || askillSubmittedAt : null,
+      exposed_at: listed ? previousStatus.exposed_at || monitor.submittedAt : null,
       measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   } catch (error) {
     return {
       url: "https://askill.sh/",
-      search_url: askillSearchUrl,
+      search_url: monitor.searchUrl,
       listed: false,
       listed_skills: 0,
       expected_skills: 1,
       status: "catalog_request_failed",
-      submission: {
-        submitted_at: askillSubmittedAt,
-        indexed: true,
-        refresh_recorded_at: askillRefreshRecordedAt,
-        refresh_result: askillRefreshResult,
-      },
-      exposed_at: previousStatus.exposed_at || askillSubmittedAt,
+      submission: monitor.submission,
+      exposed_at: previousStatus.exposed_at || monitor.submittedAt,
       error: error instanceof Error ? error.message : String(error),
       measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
@@ -2610,6 +2628,7 @@ const [
   agentSkillsIn,
   skillsMd,
   askill,
+  askillDedicated,
   agentSkillsMd,
 ] = await Promise.all([
   skillsShStatus(),
@@ -2651,6 +2670,7 @@ const [
   agentSkillsInStatus(previous.agent_skills_in || {}, new Date().toISOString()),
   skillsMdStatus(previous.skills_md || {}, new Date().toISOString()),
   askillStatus(previous.askill || {}, new Date().toISOString()),
+  askillStatus(previous.askill_dedicated || {}, new Date().toISOString(), askillDedicatedMonitor),
   agentSkillsMdStatus(previous.agent_skills_md || {}, new Date().toISOString()),
 ]);
 if (Number(x402scan.listed_resources || 0) > 0) {
@@ -2849,6 +2869,7 @@ const state = {
   agent_skills_in: agentSkillsIn,
   skills_md: skillsMd,
   askill,
+  askill_dedicated: askillDedicated,
   agent_skills_md: agentSkillsMd,
   github_skill: githubSkill,
   security_directory_pr: securityDirectoryPr,

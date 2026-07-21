@@ -8,6 +8,11 @@ export const ASKILL_INSTALL_REF = `gh:${ASKILL_REPOSITORY}@${ASKILL_SKILL_NAME}`
 export const ASKILL_BUYER_LANGUAGE_DESCRIPTION =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
 export const ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-21T15:51:34.000Z";
+export const ASKILL_DEDICATED_REPOSITORY = "Mimirs402/bountyverdict-mcp-skill";
+export const ASKILL_DEDICATED_OWNER = "Mimirs402";
+export const ASKILL_DEDICATED_INSTALL_REF =
+  `gh:${ASKILL_DEDICATED_REPOSITORY}@${ASKILL_SKILL_NAME}`;
+export const ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-21T21:37:35.000Z";
 export const ASKILL_BUYER_QUERIES = Object.freeze([
   "github actions root cause",
   "should I retry failed github action",
@@ -29,6 +34,27 @@ export type AskillBuyerQueryResult = {
   returned_results: number;
 };
 
+export type AskillIdentity = Readonly<{
+  owner: string;
+  repo: string;
+  installRef: string;
+  requiredAdapterRevisionPushedAt: string;
+}>;
+
+export const ASKILL_LEGACY_IDENTITY: AskillIdentity = Object.freeze({
+  owner: ASKILL_OWNER,
+  repo: ASKILL_REPO,
+  installRef: ASKILL_INSTALL_REF,
+  requiredAdapterRevisionPushedAt: ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
+});
+
+export const ASKILL_DEDICATED_IDENTITY: AskillIdentity = Object.freeze({
+  owner: ASKILL_DEDICATED_OWNER,
+  repo: ASKILL_REPO,
+  installRef: ASKILL_DEDICATED_INSTALL_REF,
+  requiredAdapterRevisionPushedAt: ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
+});
+
 function boundedString(value: unknown, label: string, maximum = 2_000): string {
   if (typeof value !== "string" || value.length === 0 || value.length > maximum) {
     throw new Error(`askill ${label} is malformed.`);
@@ -49,7 +75,10 @@ function optionalScore(value: unknown, label: string): number | null {
   return value;
 }
 
-export function parseAskillSearchPayload(value: unknown): Record<string, unknown> {
+export function parseAskillSearchPayload(
+  value: unknown,
+  identity: AskillIdentity = ASKILL_LEGACY_IDENTITY,
+): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("askill returned a malformed search payload.");
   }
@@ -69,7 +98,7 @@ export function parseAskillSearchPayload(value: unknown): Record<string, unknown
       throw new Error("askill returned a malformed skill entry.");
     }
     const entry = value as Record<string, unknown>;
-    return entry.repoOwner === ASKILL_OWNER && entry.repoName === ASKILL_REPO;
+    return entry.repoOwner === identity.owner && entry.repoName === identity.repo;
   }) as Array<Record<string, unknown>>;
   if (repositoryEntries.length > 1) throw new Error("askill duplicated the adapter listing.");
 
@@ -89,7 +118,7 @@ export function parseAskillSearchPayload(value: unknown): Record<string, unknown
   }
   const exact = boundedString(entry.name, "name", 200) === ASKILL_SKILL_NAME &&
     boundedString(entry.skillName, "skill name", 200) === ASKILL_SKILL_NAME &&
-    boundedString(entry.installRef, "install reference", 500) === ASKILL_INSTALL_REF &&
+    boundedString(entry.installRef, "install reference", 500) === identity.installRef &&
     boundedString(entry.path, "path", 500) === ASKILL_PATH &&
     boundedString(entry.filePath, "file path", 500) === ASKILL_FILE_PATH &&
     entry.nameUniqueInRepo === true && entry.source === "submit";
@@ -109,7 +138,7 @@ export function parseAskillSearchPayload(value: unknown): Record<string, unknown
   if (!Number.isFinite(Date.parse(updatedAt))) throw new Error("askill updated timestamp is malformed.");
   if (!Number.isFinite(Date.parse(lastPushed))) throw new Error("askill last-pushed timestamp is malformed.");
   const buyerLanguageRevisionLive = description === ASKILL_BUYER_LANGUAGE_DESCRIPTION;
-  const adapterRevisionLive = Date.parse(lastPushed) >= Date.parse(ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT);
+  const adapterRevisionLive = Date.parse(lastPushed) >= Date.parse(identity.requiredAdapterRevisionPushedAt);
   return {
     listed: true,
     listed_skills: 1,
@@ -117,7 +146,7 @@ export function parseAskillSearchPayload(value: unknown): Record<string, unknown
     catalog_total: Number(pagination.total),
     entry_id: id,
     listing_url: `https://askill.sh/skills/${id}`,
-    install_source: ASKILL_INSTALL_REF,
+    install_source: identity.installRef,
     favorites: counter(entry.favoriteCount, "favorite count"),
     repository_stars: counter(entry.stars, "repository stars"),
     ai_score: optionalScore(entry.aiScore, "AI score"),
@@ -127,12 +156,15 @@ export function parseAskillSearchPayload(value: unknown): Record<string, unknown
     last_pushed: lastPushed,
     buyer_language_revision_live: buyerLanguageRevisionLive,
     adapter_revision_live: adapterRevisionLive,
-    required_adapter_revision_pushed_at: ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
+    required_adapter_revision_pushed_at: identity.requiredAdapterRevisionPushedAt,
     status: buyerLanguageRevisionLive && adapterRevisionLive ? "listed" : "listed_pending_content_refresh",
   };
 }
 
-export function parseAskillBuyerQueryPayload(value: unknown): AskillBuyerQueryResult {
+export function parseAskillBuyerQueryPayload(
+  value: unknown,
+  identity: AskillIdentity = ASKILL_LEGACY_IDENTITY,
+): AskillBuyerQueryResult {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("askill returned a malformed buyer-query payload.");
   }
@@ -152,8 +184,8 @@ export function parseAskillBuyerQueryPayload(value: unknown): AskillBuyerQueryRe
       throw new Error("askill returned a malformed buyer-query entry.");
     }
     const entry = value as Record<string, unknown>;
-    if (entry.installRef === ASKILL_INSTALL_REF) {
-      if (entry.repoOwner !== ASKILL_OWNER || entry.repoName !== ASKILL_REPO || entry.name !== ASKILL_SKILL_NAME ||
+    if (entry.installRef === identity.installRef) {
+      if (entry.repoOwner !== identity.owner || entry.repoName !== identity.repo || entry.name !== ASKILL_SKILL_NAME ||
         entry.path !== ASKILL_PATH || entry.filePath !== ASKILL_FILE_PATH) {
         throw new Error("askill buyer-query target contract drifted.");
       }

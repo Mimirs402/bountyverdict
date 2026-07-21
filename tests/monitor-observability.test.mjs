@@ -42,3 +42,13 @@ test("distribution monitoring treats Payan demand state as a funnel and receipts
   assert.match(distribution, /\["direct", "escrow_release"\]/);
   assert.match(distribution, /Payan exact-fit demand capture/);
 });
+
+test("directory monitoring separates Awesome Copilot review and catalog presence from demand", async () => {
+  const directory = await readFile(directoryMonitorUrl, "utf8");
+  const distribution = await readFile(distributionUrl, "utf8");
+  assert.match(directory, /async function awesomeCopilotStatus/);
+  assert.match(directory, /submission_review_and_default_catalog_presence_not_impressions_installs_or_purchases/);
+  assert.match(directory, /issues\/2369/);
+  assert.match(distribution, /Awesome Copilot default marketplace/);
+  assert.match(distribution, /default-marketplace presence is not an impression, install, or purchase/);
+});

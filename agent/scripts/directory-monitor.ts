@@ -16,6 +16,8 @@ const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-ski
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
 const agentPluginsCatalogUrl = "https://cdn.jsdelivr.net/gh/dmgrok/agent-plugins@main/catalog.json";
+const awesomeCopilotIssueUrl = "https://github.com/github/awesome-copilot/issues/2369";
+const awesomeCopilotCatalogUrl = "https://raw.githubusercontent.com/github/awesome-copilot/main/plugins/external.json";
 const x402ScoutUrl = "https://x402scout.com/catalog";
 const agent402Api = "https://agent402.tools/api";
 const productionOrigin = "https://bountyverdict-agent-production.mimirslab.workers.dev";
@@ -184,6 +186,66 @@ async function agentPluginsCatalogStatus(): Promise<Record<string, unknown>> {
       maintenance_status,
     })),
     measurement: "catalog_presence_and_quality_metadata_not_impressions_installs_or_purchases",
+  };
+}
+
+async function awesomeCopilotStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  const [{ stdout: issueOutput }, catalogResponse] = await Promise.all([
+    execFileAsync("gh", [
+      "issue", "view", "2369",
+      "--repo", "github/awesome-copilot",
+      "--json", "number,title,state,labels,createdAt,updatedAt,closedAt,url",
+    ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
+    fetch(awesomeCopilotCatalogUrl, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      signal: AbortSignal.timeout(timeoutMs),
+    }),
+  ]);
+  if (!catalogResponse.ok) throw new Error(`Awesome Copilot catalog returned HTTP ${catalogResponse.status}.`);
+  const issue = JSON.parse(issueOutput) as Record<string, any>;
+  const catalog = await catalogResponse.json() as unknown;
+  if (issue.number !== 2369 || issue.url !== awesomeCopilotIssueUrl || !Array.isArray(issue.labels) ||
+    !Array.isArray(catalog)) {
+    throw new Error("Awesome Copilot returned malformed review or catalog telemetry.");
+  }
+  const labels = issue.labels.map((label: Record<string, unknown>) => String(label.name || "")).filter(Boolean).sort();
+  const matching = (catalog as Array<Record<string, any>>).filter((entry) =>
+    entry.name === "bountyverdict" && entry.source?.source === "github" &&
+    entry.source?.repo === "cristianmoroaica/bountyverdict"
+  );
+  if (matching.length > 1) throw new Error("Awesome Copilot catalog duplicated BountyVerdict.");
+  const listed = matching.length === 1;
+  const reviewStatus = listed || labels.includes("approved")
+    ? "approved"
+    : labels.includes("ready-for-review")
+      ? "ready_for_review"
+      : labels.includes("requires-submitter-fixes")
+        ? "requires_submitter_fixes"
+        : labels.includes("rejected")
+          ? "rejected"
+          : labels.includes("awaiting-review")
+            ? "awaiting_review"
+            : issue.state === "CLOSED"
+              ? "closed_without_catalog_entry"
+              : "submitted_awaiting_intake";
+  return {
+    url: awesomeCopilotIssueUrl,
+    catalog_url: "https://github.com/github/awesome-copilot/blob/main/plugins/external.json",
+    issue_state: issue.state,
+    issue_labels: labels,
+    issue_created_at: issue.createdAt,
+    issue_updated_at: issue.updatedAt,
+    issue_closed_at: issue.closedAt,
+    review_status: reviewStatus,
+    automated_intake_passed: labels.includes("ready-for-review") || labels.includes("approved") || listed,
+    listed,
+    listed_version: listed ? matching[0].version : null,
+    listed_source_sha: listed ? matching[0].source?.sha || null : null,
+    exposed_at: listed ? previousStatus.exposed_at || observedAt : null,
+    measurement: "submission_review_and_default_catalog_presence_not_impressions_installs_or_purchases",
   };
 }
 
@@ -789,6 +851,7 @@ const [
   x402DirectoryPr,
   agentPluginsPr,
   agentPluginsCatalog,
+  awesomeCopilot,
   agent402,
   x402scout,
   x402scan,
@@ -804,6 +867,7 @@ const [
   githubPrStatus("xpaysh", "awesome-x402", 934, x402DirectoryPrUrl),
   githubPrStatus("dmgrok", "agent-plugins", 97, agentPluginsPrUrl),
   agentPluginsCatalogStatus(),
+  awesomeCopilotStatus(previous.awesome_copilot || {}, new Date().toISOString()),
   agent402Status(),
   x402ScoutStatus(),
   x402ScanStatus(),
@@ -865,6 +929,7 @@ const state = {
   x402_directory_pr: x402DirectoryPr,
   agent_plugins_pr: agentPluginsPr,
   agent_plugins_catalog: agentPluginsCatalog,
+  awesome_copilot: awesomeCopilot,
   agent402,
   x402scout,
   x402scan,

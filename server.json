@@ -3,7 +3,7 @@
   "name": "io.github.cristianmoroaica/bountyverdict",
   "title": "BountyVerdict Agent Decision Tools",
   "description": "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "icons": [
     {
       "src": "https://cristianmoroaica.github.io/bountyverdict/favicon.svg",
@@ -49,12 +49,12 @@
         "Gate an MCP tools/list update for compatibility and safety regressions"
       ],
       "tools": [
-        { "name": "check_github_bounty", "price": "$0.05 USDC", "task": "Assess one bounty's claimability and delivery risk" },
-        { "name": "rank_github_bounties", "price": "$0.40 USDC", "task": "Choose the best of 2-10 bounty issues" },
-        { "name": "audit_agent_harness", "price": "$0.03 USDC", "task": "Audit coding-agent repository instructions" },
-        { "name": "diagnose_github_actions_run", "price": "$0.04 USDC", "task": "Find why a GitHub Actions run failed" },
-        { "name": "classify_github_actions_flake", "price": "$0.07 USDC", "task": "Decide whether to retry once or fix" },
-        { "name": "check_mcp_tool_drift", "price": "$0.02 USDC", "task": "Detect breaking MCP tool-catalog changes" }
+        { "name": "check_github_bounty", "price": "$0.05 USDC", "task": "Assess one bounty's claimability and delivery risk", "returns": "AVOID, CAUTION, or VIABLE with evidence and reuse guidance" },
+        { "name": "rank_github_bounties", "price": "$0.40 USDC", "task": "Choose the best of 2-10 bounty issues", "returns": "Ranked verdicts, best candidate, partial failures, and reuse guidance" },
+        { "name": "audit_agent_harness", "price": "$0.03 USDC", "task": "Audit coding-agent repository instructions", "returns": "READY, REVIEW, or REPAIR with commit-pinned findings" },
+        { "name": "diagnose_github_actions_run", "price": "$0.04 USDC", "task": "Find why a GitHub Actions run failed", "returns": "Root-cause verdict, redacted evidence, and next actions" },
+        { "name": "classify_github_actions_flake", "price": "$0.07 USDC", "task": "Decide whether to retry once or fix", "returns": "Flake verdict and ONCE, NO, or NOT_NEEDED retry action" },
+        { "name": "check_mcp_tool_drift", "price": "$0.02 USDC", "task": "Detect breaking MCP tool-catalog changes", "returns": "Compatibility verdict, accept or block action, and exact hashes" }
       ]
     }
   }

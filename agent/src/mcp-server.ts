@@ -11,18 +11,24 @@ import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
 import { MCP_DRIFT_MAX_BODY_BYTES, McpDriftError, parseAndAnalyzeMcpDrift } from "./mcp-drift.ts";
 import { mcpDriftInputSchema } from "./mcp-drift-discovery.ts";
+import { MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
 
 const MCP_PROTOCOL_VERSION = "2025-11-25";
 const MCP_BODY_LIMIT_BYTES = MCP_DRIFT_MAX_BODY_BYTES + 64 * 1024;
-const MCP_SERVER_VERSION = "1.0.1";
+const MCP_SERVER_VERSION = "1.1.0";
 const MCP_ALLOWED_BROWSER_ORIGINS = new Set(["https://playground.ai.cloudflare.com"]);
 const GITHUB_ISSUE_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/;
 const GITHUB_REPOSITORY_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
 const GITHUB_RUN_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9]\d*\/?$/;
 const MCP_SERVER_ID_PATTERN = /^[A-Za-z0-9._:/@+~-]{1,256}$/;
 const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
+const ISSUE_URL_DESCRIPTION = "Canonical public GitHub issue URL, for example https://github.com/owner/repository/issues/123. No query string, fragment, pull request, or non-GitHub host.";
+const REPOSITORY_URL_DESCRIPTION = "Canonical public GitHub repository URL, for example https://github.com/owner/repository. No subpath, query string, fragment, or non-GitHub host.";
+const RUN_URL_DESCRIPTION = "Canonical public GitHub Actions run URL, for example https://github.com/owner/repository/actions/runs/123456. No job URL, query string, fragment, or non-GitHub host.";
+const PORTFOLIO_URLS_DESCRIPTION = "Two to ten distinct canonical public GitHub issue URLs. Duplicate issue URLs are rejected before payment.";
+const FLAKE_ATTEMPT_DESCRIPTION = "Optional exact workflow run attempt number, starting at 1. Omit to use the run URL's latest available completed attempt.";
 
 type DistributedProduct = Exclude<ProductKey, "skill">;
 type ToolResult = {
@@ -76,28 +82,28 @@ const TOOL_PRODUCT = Object.freeze({
 type ToolName = keyof typeof TOOL_PRODUCT;
 
 const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
-  check_github_bounty: "Use for one public GitHub bounty issue before coding: assess claimability and delivery risk with an evidence-linked AVOID, CAUTION, or VIABLE verdict. For choosing among 2-10 bounties, use rank_github_bounties instead. Read-only. Costs $0.05 USDC on Base via x402 per successful call.",
-  rank_github_bounties: "Use to choose the best candidate from 2-10 distinct public GitHub bounty issues. Returns full verdicts, evidence, ranking, and partial failures. For one issue, use check_github_bounty instead. Read-only. Costs $0.40 USDC on Base via x402 per successful call.",
-  audit_agent_harness: "Use before assigning a coding agent to a public GitHub repository: audit its AGENTS.md, CLAUDE.md, GEMINI.md, Copilot, Cursor, and SKILL.md instruction stack at an immutable commit. This does not diagnose CI runs. Read-only. Costs $0.03 USDC on Base via x402 per successful call.",
-  diagnose_github_actions_run: "Use to find the root cause of one public failed GitHub Actions run and get redacted evidence plus concrete next actions. For the narrower retry-once-versus-fix decision using history, use classify_github_actions_flake. Read-only. Costs $0.04 USDC on Base via x402 per successful call.",
-  classify_github_actions_flake: "Use when the question is whether one completed failed GitHub Actions run should be retried once or fixed, using attempt and historical fingerprints. For general root-cause diagnosis, use diagnose_github_actions_run. Read-only. Costs $0.07 USDC on Base via x402 per successful call.",
-  check_mcp_tool_drift: "Use before accepting an MCP tools/list update: compare complete baseline and current snapshots for removed tools, new required arguments, incompatible schemas, and model-facing safety-hint regressions. Returns a deterministic compatibility verdict without fetching or invoking tools. Read-only. Costs $0.02 USDC on Base via x402 per successful call.",
+  check_github_bounty: "Use for one public GitHub bounty issue before coding: assess claimability and delivery risk with an evidence-linked AVOID, CAUTION, or VIABLE verdict. For choosing among 2-10 bounties, use rank_github_bounties instead. Call for every distinct candidate and again after issue activity changes. Read-only. Costs $0.05 USDC on Base via x402 per successful call.",
+  rank_github_bounties: "Use to choose the best candidate from 2-10 distinct public GitHub bounty issues. Returns full verdicts, evidence, ranking, and partial failures. For one issue, use check_github_bounty instead. Call again whenever the candidate set or issue activity changes. Read-only. Costs $0.40 USDC on Base via x402 per successful call.",
+  audit_agent_harness: "Use before assigning a coding agent to a public GitHub repository: audit its AGENTS.md, CLAUDE.md, GEMINI.md, Copilot, Cursor, and SKILL.md instruction stack at an immutable commit. This does not diagnose CI runs. Call for each repository and again after its default-branch commit changes. Read-only. Costs $0.03 USDC on Base via x402 per successful call.",
+  diagnose_github_actions_run: "Use to find the root cause of one public failed GitHub Actions run and get redacted evidence plus concrete next actions. For the narrower retry-once-versus-fix decision using history, use classify_github_actions_flake. Call for each failed run or new attempt that needs diagnosis. Read-only. Costs $0.04 USDC on Base via x402 per successful call.",
+  classify_github_actions_flake: "Use when the question is whether one completed failed GitHub Actions run should be retried once or fixed, using attempt and historical fingerprints. For general root-cause diagnosis, use diagnose_github_actions_run. Call before each retry decision and again after a new attempt appears. Read-only. Costs $0.07 USDC on Base via x402 per successful call.",
+  check_mcp_tool_drift: "Use before accepting an MCP tools/list update: compare complete baseline and current snapshots for removed tools, new required arguments, incompatible schemas, and model-facing safety-hint regressions. Returns a deterministic compatibility verdict without fetching or invoking tools. Call for every proposed catalog upgrade or changed snapshot hash. Read-only. Costs $0.02 USDC on Base via x402 per successful call.",
 };
 
 const issueUrlSchema = z.string()
   .regex(GITHUB_ISSUE_URL_PATTERN)
-  .describe("Canonical public GitHub issue URL, for example https://github.com/owner/repository/issues/123. No query string, fragment, pull request, or non-GitHub host.");
+  .describe(ISSUE_URL_DESCRIPTION);
 const repositoryUrlSchema = z.string()
   .regex(GITHUB_REPOSITORY_URL_PATTERN)
-  .describe("Canonical public GitHub repository URL, for example https://github.com/owner/repository. No subpath, query string, fragment, or non-GitHub host.");
+  .describe(REPOSITORY_URL_DESCRIPTION);
 const runUrlSchema = z.string()
   .regex(GITHUB_RUN_URL_PATTERN)
-  .describe("Canonical public GitHub Actions run URL, for example https://github.com/owner/repository/actions/runs/123456. No job URL, query string, fragment, or non-GitHub host.");
+  .describe(RUN_URL_DESCRIPTION);
 const portfolioUrlsSchema = z.array(issueUrlSchema)
   .min(2)
   .max(10)
   .refine((urls) => new Set(urls).size === urls.length, "Every issue URL must be unique.")
-  .describe("Two to ten distinct canonical public GitHub issue URLs. Duplicate issue URLs are rejected before payment.");
+  .describe(PORTFOLIO_URLS_DESCRIPTION);
 const jsonSchemaObject = z.record(z.unknown())
   .describe("A bounded JSON Schema Draft 2020-12 object in MCPDriftVerdict's documented comparison subset.");
 const mcpToolSchema = z.object({
@@ -135,11 +141,11 @@ const mcpDriftLiveInputSchema = z.object({
 }).strict();
 
 const BAZAAR_INPUT_SCHEMAS: Record<ToolName, Record<string, unknown>> = {
-  check_github_bounty: { type: "object", properties: { issue_url: { type: "string", description: "Public GitHub issue URL." } }, required: ["issue_url"], additionalProperties: false },
-  rank_github_bounties: { type: "object", properties: { issue_urls: { type: "array", minItems: 2, maxItems: 10, uniqueItems: true, items: { type: "string", description: "Public GitHub issue URL." } } }, required: ["issue_urls"], additionalProperties: false },
-  audit_agent_harness: { type: "object", properties: { repo_url: { type: "string", description: "Public GitHub repository URL." } }, required: ["repo_url"], additionalProperties: false },
-  diagnose_github_actions_run: { type: "object", properties: { run_url: { type: "string", description: "Public GitHub Actions run URL." } }, required: ["run_url"], additionalProperties: false },
-  classify_github_actions_flake: { type: "object", properties: { run_url: { type: "string", description: "Public GitHub Actions run URL." }, attempt: { type: "integer", minimum: 1, description: "Optional exact workflow attempt." } }, required: ["run_url"], additionalProperties: false },
+  check_github_bounty: { type: "object", properties: { issue_url: { type: "string", pattern: GITHUB_ISSUE_URL_PATTERN.source, description: ISSUE_URL_DESCRIPTION } }, required: ["issue_url"], additionalProperties: false },
+  rank_github_bounties: { type: "object", properties: { issue_urls: { type: "array", minItems: 2, maxItems: 10, uniqueItems: true, description: PORTFOLIO_URLS_DESCRIPTION, items: { type: "string", pattern: GITHUB_ISSUE_URL_PATTERN.source, description: ISSUE_URL_DESCRIPTION } } }, required: ["issue_urls"], additionalProperties: false },
+  audit_agent_harness: { type: "object", properties: { repo_url: { type: "string", pattern: GITHUB_REPOSITORY_URL_PATTERN.source, description: REPOSITORY_URL_DESCRIPTION } }, required: ["repo_url"], additionalProperties: false },
+  diagnose_github_actions_run: { type: "object", properties: { run_url: { type: "string", pattern: GITHUB_RUN_URL_PATTERN.source, description: RUN_URL_DESCRIPTION } }, required: ["run_url"], additionalProperties: false },
+  classify_github_actions_flake: { type: "object", properties: { run_url: { type: "string", pattern: GITHUB_RUN_URL_PATTERN.source, description: RUN_URL_DESCRIPTION }, attempt: { type: "integer", minimum: 1, description: FLAKE_ATTEMPT_DESCRIPTION } }, required: ["run_url"], additionalProperties: false },
   check_mcp_tool_drift: mcpDriftInputSchema,
 };
 
@@ -153,10 +159,19 @@ function jsonResult(value: unknown): ToolResult {
 }
 
 function errorResult(product: DistributedProduct, code: string, message: string): ToolResult {
+  const body = { error: code, message, product: PRODUCT_CATALOG[product].service, payment_verified: false, payment_settled: false, payment_challenge_issued: false };
   return {
-    ...jsonResult({ error: code, message, product: PRODUCT_CATALOG[product].service, payment_verified: false, payment_settled: false, payment_challenge_issued: false }),
+    content: [{ type: "text", text: JSON.stringify(body) }],
     isError: true,
   };
+}
+
+function omitStructuredContentFromError(result: ToolResult): ToolResult {
+  if (!result.isError || result.structuredContent === undefined) return result;
+  // SDK 1.29 clients validate error structuredContent against the success schema.
+  // x402 requires the identical JSON text fallback, so keep that and omit only this field.
+  const { structuredContent: _structuredContent, ...compatible } = result;
+  return compatible;
 }
 
 export function classifyMcpClientFamily(value: unknown, ownerAutomation = false): McpClientFamily {
@@ -251,7 +266,7 @@ async function paidCall(
       const settled = Boolean(result._meta?.["x402/payment-response"]);
       emitMcpEvent(settled && !result.isError ? "paid_success" : "paid_error", product, request);
     }
-    return result;
+    return omitStructuredContentFromError(result);
   } catch (error) {
     if (paymentPresent) emitMcpEvent("paid_error", product, request);
     throw error;
@@ -286,7 +301,7 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
   });
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
-  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), annotations }, async ({ issue_url }, extra) => {
+  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations }, async ({ issue_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeIssueUrl(issue_url); } catch (error) {
       emitMcpEvent("validation_error", "single", request);
@@ -298,7 +313,7 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
     });
   });
 
-  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: TOOL_DESCRIPTIONS.rank_github_bounties, inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), annotations }, async ({ issue_urls }, extra) => {
+  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: TOOL_DESCRIPTIONS.rank_github_bounties, inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.rank_github_bounties, annotations }, async ({ issue_urls }, extra) => {
     let normalized: string[];
     try { normalized = validatePortfolioUrls(issue_urls); } catch (error) {
       emitMcpEvent("validation_error", "portfolio", request);
@@ -310,7 +325,7 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
     });
   });
 
-  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: TOOL_DESCRIPTIONS.audit_agent_harness, inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), annotations }, async ({ repo_url }, extra) => {
+  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: TOOL_DESCRIPTIONS.audit_agent_harness, inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.audit_agent_harness, annotations }, async ({ repo_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRepositoryUrl(repo_url); } catch (error) {
       emitMcpEvent("validation_error", "harness", request);
@@ -322,7 +337,7 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
     });
   });
 
-  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: TOOL_DESCRIPTIONS.diagnose_github_actions_run, inputSchema: z.object({ run_url: runUrlSchema }).strict(), annotations }, async ({ run_url }, extra) => {
+  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: TOOL_DESCRIPTIONS.diagnose_github_actions_run, inputSchema: z.object({ run_url: runUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.diagnose_github_actions_run, annotations }, async ({ run_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRunUrl(run_url); } catch (error) {
       emitMcpEvent("validation_error", "run", request);
@@ -336,8 +351,8 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
 
   server.registerTool("classify_github_actions_flake", { title: "Decide whether to retry failed GitHub Actions", description: TOOL_DESCRIPTIONS.classify_github_actions_flake, inputSchema: z.object({
     run_url: runUrlSchema,
-    attempt: z.number().int().positive().optional().describe("Optional exact workflow run attempt number, starting at 1. Omit to use the run URL's latest available completed attempt."),
-  }).strict(), annotations }, async ({ run_url, attempt }, extra) => {
+    attempt: z.number().int().positive().optional().describe(FLAKE_ATTEMPT_DESCRIPTION),
+  }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.classify_github_actions_flake, annotations }, async ({ run_url, attempt }, extra) => {
     let normalized: string;
     let normalizedAttempt: number | undefined;
     try {
@@ -358,7 +373,7 @@ async function createMcpServer(env: McpEnvironment, request: RequestClassificati
     });
   });
 
-  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: TOOL_DESCRIPTIONS.check_mcp_tool_drift, inputSchema: mcpDriftLiveInputSchema, annotations }, async (args, extra) => {
+  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: TOOL_DESCRIPTIONS.check_mcp_tool_drift, inputSchema: mcpDriftLiveInputSchema, outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_mcp_tool_drift, annotations }, async (args, extra) => {
     let result: Awaited<ReturnType<typeof parseAndAnalyzeMcpDrift>>;
     const normalized = { contract_version: args.contract_version, subject: args.subject, annotation_source_trust: args.annotation_source_trust, baseline: args.baseline, current: args.current };
     try { result = await parseAndAnalyzeMcpDrift(JSON.stringify(normalized)); }

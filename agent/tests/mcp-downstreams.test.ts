@@ -3,7 +3,7 @@ import test from "node:test";
 import { glamaConnectorStatus, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
 
 const name = "io.github.cristianmoroaica/bountyverdict";
-const version = "1.0.1";
+const version = "1.1.0";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
 
 test("recognizes exact active remote propagation into the Qt Creator mirror", () => {
@@ -16,7 +16,7 @@ test("recognizes exact active remote propagation into the Qt Creator mirror", ()
     ],
   }, name, version, endpoint);
   assert.equal(result.listed, true);
-  assert.deepEqual(result.observed_versions, ["1.0.0", "1.0.1"]);
+  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.0"]);
   assert.equal(result.server_count, 2);
 });
 
@@ -30,7 +30,7 @@ test("keeps pending and drifted Qt entries distinct from exact propagation", () 
     ],
   }, name, version, endpoint);
   assert.equal(result.listed, false);
-  assert.deepEqual(result.observed_versions, ["1.0.0", "1.0.1"]);
+  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.0"]);
 });
 
 test("rejects malformed or unbounded Qt mirrors", () => {

@@ -182,6 +182,9 @@ jobs:
           const listed = await rpc(2, "tools/list");
           const expectedNames = ["check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
           if (JSON.stringify(listed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
+          const outputSchemaSizes = listed.result.tools.map(({ outputSchema }) => Buffer.byteLength(JSON.stringify(outputSchema)));
+          if (listed.result.tools.some(({ outputSchema }) => outputSchema?.type !== "object" || !Array.isArray(outputSchema.required))) process.exit(1);
+          if (outputSchemaSizes.some((bytes) => bytes > 2048) || outputSchemaSizes.reduce((total, bytes) => total + bytes, 0) > 12000) process.exit(1);
           const calls = [
             ["check_github_bounty", { issue_url: "https://github.com/owner/repo/issues/1" }, "50000"],
             ["rank_github_bounties", { issue_urls: ["https://github.com/owner/repo/issues/1", "https://github.com/owner/repo/issues/2"] }, "400000"],
@@ -192,8 +195,8 @@ jobs:
           ];
           for (const [name, args, amount] of calls) {
             const called = await rpc(3, "tools/call", { name, arguments: args });
-            const challenge = called.result?.structuredContent;
-            if (!called.result?.isError || JSON.stringify(challenge) !== called.result?.content?.[0]?.text) process.exit(1);
+            const challenge = JSON.parse(called.result?.content?.[0]?.text || "null");
+            if (!called.result?.isError || called.result?.structuredContent !== undefined) process.exit(1);
             if (challenge?.accepts?.[0]?.amount !== amount || challenge?.accepts?.[0]?.network !== "eip155:8453") process.exit(1);
             if (challenge?.resource?.url !== `mcp://tool/${name}` || challenge?.extensions?.bazaar?.info?.input?.toolName !== name) process.exit(1);
           }

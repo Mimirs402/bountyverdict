@@ -29,11 +29,13 @@
   },
   "mcp": {
     "registry_name": "io.github.cristianmoroaica/bountyverdict",
+    "server_version": "1.1.0",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
     "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp",
     "stateless": true,
     "paid_tools": 6,
+    "machine_readable_output_contracts": true,
     "skillverdict_excluded": true,
     "payment": "x402 v2 exact Base USDC"
   },

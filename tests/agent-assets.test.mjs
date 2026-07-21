@@ -37,6 +37,8 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
+  assert.equal(manifest.mcp.server_version, "1.1.0");
+  assert.equal(manifest.mcp.machine_readable_output_contracts, true);
   assert.match(manifest.skill, /route-github-agent-checks\/SKILL\.md$/);
   assert.equal(manifest.payment.scheme, "exact");
   assert.equal(manifest.payment.asset, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");

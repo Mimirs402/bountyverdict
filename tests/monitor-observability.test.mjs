@@ -25,7 +25,7 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(distribution, /marketplace_search: previousReport\.acquisition\?\.marketplace_search/);
   assert.match(distribution, /agenticMarket = previousReport\.marketplaces\?\.agentic_market/);
   assert.match(distribution, /Security action required:[^\n]+x402\.jobs API key/);
-  assert.match(distribution, /ToolHive in-agent catalog:[^\n]+PR \[#1385\]/);
+  assert.match(distribution, /ToolHive in-agent catalog:[^\n]+PR \[#1388\]/);
   assert.match(distribution, /Placement and review state are not impressions, installs, purchases, or revenue/);
   assert.match(auditedRunner, /FUNNEL_ROTATION_ID: rotationId/);
   assert.match(auditedRunner, /if \(monitor === "distribution"\) loadDistributionMonitorConfiguration\(process\.env\)/);
@@ -311,7 +311,8 @@ test("directory monitoring tracks Cline review and exact in-agent install contra
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
-  assert.match(directory, /const clineMarketplacePrNumber = 13/);
+  assert.match(directory, /const clineMarketplacePrNumber = 16/);
+  assert.match(distribution, /routing skill https:\/\/github\.com\/cline\/marketplace\/pull\/15/);
   assert.match(directory, /async function clineMarketplaceStatus/);
   assert.match(directory, /parseClineMarketplaceCatalog/);
   assert.match(directory, /cline_marketplace: clineMarketplace/);
@@ -377,7 +378,7 @@ test("directory monitoring tracks Kilo review and exact secret-free remote contr
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
-  assert.match(directory, /const kiloMarketplacePrNumber = 192/);
+  assert.match(directory, /const kiloMarketplacePrNumber = 194/);
   assert.match(directory, /async function kiloMarketplaceStatus/);
   assert.match(directory, /parseKiloMarketplaceDefinition/);
   assert.match(directory, /parseKiloMarketplaceCatalog/);
@@ -396,7 +397,7 @@ test("directory monitoring tracks ToolHive review and exact in-agent remote cont
     readFile(distributionUrl, "utf8"),
     readFile(new URL("../agent/src/toolhive.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(directory, /const toolHivePrNumber = 1385/);
+  assert.match(directory, /const toolHivePrNumber = 1388/);
   assert.match(directory, /async function toolHiveStatus/);
   assert.match(directory, /parseToolHiveCatalogEntry/);
   assert.match(directory, /toolhive: toolHive/);

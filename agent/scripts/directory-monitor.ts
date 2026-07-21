@@ -172,11 +172,11 @@ const toolsForAgentsSubmittedAt = "2026-07-21T15:34:00Z";
 const toolsForAgentsListingUrl = "https://www.toolsforagents.dev/tools/cristianmoroaica/bountyverdict";
 const mcpServerSpotSubmittedAt = "2026-07-21T15:36:00Z";
 const mcpServerSpotListingUrl = "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools";
-const clineMarketplacePrNumber = 13;
+const clineMarketplacePrNumber = 16;
 const clineMarketplacePrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplacePrNumber}`;
 const clineMarketplaceCatalogUrl = "https://cline.github.io/marketplace/catalog.json";
 const clineMarketplaceEndpoint = `${productionOrigin}/mcp?source=cline-marketplace`;
-const kiloMarketplacePrNumber = 192;
+const kiloMarketplacePrNumber = 194;
 const kiloMarketplacePrUrl = `https://github.com/Kilo-Org/kilo-marketplace/pull/${kiloMarketplacePrNumber}`;
 const kiloMarketplaceDefinitionUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/bountyverdict/MCP.yaml";
 const kiloMarketplaceCatalogUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/marketplace.yaml";
@@ -188,7 +188,7 @@ const agentFinderCatalogEntryPath = "catalog/cristianmoroaica/bountyverdict.json
 const agentFinderCatalogEntryUrl = `https://raw.githubusercontent.com/github/agentfinder-catalog/main/${agentFinderCatalogEntryPath}`;
 const agentFinderSearchUrl = "https://github.com/agentfinder?search=bountyverdict";
 const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.cristianmoroaica:bountyverdict";
-const toolHivePrNumber = 1385;
+const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
   "https://raw.githubusercontent.com/stacklok/toolhive-catalog/main/registries/toolhive/servers/bountyverdict/server.json";

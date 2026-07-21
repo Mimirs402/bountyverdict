@@ -74,6 +74,34 @@ test("a non-maintainer bounty claim cannot establish reward provenance", () => {
   assert.ok(output.signals.some((item) => item.label === "Reward is unverified"));
 });
 
+test("parses abbreviated thousands in bounty titles", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "[Bounty $2k] Implement the widget adapter",
+      body: "A reproducible and bounded specification with clear acceptance criteria for the complete adapter implementation.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+  assert.equal(output.reward.amount, 2_000);
+  assert.equal(output.reward.currency, "USD");
+});
+
+test("parses decimal uppercase thousands in bounty descriptions", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "Implement the widget adapter bounty",
+      body: "A reproducible and bounded specification with clear acceptance criteria. The accepted implementation receives $1.5K.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+  assert.equal(output.reward.amount, 1_500);
+  assert.equal(output.reward.currency, "USD");
+});
+
 test("a verified Algora GitHub App comment establishes listing provenance only", () => {
   const comments = [{
     body: "## 💎 $250 bounty • acme\nReceive payment 2-5 days post-reward.",

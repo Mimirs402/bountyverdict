@@ -3,7 +3,7 @@
   "name": "io.github.Mimirs402/bountyverdict",
   "title": "BountyVerdict Agent Decision Tools",
   "description": "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "icons": [
     {
       "src": "https://mimirs402.github.io/bountyverdict/favicon.svg",

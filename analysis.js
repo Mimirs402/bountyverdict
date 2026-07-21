@@ -120,9 +120,10 @@ function platformClaimState(comments, openPulls) {
 }
 
 function amountFromText(text) {
-  const match = String(text ?? "").match(/\$\s*([\d][\d,]*(?:\.\d{1,2})?)/);
+  const match = String(text ?? "").match(/\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?\b/);
   if (!match) return { amount: null, currency: null };
-  const amount = Number(match[1].replaceAll(",", ""));
+  const multiplier = match[2] ? 1_000 : 1;
+  const amount = Number(match[1].replaceAll(",", "")) * multiplier;
   return { amount: Number.isFinite(amount) ? amount : null, currency: "USD" };
 }
 

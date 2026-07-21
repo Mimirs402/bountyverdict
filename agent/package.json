@@ -53,12 +53,12 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260719.1",
+    "@cloudflare/workers-types": "5.20260721.1",
     "@types/node": "22.19.7",
     "node-addon-api": "8.5.0",
     "node-gyp": "13.0.1",
     "typescript": "5.9.3",
-    "wrangler": "4.112.0"
+    "wrangler": "4.113.0"
   },
   "optionalDependencies": {
     "@img/sharp-libvips-linux-x64": "1.2.4",
@@ -66,6 +66,7 @@
   },
   "overrides": {
     "@hono/node-server": "2.0.11",
-    "axios": "1.18.1"
+    "axios": "1.18.1",
+    "sharp": "0.35.3"
   }
 }

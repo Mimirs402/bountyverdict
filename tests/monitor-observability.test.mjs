@@ -109,10 +109,12 @@ test("distribution monitoring treats Payan demand state as a funnel and receipts
   assert.match(distribution, /Payan exact-fit demand capture/);
 });
 
-test("distribution monitoring measures the MCP preview-copy rollout from an immutable buyer-event baseline", async () => {
+test("distribution monitoring measures the MCP selection-preview rollout from an immutable buyer-event baseline", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
-  assert.match(distribution, /mcp-tools-list-preview-copy-v1/);
-  assert.match(distribution, /release_commit: "bc1cdb38af7d51e06b61037161f18ecbee56efc6"/);
+  assert.match(distribution, /mcp-selection-preview-parity-v2/);
+  assert.match(distribution, /release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99"/);
+  assert.match(distribution, /initialize: 252/);
+  assert.match(distribution, /tools_list: 203/);
   assert.match(distribution, /valid_call_per_tools_list_percent/);
   assert.match(distribution, /invalid_call_share_percent/);
   assert.match(distribution, /payment_present_per_valid_call_percent/);

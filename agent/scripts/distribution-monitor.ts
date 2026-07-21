@@ -77,12 +77,12 @@ const MCP_INTENT_PAGE = "https://cristianmoroaica.github.io/bountyverdict/mcp-gi
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
-  id: "mcp-tools-list-preview-copy-v1",
-  started_at: "2026-07-21T09:35:19.486Z",
-  release_commit: "bc1cdb38af7d51e06b61037161f18ecbee56efc6",
+  id: "mcp-selection-preview-parity-v2",
+  started_at: "2026-07-21T22:01:43.197Z",
+  release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99",
   baseline: Object.freeze({
-    initialize: 100,
-    tools_list: 57,
+    initialize: 252,
+    tools_list: 203,
     validation_error: 6,
     capacity_rejected: 0,
     payment_required: 0,
@@ -1746,7 +1746,7 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
       monotonicDelta(
         buyerCandidateMcpTotals[stage as keyof typeof buyerCandidateMcpTotals],
         baseline,
-        `MCP preview-copy rollout ${stage}`,
+        `MCP selection-preview rollout ${stage}`,
       ),
     ]));
     const previewCallOpportunities = Number(mcpPreviewCopyDelta.validation_error || 0) + Number(mcpPreviewCopyDelta.payment_required || 0);
@@ -2197,7 +2197,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_buyer_candidate_discovery_requests || 0)} trusted buyer-candidate discovery hits; ${Number(funnel.trusted_external_discovery_requests || 0)} raw external discovery/health hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
 - **Latest privacy-safe buyer-candidate learning:** discovery ${externalDiscoveryCohorts.length ? externalDiscoveryCohorts.join("; ") : "none since the clean boundary"}; paid-route attempts ${externalPaidRouteCohorts.length ? externalPaidRouteCohorts.join("; ") : "none since the clean boundary"} (Agent402 OpenAPI/x402 health, owner automation, x402 observer, and registry crawlers remain visible as raw reach but are excluded here; bounded aggregate categories only; no arguments, URLs, payloads, identities, IPs, or raw user agents retained)
 - **MCP buyer-candidate funnel:** ${funnel.available ? `${Number(mcpBuyerCandidate.initialize || 0)} initializations; ${Number(mcpBuyerCandidate.tools_list || 0)} tool-list requests; ${Number(mcpBuyerCandidate.protocol_error || 0)} protocol errors; ${Number(mcpBuyerCandidate.capacity_rejected || 0)} capacity rejections; ${Number(mcpBuyerCandidate.payment_required || 0)} valid unpaid tool calls; ${Number(mcpBuyerCandidate.payment_present || 0)} payment presentations; ${Number(mcpBuyerCandidate.paid_success || 0)} paid successes` : "unavailable"} (${funnel.mcp_learning_stage || "not started"}; owner, registry, Glama release, and x402 observer channels excluded)
-- **MCP preview-copy rollout:** ${funnel.available ? `${mcpPreviewCopyExperiment.status || "unavailable"} since ${mcpPreviewCopyExperiment.started_at || "unknown"} at ${String(mcpPreviewCopyExperiment.release_commit || "unknown").slice(0, 7)}; delta ${Number(mcpPreviewCopyDelta.initialize || 0)} initialize / ${Number(mcpPreviewCopyDelta.tools_list || 0)} tools/list / ${Number(mcpPreviewCopyDelta.validation_error || 0)} invalid / ${Number(mcpPreviewCopyDelta.payment_required || 0)} valid unpaid / ${Number(mcpPreviewCopyDelta.payment_present || 0)} payment presented / ${Number(mcpPreviewCopyDelta.paid_success || 0)} paid success; list-to-valid ${ratio(mcpPreviewCopyRatios.valid_call_per_tools_list_percent)}, invalid share ${ratio(mcpPreviewCopyRatios.invalid_call_share_percent)}, valid-to-payment ${ratio(mcpPreviewCopyRatios.payment_present_per_valid_call_percent)}` : "unavailable"} (aggregate event deltas, not unique agents or purchase proof)
+- **MCP selection-preview rollout:** ${funnel.available ? `${mcpPreviewCopyExperiment.status || "unavailable"} since ${mcpPreviewCopyExperiment.started_at || "unknown"} at ${String(mcpPreviewCopyExperiment.release_commit || "unknown").slice(0, 7)}; delta ${Number(mcpPreviewCopyDelta.initialize || 0)} initialize / ${Number(mcpPreviewCopyDelta.tools_list || 0)} tools/list / ${Number(mcpPreviewCopyDelta.validation_error || 0)} invalid / ${Number(mcpPreviewCopyDelta.payment_required || 0)} valid unpaid / ${Number(mcpPreviewCopyDelta.payment_present || 0)} payment presented / ${Number(mcpPreviewCopyDelta.paid_success || 0)} paid success; list-to-valid ${ratio(mcpPreviewCopyRatios.valid_call_per_tools_list_percent)}, invalid share ${ratio(mcpPreviewCopyRatios.invalid_call_share_percent)}, valid-to-payment ${ratio(mcpPreviewCopyRatios.payment_present_per_valid_call_percent)}` : "unavailable"} (aggregate event deltas, not unique agents or purchase proof)
 - **MCP invalid-call learning:** ${funnel.available ? mcpValidationSummary : "unavailable"} (coarse categories only; no arguments, URLs, payloads, identities, or raw client names retained; pre-upgrade events remain legacy-unclassified)
 - **MCP directory-crawler activity:** ${funnel.available ? `${Number(mcpRegistryCrawler.initialize || 0)} initializations; ${Number(mcpRegistryCrawler.tools_list || 0)} tool-list requests; ${Number(mcpRegistryCrawler.payment_required || 0)} valid unpaid tool calls` : "unavailable"} (retained separately for distribution propagation, never treated as buyer intent)
 - **Kiro Power package:** repository contract published; registry submission not made because publisher terms require explicit acceptance; ${funnel.available ? `${Number(mcpKiroPower.initialize || 0)} declared-source initializations, ${Number(mcpKiroPower.tools_list || 0)} tool-list requests, ${Number(mcpKiroPower.payment_required || 0)} valid unpaid calls, ${Number(mcpKiroPower.payment_present || 0)} payment presentations` : "funnel unavailable"} (source marker is aggregate attribution, not proof of install, identity, or purchase)

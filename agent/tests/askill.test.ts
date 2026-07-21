@@ -71,7 +71,20 @@ test("rejects duplicate, malformed, and unbounded askill telemetry", () => {
 });
 
 test("retains bounded unbranded askill retrieval ranks", () => {
-  assert.equal(ASKILL_BUYER_QUERIES.length, 6);
+  assert.deepEqual(ASKILL_BUYER_QUERIES, [
+    "github actions root cause",
+    "should I retry failed github action",
+    "check github bounty",
+    "audit AGENTS.md",
+    "MCP schema drift",
+    "rank github bounties",
+    "is this github bounty worth working on",
+    "which github bounty should i work on",
+    "is this repo ready for a coding agent",
+    "why did my github actions run fail",
+    "should i retry this failed github actions run",
+    "will this mcp tools/list change break clients",
+  ]);
   assert.deepEqual(parseAskillBuyerQueryPayload(payload([
     { installRef: "gh:other/repo@skill" },
     exactEntry,

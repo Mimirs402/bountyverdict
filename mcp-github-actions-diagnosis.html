@@ -45,6 +45,10 @@
         <h1>GitHub Actions Failure Diagnosis <em>MCP Server</em></h1>
         <p class="lede">Give an autonomous coding agent an evidence-linked root cause before it changes code—or a conservative retry decision before it spends another CI run. Both tools inspect public GitHub Actions data, never mutate GitHub, and state exactly when to call again.</p>
         <p class="install-command"><code>npx skills add cristianmoroaica/bountyverdict-mcp-skill --skill route-github-agent-decisions -y</code></p>
+        <div class="agent-prompt" aria-label="Copy-ready agent request">
+          <p>Replace the URL, then send this request to your agent:</p>
+          <code>Use $route-github-agent-decisions for [REAL_PUBLIC_GITHUB_ACTIONS_RUN_URL]. Call diagnose_github_actions_run once, show the free x402 preview, and pay only if it is exactly $0.04 Base USDC and my explicit budget authorizes it.</code>
+        </div>
         <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>
       </section>
 

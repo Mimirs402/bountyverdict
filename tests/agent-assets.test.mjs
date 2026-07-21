@@ -294,6 +294,9 @@ test("GitHub Actions MCP intent page is crawlable, bounded, and excludes the fro
   assert.match(page, /classify_github_actions_flake/);
   assert.match(page, /\$0\.04 USDC/);
   assert.match(page, /\$0\.07 USDC/);
+  assert.match(page, /Use \$route-github-agent-decisions for \[REAL_PUBLIC_GITHUB_ACTIONS_RUN_URL\]/);
+  assert.match(page, /Call diagnose_github_actions_run once, show the free x402 preview/);
+  assert.match(page, /pay only if it is exactly \$0\.04 Base USDC and my explicit budget authorizes it/);
   assert.match(page, /does not rerun workflows/);
   assert.match(page, /service_reuse/);
   assert.match(page, /io\.github\.cristianmoroaica\/bountyverdict/);

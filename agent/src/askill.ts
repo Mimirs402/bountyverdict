@@ -12,6 +12,12 @@ export const ASKILL_BUYER_QUERIES = Object.freeze([
   "audit AGENTS.md",
   "MCP schema drift",
   "rank github bounties",
+  "is this github bounty worth working on",
+  "which github bounty should i work on",
+  "is this repo ready for a coding agent",
+  "why did my github actions run fail",
+  "should i retry this failed github actions run",
+  "will this mcp tools/list change break clients",
 ] as const);
 
 export type AskillBuyerQueryResult = {

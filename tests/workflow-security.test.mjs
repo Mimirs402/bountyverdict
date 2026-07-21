@@ -35,6 +35,6 @@ test("the MCP Registry publisher is version- and digest-pinned", async () => {
 
 test("the MCP Registry manifest keeps schema-bounded public metadata", async () => {
   const manifest = JSON.parse(await readFile(new URL("../server.json", import.meta.url), "utf8"));
-  assert.equal(manifest.version, "1.1.1");
+  assert.equal(manifest.version, "1.1.2");
   assert.ok(manifest.description.length <= 100, "server description must fit the current registry schema");
 });

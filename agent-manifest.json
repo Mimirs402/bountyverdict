@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "product": "BountyVerdict",
-  "release_version": "1.0.1",
-  "release_url": "https://github.com/cristianmoroaica/bountyverdict/releases/tag/v1.0.3",
+  "release_version": "1.1.1",
+  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.1",
   "status": "active",
   "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
   "test_api": "https://bountyverdict-agent.mimirslab.workers.dev",
@@ -28,7 +28,7 @@
     "promise": "Every successful result states exactly when and for which evidence or snapshot tuple agents may reuse the bounded decision check."
   },
   "mcp": {
-    "registry_name": "io.github.cristianmoroaica/bountyverdict",
+    "registry_name": "io.github.Mimirs402/bountyverdict",
     "server_version": "1.1.1",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
@@ -37,11 +37,12 @@
     "paid_tools": 6,
     "machine_readable_output_contracts": true,
     "direct_automatic_payment_requires": "@x402/mcp",
-    "http_payment_handoff_extension": "io.github.cristianmoroaica/bountyverdict/http-payment-handoff",
+    "http_payment_handoff_extension": "io.github.Mimirs402/bountyverdict/http-payment-handoff",
+    "legacy_http_payment_handoff_extension": "io.github.cristianmoroaica/bountyverdict/http-payment-handoff",
     "skillverdict_excluded": true,
     "payment": "x402 v2 exact Base USDC"
   },
-  "client_setup": "https://cristianmoroaica.github.io/bountyverdict/llms-install.md",
+  "client_setup": "https://mimirs402.github.io/bountyverdict/llms-install.md",
   "ard_catalog": "https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json",
   "products": [
     {
@@ -59,9 +60,9 @@
       "price_usdc": "0.05",
       "reusable": true,
       "use_when": "Decide whether one public GitHub bounty issue is worth pursuing before coding.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill preflight-github-bounties -y",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/verdict.json"
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill preflight-github-bounties -y",
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/verdict.json"
     },
     {
       "name": "BountyVerdict Portfolio",
@@ -70,11 +71,11 @@
       "price_usdc": "0.40",
       "reusable": true,
       "use_when": "Rank two to ten public GitHub bounty candidates with partial-failure handling.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill preflight-github-bounties -y",
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill preflight-github-bounties -y",
       "minimum_candidates": 2,
       "maximum_candidates": 10,
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/portfolio.json"
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/portfolio.json"
     },
     {
       "name": "HarnessVerdict",
@@ -86,9 +87,9 @@
       "price_usdc": "0.03",
       "reusable": true,
       "use_when": "Audit a public repository's coding-agent instruction stack before autonomous coding.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill audit-agent-harness -y",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/harness.json"
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill audit-agent-harness -y",
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/harness.json"
     },
     {
       "name": "SkillVerdict",
@@ -97,9 +98,9 @@
       "price_usdc": "0.06",
       "reusable": true,
       "use_when": "Audit a public SKILL.md bundle before loading, installing, or executing it.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill preflight-agent-skills -y",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/skill.json"
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill preflight-agent-skills -y",
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/skill.json"
     },
     {
       "name": "RunVerdict",
@@ -111,9 +112,9 @@
       "price_usdc": "0.04",
       "reusable": true,
       "use_when": "Diagnose the root cause and next action for one public GitHub Actions run.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill diagnose-github-actions -y",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/run.json"
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill diagnose-github-actions -y",
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/run.json"
     },
     {
       "name": "FlakeVerdict",
@@ -126,8 +127,8 @@
       "price_usdc": "0.07",
       "reusable": true,
       "use_when": "Decide whether one completed failed public GitHub Actions run merits exactly one retry.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill classify-github-flakes -y",
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill classify-github-flakes -y",
       "verdicts": [
         "CONFIRMED_FLAKE",
         "LIKELY_FLAKE",
@@ -144,7 +145,7 @@
         "mutates_ci": false
       },
       "reuse_guidance": "Call FlakeVerdict for every completed public GitHub Actions failure before spending a retry; each successful call re-reads the selected attempt, other attempts of the same run, same-SHA outcomes, and up to 12 earlier comparable runs. Reuse a result only for its exact run ID and attempt, and call again after a new attempt appears.",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/flake.json"
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/flake.json"
     },
     {
       "name": "MCPDriftVerdict",
@@ -153,8 +154,8 @@
       "price_usdc": "0.02",
       "reusable": true,
       "use_when": "Gate a complete MCP 2025-11-25 tools/list snapshot change before accepting or pinning it.",
-      "skill_url": "https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md",
-      "install_command": "npx skills add cristianmoroaica/bountyverdict --skill check-mcp-tool-drift -y",
+      "skill_url": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md",
+      "install_command": "npx skills add Mimirs402/bountyverdict --skill check-mcp-tool-drift -y",
       "verdicts": [
         "UNCHANGED",
         "SAFE_ADDITIVE",
@@ -175,25 +176,25 @@
         "validation_completes_before_payment": true
       },
       "reuse_guidance": "Call MCPDriftVerdict after every notifications/tools/list_changed, at agent startup when the current tools/list snapshot hash differs from the pinned baseline, and before accepting an MCP server upgrade. Reuse only for the exact baseline_snapshot hash, current_snapshot hash, and ruleset_version tuple.",
-      "sample": "https://cristianmoroaica.github.io/bountyverdict/samples/mcp-drift.json"
+      "sample": "https://mimirs402.github.io/bountyverdict/samples/mcp-drift.json"
     }
   ],
-  "skill": "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md",
+  "skill": "https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md",
   "install": {
-    "router": "npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y",
-    "all": "npx skills add cristianmoroaica/bountyverdict --skill '*' -y"
+    "router": "npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y",
+    "all": "npx skills add Mimirs402/bountyverdict --skill '*' -y"
   },
   "skills": {
-    "route_github_agent_checks": "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md",
-    "preflight_github_bounties": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
-    "audit_agent_harness": "https://cristianmoroaica.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md",
-    "preflight_agent_skills": "https://cristianmoroaica.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md",
-    "diagnose_github_actions": "https://cristianmoroaica.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md",
-    "classify_github_flakes": "https://cristianmoroaica.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md",
-    "check_mcp_tool_drift": "https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
+    "route_github_agent_checks": "https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md",
+    "preflight_github_bounties": "https://mimirs402.github.io/bountyverdict/skills/preflight-github-bounties/SKILL.md",
+    "audit_agent_harness": "https://mimirs402.github.io/bountyverdict/skills/audit-agent-harness/SKILL.md",
+    "preflight_agent_skills": "https://mimirs402.github.io/bountyverdict/skills/preflight-agent-skills/SKILL.md",
+    "diagnose_github_actions": "https://mimirs402.github.io/bountyverdict/skills/diagnose-github-actions/SKILL.md",
+    "classify_github_flakes": "https://mimirs402.github.io/bountyverdict/skills/classify-github-flakes/SKILL.md",
+    "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
-  "source": "https://github.com/cristianmoroaica/bountyverdict",
-  "updated_at": "2026-07-21T19:12:52.497Z",
+  "source": "https://github.com/Mimirs402/bountyverdict",
+  "updated_at": "2026-07-21T22:38:07Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",

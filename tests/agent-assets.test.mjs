@@ -18,7 +18,7 @@ const agentPluginsMcpRuntimeSignals = [
   "claude desktop config",
 ];
 const assertPortableWithoutMcpRuntime = (skill) => {
-  assert.match(skill, /\nrequires_mcp: false\n---\n/);
+  assert.doesNotMatch(skill.split("---\n").slice(0, 2).join("---\n"), /requires_mcp/);
   const body = skill.split("---\n").slice(2).join("---\n").toLowerCase();
   for (const signal of agentPluginsMcpRuntimeSignals) assert.doesNotMatch(body, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 };
@@ -38,7 +38,7 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
     disabledTools: [],
   });
 
-  assert.match(power, /^---\nname: "bountyverdict"\ndisplayName: "GitHub Agent Decision Gates"\ndescription: ".+"\nkeywords: \[.+\]\nauthor: "Cristian Moroaica"\n---\n/);
+  assert.match(power, /^---\nname: "bountyverdict"\ndisplayName: "GitHub Agent Decision Gates"\ndescription: ".+"\nkeywords: \[.+\]\nauthor: "Mimir's Lab"\n---\n/);
   assert.match(power, /No BountyVerdict account or API key is required/);
   assert.match(power, /six tools are read-only/i);
   assert.match(power, /structurally invalid input is rejected before any payment requirement/);
@@ -70,8 +70,8 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
-  assert.equal(manifest.release_version, "1.0.1");
-  assert.match(manifest.release_url, /\/releases\/tag\/v1\.0\.3$/);
+  assert.equal(manifest.release_version, "1.1.1");
+  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.1$/);
   assert.ok(["awaiting_production", "active"].includes(manifest.status));
   if (manifest.status === "awaiting_production") assert.equal(manifest.production_api, null);
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
@@ -110,7 +110,7 @@ test("agent manifest is honest and links inspectable products", async () => {
   for (const product of manifest.products) {
     assert.match(product.use_when, /\.$/);
     assert.match(product.skill_url, /^https:\/\/.+\/SKILL\.md$/);
-    assert.match(product.install_command, /^npx skills add cristianmoroaica\/bountyverdict --skill [a-z0-9-]+ -y$/);
+    assert.match(product.install_command, /^npx skills add Mimirs402\/bountyverdict --skill [a-z0-9-]+ -y$/);
   }
   const flake = manifest.products.find((product) => product.name === "FlakeVerdict");
   assert.equal(flake.method, "POST");
@@ -140,7 +140,7 @@ test("umbrella routing skill selects one product and preserves payment safety", 
     new URL("../skills/route-github-agent-checks/SKILL.md", import.meta.url),
     "utf8",
   );
-  assert.match(skill, /^---\nname: route-github-agent-checks\ndescription: .+\nrequires_mcp: false\n---/);
+  assert.match(skill, /^---\nname: route-github-agent-checks\ndescription: .+\n---/);
   assertPortableWithoutMcpRuntime(skill);
   for (const product of ["BountyVerdict", "BountyVerdict Portfolio", "HarnessVerdict", "SkillVerdict", "RunVerdict", "FlakeVerdict", "MCPDriftVerdict"]) {
     assert.match(skill, new RegExp(product));
@@ -202,7 +202,7 @@ test("hosted MCPDriftVerdict workflow gates payment and treats catalogs as data"
     new URL("../skills/check-mcp-tool-drift/SKILL.md", import.meta.url),
     "utf8",
   );
-  assert.match(skill, /^---\nname: check-mcp-tool-drift\ndescription: .+\nrequires_mcp: false\n---/);
+  assert.match(skill, /^---\nname: check-mcp-tool-drift\ndescription: .+\n---/);
   assertPortableWithoutMcpRuntime(skill);
   assert.match(skill, /20000/);
   assert.match(skill, /byte-identical original body/);
@@ -261,29 +261,29 @@ test("agent landing page exposes all seven self-serve products", async () => {
   assert.match(page, /No account or API key/);
   assert.match(page, /route-github-agent-checks/);
   assert.match(page, /agent-manifest\.json/);
-  assert.match(page, /io\.github\.cristianmoroaica\/bountyverdict/);
+  assert.match(page, /io\.github\.Mimirs402\/bountyverdict/);
   assert.match(page, /bountyverdict-agent-production\.mimirslab\.workers\.dev\/mcp/);
   assert.match(page, /rel="ai-catalog" href="https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/\.well-known\/ai-catalog\.json"/);
   assert.match(page, /call <code>tools\/list<\/code>/);
   assert.match(page, /six paid, read-only tools/);
   assert.match(page, /SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP/);
-  assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.cristianmoroaica%2Fbountyverdict\/versions\/latest/);
-  assert.match(page, /gh skill preview cristianmoroaica\/bountyverdict route-github-agent-checks@v1\.0\.3/);
-  assert.match(page, /gh skill install cristianmoroaica\/bountyverdict route-github-agent-checks --pin v1\.0\.3/);
-  assert.match(page, /copilot plugin install cristianmoroaica\/bountyverdict/);
+  assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
+  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.0\.3/);
+  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.0\.3/);
+  assert.match(page, /copilot plugin install Mimirs402\/bountyverdict/);
   assert.match(page, /npx awal@2\.12\.0 x402 details/);
   assert.match(page, /npx awal@2\.12\.0 x402 pay/);
   assert.match(page, /--max-amount/);
   assert.match(page, /blob\/main\/SECURITY\.md/);
   assert.match(page, /blob\/main\/PRIVACY\.md/);
-  assert.match(page, /skills\.sh\/cristianmoroaica\/bountyverdict\/route-github-agent-checks/);
+  assert.match(page, /skills\.sh\/Mimirs402\/bountyverdict\/route-github-agent-checks/);
   for (const product of ["BountyVerdict", "Portfolio", "HarnessVerdict", "SkillVerdict", "RunVerdict", "FlakeVerdict", "MCPDriftVerdict"]) {
     assert.match(page, new RegExp(product));
   }
   for (const price of ["0.05", "0.40", "0.03", "0.06", "0.04", "0.07", "0.02"]) {
     assert.match(page, new RegExp(`\\$${price}`));
   }
-  assert.equal((page.match(/https:\/\/skills\.sh\/cristianmoroaica\/bountyverdict\//g) || []).length, 8);
+  assert.equal((page.match(/https:\/\/skills\.sh\/Mimirs402\/bountyverdict\//g) || []).length, 8);
   assert.match(page, /mcp-github-actions-diagnosis\.html/);
 });
 
@@ -294,7 +294,7 @@ test("GitHub Actions MCP intent page is crawlable, bounded, and excludes the fro
     readFile(new URL("../README.md", import.meta.url), "utf8"),
   ]);
   assert.match(page, /<title>GitHub Actions Failure Diagnosis MCP Server<\/title>/);
-  assert.match(page, /rel="canonical" href="https:\/\/cristianmoroaica\.github\.io\/bountyverdict\/mcp-github-actions-diagnosis\.html"/);
+  assert.match(page, /rel="canonical" href="https:\/\/mimirs402\.github\.io\/bountyverdict\/mcp-github-actions-diagnosis\.html"/);
   assert.match(page, /rel="ai-catalog" href="https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/\.well-known\/ai-catalog\.json"/);
   assert.match(page, /application\/ld\+json/);
   assert.match(page, /diagnose_github_actions_run/);
@@ -306,7 +306,7 @@ test("GitHub Actions MCP intent page is crawlable, bounded, and excludes the fro
   assert.match(page, /pay only if it is exactly \$0\.04 Base USDC and my explicit budget authorizes it/);
   assert.match(page, /does not rerun workflows/);
   assert.match(page, /service_reuse/);
-  assert.match(page, /io\.github\.cristianmoroaica\/bountyverdict/);
+  assert.match(page, /io\.github\.Mimirs402\/bountyverdict/);
   assert.doesNotMatch(page, /SkillVerdict|preflight-agent-skills|\/api\/skill/);
   assert.match(sitemap, /mcp-github-actions-diagnosis\.html/);
   assert.match(readme, /GitHub Actions Failure Diagnosis MCP Server/);
@@ -314,7 +314,7 @@ test("GitHub Actions MCP intent page is crawlable, bounded, and excludes the fro
 
 test("human landing page links directly to the measurable router funnel", async () => {
   const page = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(page, /skills\.sh\/cristianmoroaica\/bountyverdict\/route-github-agent-checks/);
+  assert.match(page, /skills\.sh\/Mimirs402\/bountyverdict\/route-github-agent-checks/);
   assert.match(page, /Install the router on skills\.sh/);
   assert.match(page, /rel="ai-catalog" href="https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/\.well-known\/ai-catalog\.json"/);
 });
@@ -341,8 +341,8 @@ test("public trust disclosures cover payment, retention, and private reporting",
     assert.match(privacy, new RegExp(provider));
   }
   assert.match(privacy, /does not sell personal data/);
-  assert.match(securityTxt, /^Contact: https:\/\/github\.com\/cristianmoroaica\/bountyverdict\/security\/advisories\/new$/m);
-  assert.match(securityTxt, /^Canonical: https:\/\/cristianmoroaica\.github\.io\/bountyverdict\/security\.txt$/m);
+  assert.match(securityTxt, /^Contact: https:\/\/github\.com\/Mimirs402\/bountyverdict\/security\/advisories\/new$/m);
+  assert.match(securityTxt, /^Canonical: https:\/\/mimirs402\.github\.io\/bountyverdict\/security\.txt$/m);
 });
 
 test("skills.sh groups every published skill exactly once", async () => {

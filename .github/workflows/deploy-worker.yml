@@ -108,7 +108,7 @@ jobs:
                 ];
                 const actual = value.products?.map(({ name, price, endpoint, method }) => [name, price, endpoint, method]);
                 if (value.status !== "available" || JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
-                if (value.agent_manifest !== "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json" || value.agent_skill !== "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
+                if (value.agent_manifest !== "https://mimirs402.github.io/bountyverdict/agent-manifest.json" || value.agent_skill !== "https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
                 if (value.distributed_agent_manifest !== "/agent-manifest.json" || value.distributed_agent_skill !== "/SKILL.md") process.exit(1);
                 if (value.ai_catalog !== "/.well-known/ai-catalog.json") process.exit(1);
                 if (value.api_catalog !== "/.well-known/api-catalog" || value.integrations !== "/.well-known/integrations.json" || value.mcp_server_card !== "/.well-known/mcp/server-card.json") process.exit(1);
@@ -154,8 +154,8 @@ jobs:
                 if (value.spec !== "agent402-service-manifest/1" || value.version !== 1) process.exit(1);
                 if (JSON.stringify(value.resources) !== JSON.stringify(expected)) process.exit(1);
                 if (value.payment?.x402?.primaryNetwork !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.x402?.payTo || "")) process.exit(1);
-                if (value.discovery?.agentManifest !== "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json") process.exit(1);
-                if (value.discovery?.agentSkill !== "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
+                if (value.discovery?.agentManifest !== "https://mimirs402.github.io/bountyverdict/agent-manifest.json") process.exit(1);
+                if (value.discovery?.agentSkill !== "https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
                 if (value.discovery?.aiCatalog !== `${process.env.PRODUCTION_API_URL}/.well-known/ai-catalog.json`) process.exit(1);
               });
             '; then
@@ -171,7 +171,7 @@ jobs:
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/mcp.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
-              if (value.name !== "io.github.cristianmoroaica/bountyverdict" || value.url !== `${process.env.PRODUCTION_API_URL}/mcp`) process.exit(1);
+              if (value.name !== "io.github.Mimirs402/bountyverdict" || value.url !== `${process.env.PRODUCTION_API_URL}/mcp`) process.exit(1);
               if (value.transport !== "streamable-http" || value.protocol_version !== "2025-11-25") process.exit(1);
               if (value.payment?.protocol !== "x402" || value.payment?.network !== "eip155:8453" || value.payment?.currency !== "USDC") process.exit(1);
               if (value.ai_catalog !== `${process.env.PRODUCTION_API_URL}/.well-known/ai-catalog.json`) process.exit(1);
@@ -295,7 +295,7 @@ jobs:
             ["classify_github_actions_flake", { run_url: "https://github.com/owner/repo/actions/runs/1", attempt: 1 }, "70000", "/api/github-actions-flake-retry-gate", "POST"],
             ["check_mcp_tool_drift", { contract_version: "mcp-drift/1", subject: { server_id: "release-check" }, annotation_source_trust: "trusted", baseline: { protocol_version: "2025-11-25", complete: true, tools: [] }, current: { protocol_version: "2025-11-25", complete: true, tools: [] } }, "20000", "/api/mcp-drift", "POST"],
           ];
-          const handoffKey = "io.github.cristianmoroaica/bountyverdict/http-payment-handoff";
+          const handoffKey = "io.github.Mimirs402/bountyverdict/http-payment-handoff";
           for (const [name, args, amount, path, method] of calls) {
             const called = await rpc(3, "tools/call", { name, arguments: args });
             const challenge = JSON.parse(called.result?.content?.[0]?.text || "null");

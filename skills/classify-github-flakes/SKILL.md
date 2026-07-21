@@ -9,7 +9,7 @@ Use FlakeVerdict as a read-only retry gate. It inspects public GitHub Actions ev
 
 ## Resolve the exact service
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json` for availability, then require its `production_api` to equal the exact origin `https://bountyverdict-agent-production.mimirslab.workers.dev`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json` for availability, then require its `production_api` to equal the exact origin `https://bountyverdict-agent-production.mimirslab.workers.dev`.
 2. Inspect the free sample at that origin and its `/openapi.json` document.
 3. Accept only a canonical public run URL shaped like `https://github.com/OWNER/REPO/actions/runs/RUN_ID` with no credentials, query, fragment, job suffix, or alternate host.
 4. Add `attempt` only when selecting a known positive run-attempt integer. Omit it to inspect the latest available attempt.

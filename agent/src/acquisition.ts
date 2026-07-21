@@ -291,7 +291,7 @@ function escapeRegExp(value: string): string {
 
 export function parseSkillsShInstallCounts(
   html: string,
-  repository = "cristianmoroaica/bountyverdict",
+  repository = "Mimirs402/bountyverdict",
 ): { total: number; by_skill: Record<PublishedSkill, number> } {
   const bySkill = {} as Record<PublishedSkill, number>;
   for (const skill of PUBLISHED_SKILLS) {

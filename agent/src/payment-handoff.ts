@@ -2,6 +2,8 @@ import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { PRODUCT_SELECTION_PREVIEWS } from "./selection-preview.ts";
 
 export const MCP_HTTP_PAYMENT_HANDOFF_EXTENSION =
+  "io.github.Mimirs402/bountyverdict/http-payment-handoff";
+export const LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION =
   "io.github.cristianmoroaica/bountyverdict/http-payment-handoff";
 
 export type ExactPaymentRequest = {
@@ -234,32 +236,35 @@ export async function declareMcpHttpPaymentHandoff(
     PRODUCT_CATALOG[product].amountAtomic.toString(),
   );
   const preview = PRODUCT_SELECTION_PREVIEWS[product];
-  return {
-    [MCP_HTTP_PAYMENT_HANDOFF_EXTENSION]: {
-      info: {
-        version: "1",
-        direct_mcp: {
-          automatic_payment_requires: "@x402/mcp",
-          payment_meta_key: "x402/payment",
-        },
-        wallet_mcp: {
-          capability: "make_x402_request",
-          use_exact_request: true,
-        },
-        selection_preview: {
-          product: preview.product,
-          price: PRODUCT_CATALOG[product].priceUsd,
-          currency: "USDC",
-          use_when: preview.useWhen,
-          not_for: preview.notFor,
-          decision_returned: preview.decisionReturned,
-          why_pay: preview.whyPay,
-          free_sample: new URL(preview.samplePath, `${validatedOrigin(origin)}/`).toString(),
-          unsigned_call_can_charge: false,
-        },
-        payment,
+  const declaration = {
+    info: {
+      version: "1",
+      direct_mcp: {
+        automatic_payment_requires: "@x402/mcp",
+        payment_meta_key: "x402/payment",
       },
-      schema: HTTP_HANDOFF_SCHEMA,
+      wallet_mcp: {
+        capability: "make_x402_request",
+        use_exact_request: true,
+      },
+      selection_preview: {
+        product: preview.product,
+        price: PRODUCT_CATALOG[product].priceUsd,
+        currency: "USDC",
+        use_when: preview.useWhen,
+        not_for: preview.notFor,
+        decision_returned: preview.decisionReturned,
+        why_pay: preview.whyPay,
+        free_sample: new URL(preview.samplePath, `${validatedOrigin(origin)}/`).toString(),
+        unsigned_call_can_charge: false,
+      },
+      payment,
     },
+    schema: HTTP_HANDOFF_SCHEMA,
+  };
+  return {
+    [MCP_HTTP_PAYMENT_HANDOFF_EXTENSION]: declaration,
+    // Preserve already-installed clients while the canonical registry identity migrates.
+    [LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION]: declaration,
   };
 }

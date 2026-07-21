@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Seven x402 decision APIs and installable skills for GitHub bounties, agent instructions, skill security, CI failures, flaky retries, and MCP compatibility." />
     <meta name="theme-color" content="#101510" />
-    <link rel="canonical" href="https://cristianmoroaica.github.io/bountyverdict/agents.html" />
+    <link rel="canonical" href="https://mimirs402.github.io/bountyverdict/agents.html" />
     <link rel="ai-catalog" href="https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json" />
     <title>BountyVerdict APIs for autonomous agents</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -23,19 +23,19 @@
         <h1>Agent tools that answer <em>before</em> you act.</h1>
         <p class="lede">No account or API key. Inspect a free sample and the exact payment challenge, then buy only the result your agent needs. Invalid inputs and upstream failures are not settled.</p>
         <p class="kicker">Connect the remote MCP</p>
-        <p>Use the official <code>io.github.cristianmoroaica/bountyverdict</code> server for six paid, read-only tools covering bounty checks, portfolio ranking, repository harness audits, GitHub Actions diagnosis, flaky-retry decisions, and MCP schema drift. SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP.</p>
+        <p>Use the official <code>io.github.Mimirs402/bountyverdict</code> server for six paid, read-only tools covering bounty checks, portfolio ranking, repository harness audits, GitHub Actions diagnosis, flaky-retry decisions, and MCP schema drift. SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP.</p>
         <p>Each client has its own remote-server format. Do not paste one generic JSON object into every host:</p>
         <p class="install-command"><code>codex mcp add bountyverdict --url https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p class="install-command"><code>claude mcp add --transport http --scope user bountyverdict https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p class="install-command"><code>gemini mcp add --transport http --scope user bountyverdict https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p>VS Code uses a top-level <code>servers</code> object; Cursor and Claude use <code>mcpServers</code>; Gemini JSON uses <code>httpUrl</code>. Follow the exact <a href="llms-install.md">client installation and paid-call handoff guide</a> for Codex, Claude, Gemini, VS Code, Cursor, Cline, and Kilo.</p>
         <p>Connect, call <code>tools/list</code>, and select the narrowest tool. A remote MCP connection does not itself provide a wallet. Direct automatic payment requires an x402-aware MCP client; otherwise the unpaid challenge includes a versioned exact-HTTP handoff for an authorized x402 wallet. Invalid input is rejected before payment.</p>
-        <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>
-        <p class="install-command"><code>npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y</code></p>
-        <p class="install-command"><code>gh skill preview cristianmoroaica/bountyverdict route-github-agent-checks@v1.0.3</code></p>
-        <p class="install-command"><code>gh skill install cristianmoroaica/bountyverdict route-github-agent-checks --pin v1.0.3</code></p>
-        <p class="install-command"><code>copilot plugin install cristianmoroaica/bountyverdict</code></p>
-        <p><a class="agent-link" href="https://skills.sh/cristianmoroaica/bountyverdict/route-github-agent-checks">Install the router on skills.sh ↗</a></p>
+        <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>
+        <p class="install-command"><code>npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y</code></p>
+        <p class="install-command"><code>gh skill preview Mimirs402/bountyverdict route-github-agent-checks@v1.0.3</code></p>
+        <p class="install-command"><code>gh skill install Mimirs402/bountyverdict route-github-agent-checks --pin v1.0.3</code></p>
+        <p class="install-command"><code>copilot plugin install Mimirs402/bountyverdict</code></p>
+        <p><a class="agent-link" href="https://skills.sh/Mimirs402/bountyverdict/route-github-agent-checks">Install the router on skills.sh ↗</a></p>
         <p><a href="mcp-github-actions-diagnosis.html">GitHub Actions failure diagnosis MCP server: compare root-cause and flaky-retry tools →</a></p>
       </section>
 
@@ -46,13 +46,13 @@
           <table>
             <thead><tr><th>Use when</th><th>Product</th><th>Price</th><th>Try free</th><th>Skill</th></tr></thead>
             <tbody>
-              <tr><td>Is one public GitHub bounty still worth pursuing?</td><td>BountyVerdict</td><td>$0.05</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/preflight-github-bounties">Install ↗</a></td></tr>
-              <tr><td>Which of 2–10 bounties is the best candidate?</td><td>Portfolio</td><td>$0.40</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/portfolio/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/preflight-github-bounties">Install ↗</a></td></tr>
-              <tr><td>Are this repository's agent instructions reliable?</td><td>HarnessVerdict</td><td>$0.03</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/harness/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/audit-agent-harness">Install ↗</a></td></tr>
-              <tr id="skillverdict"><td>Is a third-party SKILL.md safe to install?</td><td>SkillVerdict</td><td>$0.06</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/preflight-agent-skills">Install ↗</a></td></tr>
-              <tr><td>Why did this GitHub Actions run fail?</td><td>RunVerdict</td><td>$0.04</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/diagnose-github-actions">Install ↗</a></td></tr>
-              <tr><td>Is this failure flaky: retry once or fix it?</td><td>FlakeVerdict</td><td>$0.07</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/flake/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/classify-github-flakes">Install ↗</a></td></tr>
-              <tr><td>Will this MCP tools/list change break the agent?</td><td>MCPDriftVerdict</td><td>$0.02</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/mcp-drift/sample">Sample ↗</a></td><td><a href="https://skills.sh/cristianmoroaica/bountyverdict/check-mcp-tool-drift">Install ↗</a></td></tr>
+              <tr><td>Is one public GitHub bounty still worth pursuing?</td><td>BountyVerdict</td><td>$0.05</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/preflight-github-bounties">Install ↗</a></td></tr>
+              <tr><td>Which of 2–10 bounties is the best candidate?</td><td>Portfolio</td><td>$0.40</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/portfolio/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/preflight-github-bounties">Install ↗</a></td></tr>
+              <tr><td>Are this repository's agent instructions reliable?</td><td>HarnessVerdict</td><td>$0.03</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/harness/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/audit-agent-harness">Install ↗</a></td></tr>
+              <tr id="skillverdict"><td>Is a third-party SKILL.md safe to install?</td><td>SkillVerdict</td><td>$0.06</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/preflight-agent-skills">Install ↗</a></td></tr>
+              <tr><td>Why did this GitHub Actions run fail?</td><td>RunVerdict</td><td>$0.04</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/diagnose-github-actions">Install ↗</a></td></tr>
+              <tr><td>Is this failure flaky: retry once or fix it?</td><td>FlakeVerdict</td><td>$0.07</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/flake/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/classify-github-flakes">Install ↗</a></td></tr>
+              <tr><td>Will this MCP tools/list change break the agent?</td><td>MCPDriftVerdict</td><td>$0.02</td><td><a href="https://bountyverdict-agent-production.mimirslab.workers.dev/api/mcp-drift/sample">Sample ↗</a></td><td><a href="https://skills.sh/Mimirs402/bountyverdict/check-mcp-tool-drift">Install ↗</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -79,6 +79,6 @@
       </section>
     </main>
 
-    <footer class="footer shell"><p>Open source · continuously checked in production</p><p><a href="https://github.com/cristianmoroaica/bountyverdict/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/cristianmoroaica/bountyverdict/blob/main/PRIVACY.md">Privacy</a> · <a href="https://github.com/cristianmoroaica/bountyverdict">GitHub ↗</a></p></footer>
+    <footer class="footer shell"><p>Open source · continuously checked in production</p><p><a href="https://github.com/Mimirs402/bountyverdict/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/Mimirs402/bountyverdict/blob/main/PRIVACY.md">Privacy</a> · <a href="https://github.com/Mimirs402/bountyverdict">GitHub ↗</a></p></footer>
   </body>
 </html>

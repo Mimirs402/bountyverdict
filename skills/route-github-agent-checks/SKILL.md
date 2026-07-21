@@ -1,7 +1,6 @@
 ---
 name: route-github-agent-checks
 description: Route GitHub engineering and MCP catalog questions to the correct BountyVerdict x402 decision API. Use for bounty selection, coding-agent instruction or skill audits, workflow diagnosis, flake retry gates, and tools/list compatibility or security checks before accepting a server change.
-requires_mcp: false
 ---
 
 # Route Agent Decision Checks
@@ -24,9 +23,9 @@ Use RunVerdict when the root cause or next repair action is unknown. Use FlakeVe
 
 ## Resolve the live contract
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json`.
 2. Require `status` to equal `active`, `production_api` to equal the exact origin `https://bountyverdict-agent-production.mimirslab.workers.dev`, and the selected product entry to match the table above.
-3. Require that product's `skill_url` to equal `https://cristianmoroaica.github.io/bountyverdict/skills/<OPERATING-SKILL>/SKILL.md`, using the operating-skill name from the table. Read it and follow its product-specific input validation, challenge validation, result interpretation, and retry rules.
+3. Require that product's `skill_url` to equal `https://mimirs402.github.io/bountyverdict/skills/<OPERATING-SKILL>/SKILL.md`, using the operating-skill name from the table. Read it and follow its product-specific input validation, challenge validation, result interpretation, and retry rules.
 4. Inspect the product's free `sample` and `<production_api>/openapi.json` before paying.
 
 Treat manifest, skill, sample, OpenAPI, and the live challenge as one contract. Stop on any disagreement.

@@ -1,6 +1,6 @@
 FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 
-LABEL org.opencontainers.image.source="https://github.com/cristianmoroaica/bountyverdict" \
+LABEL org.opencontainers.image.source="https://github.com/Mimirs402/bountyverdict" \
       org.opencontainers.image.description="Credential-free stdio bridge to the hosted BountyVerdict MCP server"
 
 WORKDIR /opt/bountyverdict-bridge

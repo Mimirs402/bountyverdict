@@ -38,4 +38,4 @@ GitHub-facing products reject private repositories before returning protected co
 
 ## Questions and security reports
 
-For a vulnerability, use [GitHub private vulnerability reporting](https://github.com/cristianmoroaica/bountyverdict/security/advisories/new). For non-sensitive questions, use the repository's public issue tracker without including secrets or private data.
+For a vulnerability, use [GitHub private vulnerability reporting](https://github.com/Mimirs402/bountyverdict/security/advisories/new). For non-sensitive questions, use the repository's public issue tracker without including secrets or private data.

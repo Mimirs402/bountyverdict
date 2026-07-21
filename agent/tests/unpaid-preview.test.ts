@@ -77,8 +77,8 @@ for (const preview of cases) {
     assert.deepEqual(body.decision_returned, preview.decisions);
     assert.ok(body.why_pay);
     assert.match(body.free_sample, /^\/api\//);
-    assert.equal(body.skill, `https://cristianmoroaica.github.io/bountyverdict/skills/${preview.skill}/SKILL.md`);
-    assert.equal(body.documentation, "https://cristianmoroaica.github.io/bountyverdict/agents.html");
+    assert.equal(body.skill, `https://mimirs402.github.io/bountyverdict/skills/${preview.skill}/SKILL.md`);
+    assert.equal(body.documentation, "https://mimirs402.github.io/bountyverdict/agents.html");
     assert.equal(body.payment.protocol, "x402 v2");
     assert.equal(body.payment.network, "Base");
     assert.equal(body.payment.asset, "USDC");
@@ -320,5 +320,5 @@ test("MCPDriftVerdict unpaid response identifies the compatibility boundary", as
   assert.deepEqual(body.payment.exact_request.body, mcpDriftExampleInput);
   assert.ok(body.payment.agentic_wallet.argv.includes(JSON.stringify(mcpDriftExampleInput)));
   assert.equal(body.payment.max_amount_atomic, "20000");
-  assert.equal(body.skill, "https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md");
+  assert.equal(body.skill, "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md");
 });

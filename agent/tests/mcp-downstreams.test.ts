@@ -341,7 +341,7 @@ test("recognizes only Kilo's exact secret-free remote marketplace contract", () 
   const definition = `id: bountyverdict
 name: BountyVerdict Agent Decision Tools
 description: Six read-only x402 tools return evidence-linked decisions. Invalid input is rejected before payment.
-author: Cristian Moroaica
+author: Mimir's Lab
 url: ${repository}
 category: development
 prerequisites:

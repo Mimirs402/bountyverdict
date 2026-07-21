@@ -9,7 +9,7 @@ Use BountyVerdict as a decision gate before beginning bounty implementation. Tre
 
 ## Resolve the service
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json`.
 2. Continue only when `status` is `active` and `production_api` is an HTTPS origin.
 3. Prefer the manifest endpoint. Otherwise search Coinbase x402 Bazaar for `BountyVerdict GitHub bounty due diligence` and require the exact service name.
 4. Inspect the free sample, OpenAPI document, price, network, and schema before authorizing payment.

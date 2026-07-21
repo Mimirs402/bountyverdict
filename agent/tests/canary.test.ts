@@ -119,7 +119,7 @@ test("harness, skill, and run canaries enforce commit, file, and log coverage", 
     checkSkill: async () => ({
       product: "SkillVerdict", version: "1.0", verdict: "LOW_RISK", risk_score: 4, summary: "fixture",
       service_reuse: SERVICE_REUSE.skill,
-      repository: { url: CANARY_FIXTURES.skill.repository, full_name: "cristianmoroaica/bountyverdict", archived: false, default_branch: "main", commit_sha: "b".repeat(40) },
+      repository: { url: CANARY_FIXTURES.skill.repository, full_name: "Mimirs402/bountyverdict", archived: false, default_branch: "main", commit_sha: "b".repeat(40) },
       skill: { path: `${CANARY_FIXTURES.skill.path}/SKILL.md`, name: "diagnose-github-actions", description: "fixture", files: [`${CANARY_FIXTURES.skill.path}/SKILL.md`] },
       capabilities: { declared: [], observed: [], external_domains: [] }, findings: [], recommendations: [],
       coverage: { entries_in_skill: 1, files_scanned: 1, bytes_scanned: 250, skipped_binary: 0, skipped_oversized: 0, selection_truncated: false, github_rate_limit_remaining: 4970 },

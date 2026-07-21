@@ -1,7 +1,7 @@
 import { PRODUCT_CATALOG, PRODUCT_KEYS } from "./product-catalog.ts";
 
-const REPOSITORY = "https://github.com/cristianmoroaica/bountyverdict";
-const PRODUCT_SITE = "https://cristianmoroaica.github.io/bountyverdict/";
+const REPOSITORY = "https://github.com/Mimirs402/bountyverdict";
+const PRODUCT_SITE = "https://mimirs402.github.io/bountyverdict/";
 
 function numericPrice(price: string): number {
   const value = Number(price.replace(/^\$/, ""));
@@ -34,8 +34,8 @@ export function createX402ServiceManifest(origin: string, network: string, payTo
     selfHostable: true,
     license: "MIT",
     maintainer: {
-      name: "Cristian Moroaica",
-      url: "https://github.com/cristianmoroaica",
+      name: "Mimir's Lab",
+      url: "https://github.com/Mimirs402",
     },
     privacyPolicy: `${PRODUCT_SITE}PRIVACY.md`,
     ecosystem: {
@@ -67,7 +67,7 @@ export function createX402ServiceManifest(origin: string, network: string, payTo
       mcp: `${canonicalOrigin}/mcp`,
       mcpMetadata: `${canonicalOrigin}/.well-known/mcp.json`,
       aiCatalog: `${canonicalOrigin}/.well-known/ai-catalog.json`,
-      mcpRegistryLatest: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest",
+      mcpRegistryLatest: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest",
     },
     capabilities: {
       paidTools: resources.length,

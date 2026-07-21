@@ -26,7 +26,7 @@ jobs:
           name=$(jq -er '.name' server.json)
           version=$(jq -er '.version' server.json)
           remote=$(jq -er '[.remotes[] | select(.type == "streamable-http") | .url] | if length == 1 then .[0] else error("expected exactly one Streamable HTTP remote") end' server.json)
-          [[ "$name" == io.github.cristianmoroaica/* ]]
+          [[ "$name" == io.github.Mimirs402/* ]]
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$remote" == "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp" ]]
           echo "name=$name" >> "$GITHUB_OUTPUT"

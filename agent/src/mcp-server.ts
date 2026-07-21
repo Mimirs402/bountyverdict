@@ -99,7 +99,7 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   audit_agent_harness: `${unsignedPreviewGuidance(PRODUCT_CATALOG.harness.priceUsd)} Use before assigning a coding agent to a public GitHub repository to audit its instruction stack at an immutable commit. This does not diagnose CI. Read-only; never invent arguments. Sample: https://bountyverdict-agent-production.mimirslab.workers.dev/api/harness/sample.`,
   diagnose_github_actions_run: `${unsignedPreviewGuidance(PRODUCT_CATALOG.run.priceUsd)} Use to find why one public GitHub Actions run failed and get redacted evidence plus concrete next actions. For retry-once versus fix use classify_github_actions_flake. Read-only; never invent arguments. Sample: https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample.`,
   classify_github_actions_flake: `${unsignedPreviewGuidance(PRODUCT_CATALOG.flake.priceUsd)} Use to decide whether one completed failed GitHub Actions run should be retried once or fixed, using attempt and historical fingerprints. For root cause use diagnose_github_actions_run. Read-only; never invent arguments. Sample: https://bountyverdict-agent-production.mimirslab.workers.dev/api/flake/sample.`,
-  check_mcp_tool_drift: `${unsignedPreviewGuidance(PRODUCT_CATALOG.mcpdrift.priceUsd)} Use before accepting an MCP tools/list update to compare complete baseline and current snapshots for breaking schema or safety-hint changes. It never fetches or invokes tools. Read-only; never invent or truncate snapshot arguments. Workflow: https://cristianmoroaica.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md.`,
+  check_mcp_tool_drift: `${unsignedPreviewGuidance(PRODUCT_CATALOG.mcpdrift.priceUsd)} Use before accepting an MCP tools/list update to compare complete baseline and current snapshots for breaking schema or safety-hint changes. It never fetches or invokes tools. Read-only; never invent or truncate snapshot arguments. Workflow: https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md.`,
 };
 
 const issueUrlSchema = z.string()
@@ -318,7 +318,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     title: "BountyVerdict Agent Decision Tools",
     version: MCP_SERVER_VERSION,
     description: "Paid, read-only GitHub and MCP decision tools for autonomous agents.",
-    websiteUrl: "https://cristianmoroaica.github.io/bountyverdict/",
+    websiteUrl: "https://mimirs402.github.io/bountyverdict/",
   }, {
     instructions: `Choose by task: one bounty -> check_github_bounty; 2-10 bounties -> rank_github_bounties; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. All six tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
   });

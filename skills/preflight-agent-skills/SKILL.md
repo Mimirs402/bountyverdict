@@ -9,7 +9,7 @@ Use SkillVerdict before loading third-party skill instructions into trusted cont
 
 ## Resolve the service
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json`.
 2. Require `status: active` and a credential-free HTTPS `production_api` origin.
 3. Inspect `<production_api>/api/skill/sample` and `<production_api>/openapi.json`.
 4. Identify the canonical public GitHub repository URL and repository-relative skill directory or exact `SKILL.md` path.

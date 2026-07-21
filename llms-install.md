@@ -118,7 +118,7 @@ A remote MCP connection does not itself provide a wallet. Direct automatic MCP p
 
 Every unpaid BountyVerdict MCP challenge also declares the versioned extension:
 
-`io.github.cristianmoroaica/bountyverdict/http-payment-handoff`
+`io.github.Mimirs402/bountyverdict/http-payment-handoff`
 
 Its `info.payment` object contains the equivalent protected HTTP x402 request:
 

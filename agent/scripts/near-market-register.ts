@@ -36,7 +36,7 @@ if (previous) {
       tags: ["developer-tools", "github", "ci-cd", "code-review", "mcp"],
       capabilities: {
         summary: "Automated evidence-linked GitHub and MCP decision checks with exact typed outputs.",
-        documentation: "https://cristianmoroaica.github.io/bountyverdict/agents.html",
+        documentation: "https://mimirs402.github.io/bountyverdict/agents.html",
       },
     }),
     signal: AbortSignal.timeout(30_000),

@@ -7,7 +7,7 @@ import {
   TOOLHIVE_TOOLS,
 } from "../src/toolhive.ts";
 
-const repository = "https://github.com/cristianmoroaica/bountyverdict";
+const repository = "https://github.com/Mimirs402/bountyverdict";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
 
 function fixture() {
@@ -24,7 +24,7 @@ function fixture() {
             status: "Active",
             custom_metadata: {
               license: "MIT",
-              homepage: "https://cristianmoroaica.github.io/bountyverdict/",
+              homepage: "https://mimirs402.github.io/bountyverdict/",
             },
             tools: [...TOOLHIVE_TOOLS],
             tags: [

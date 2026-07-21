@@ -1,7 +1,6 @@
 ---
 name: check-mcp-tool-drift
 description: Compare complete MCP 2025-11-25 tools/list snapshots before accepting a server upgrade or changed tool catalog. Use after notifications/tools/list_changed, at agent startup when a catalog hash differs from the pinned baseline, or before installing, enabling, or repinning a catalog-serving endpoint.
-requires_mcp: false
 ---
 
 # Check Protocol Catalog Drift

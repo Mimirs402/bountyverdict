@@ -3,11 +3,11 @@
   "description": "Evidence-linked decision gates for public GitHub bounties, coding-agent instructions, Actions failures, flaky retries, and MCP tool-catalog upgrades. The skills inspect free samples and validate exact x402 payment constraints before any optional paid call.",
   "version": "1.0.3",
   "author": {
-    "name": "Cristian Moroaica",
-    "url": "https://github.com/cristianmoroaica"
+    "name": "Mimir's Lab",
+    "url": "https://github.com/Mimirs402"
   },
-  "homepage": "https://cristianmoroaica.github.io/bountyverdict/agents.html",
-  "repository": "https://github.com/cristianmoroaica/bountyverdict",
+  "homepage": "https://mimirs402.github.io/bountyverdict/agents.html",
+  "repository": "https://github.com/Mimirs402/bountyverdict",
   "license": "MIT",
   "keywords": [
     "github",

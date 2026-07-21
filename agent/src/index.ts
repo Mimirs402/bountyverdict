@@ -131,7 +131,7 @@ const RUN_ENDPOINT = PRODUCT_CATALOG.run.path;
 const FLAKE_ENDPOINT = PRODUCT_CATALOG.flake.path;
 const MCP_DRIFT_ENDPOINT = PRODUCT_CATALOG.mcpdrift.path;
 const TESTNET_NETWORK = TESTNET_X402_NETWORK;
-const PRODUCT_URL = "https://cristianmoroaica.github.io/bountyverdict/";
+const PRODUCT_URL = "https://mimirs402.github.io/bountyverdict/";
 const ICON_URL = `${PRODUCT_URL}favicon.svg`;
 const MANIFEST_URL = `${PRODUCT_URL}agent-manifest.json`;
 const SKILLS_URL = `${PRODUCT_URL}skills/`;
@@ -606,9 +606,9 @@ app.get("/", (c) =>
       transport: "streamable-http",
       protocol_version: "2025-11-25",
       paid_tools: 6,
-      registry_name: "io.github.cristianmoroaica/bountyverdict",
+      registry_name: "io.github.Mimirs402/bountyverdict",
     },
-    install_skill: "npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y",
+    install_skill: "npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y",
     human_checker: PRODUCT_URL,
   }),
 );

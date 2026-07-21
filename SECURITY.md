@@ -2,7 +2,7 @@
 
 ## Report a vulnerability privately
 
-Please use [GitHub private vulnerability reporting](https://github.com/cristianmoroaica/bountyverdict/security/advisories/new). Do not open a public issue for a suspected vulnerability, payment bypass, secret exposure, or exploit.
+Please use [GitHub private vulnerability reporting](https://github.com/Mimirs402/bountyverdict/security/advisories/new). Do not open a public issue for a suspected vulnerability, payment bypass, secret exposure, or exploit.
 
 Include the affected endpoint or skill, reproduction steps, expected impact, and any transaction hash only when it is already public onchain. Never include wallet private keys, seed phrases, API secrets, payment signatures, access tokens, or private repository data.
 

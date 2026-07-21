@@ -7,7 +7,10 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import app from "../src/index.ts";
 import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
-import { MCP_HTTP_PAYMENT_HANDOFF_EXTENSION } from "../src/payment-handoff.ts";
+import {
+  LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
+  MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
+} from "../src/payment-handoff.ts";
 import { PRODUCT_CATALOG } from "../src/product-catalog.ts";
 import { PRODUCT_SELECTION_PREVIEWS } from "../src/selection-preview.ts";
 
@@ -221,6 +224,7 @@ for (const [name, args, amount] of challengeCases) {
     assert.equal(challenge.extensions.bazaar.info.input.toolName, name);
     assert.equal(challenge.extensions.bazaar.info.input.transport, "streamable-http");
     const handoff = challenge.extensions[MCP_HTTP_PAYMENT_HANDOFF_EXTENSION];
+    assert.deepEqual(challenge.extensions[LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION], handoff);
     assert.equal(handoff.info.version, "1");
     assert.equal(handoff.info.direct_mcp.automatic_payment_requires, "@x402/mcp");
     assert.equal(handoff.info.direct_mcp.payment_meta_key, "x402/payment");

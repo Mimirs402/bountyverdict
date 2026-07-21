@@ -30,7 +30,7 @@ function paymentInfo(price: string) {
   };
 }
 
-const SKILLS_BASE = "https://cristianmoroaica.github.io/bountyverdict/skills/";
+const SKILLS_BASE = "https://mimirs402.github.io/bountyverdict/skills/";
 
 function agentMetadata(
   origin: string,
@@ -67,7 +67,7 @@ export function createOpenApi(
     },
     externalDocs: {
       description: "Agent manifest and activation status",
-      url: "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json",
+      url: "https://mimirs402.github.io/bountyverdict/agent-manifest.json",
     },
     tags: [
       { name: "bounty-due-diligence", description: "Decide whether one public GitHub bounty remains worth pursuing." },
@@ -685,13 +685,13 @@ export function createLlmsText(origin: string): string {
 - RFC 9727 API catalog: ${origin}/.well-known/api-catalog
 - Integration declaration: ${origin}/.well-known/integrations.json
 - Agentic Resource Discovery catalog: ${origin}/.well-known/ai-catalog.json (six neutral representative queries; publication is not proof of third-party indexing)
-- MCP Registry name: io.github.cristianmoroaica/bountyverdict
-- Client-specific MCP install and paid-call guide: https://cristianmoroaica.github.io/bountyverdict/llms-install.md
+- MCP Registry name: io.github.Mimirs402/bountyverdict
+- Client-specific MCP install and paid-call guide: https://mimirs402.github.io/bountyverdict/llms-install.md
 - A remote MCP connection does not provide a wallet; direct automatic payment requires an x402-aware MCP client such as @x402/mcp
-- Every valid unpaid MCP call includes io.github.cristianmoroaica/bountyverdict/http-payment-handoff with the equivalent exact HTTP x402 request for an authorized wallet
-- Umbrella routing skill: https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md
-- Install router: npx skills add cristianmoroaica/bountyverdict --skill route-github-agent-checks -y
-- Install all operating skills: npx skills add cristianmoroaica/bountyverdict --skill '*' -y
+- Every valid unpaid MCP call includes io.github.Mimirs402/bountyverdict/http-payment-handoff with the equivalent exact HTTP x402 request for an authorized wallet
+- Umbrella routing skill: https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md
+- Install router: npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y
+- Install all operating skills: npx skills add Mimirs402/bountyverdict --skill '*' -y
 - Paid check: POST ${origin}/api/bounty-preflight with {"issue_url":"<EXACT_PUBLIC_GITHUB_ISSUE_URL>"}
 - Deprecated compatibility transport: GET ${origin}/api/verdict?issue_url=<PUBLIC_GITHUB_ISSUE_URL>
 - Price: $0.05 USDC per successful result through x402 v2

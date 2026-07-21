@@ -49,7 +49,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     assert.match(paid["x-payment-info"].price.amount, /^\d+\.\d{6}$/);
     assert.ok(paid.responses["402"]);
     assert.equal(paid.tags.length, 1);
-    assert.match(paid["x-agent-skill"], /^https:\/\/cristianmoroaica\.github\.io\/bountyverdict\/skills\/[a-z0-9-]+\/SKILL\.md$/);
+    assert.match(paid["x-agent-skill"], /^https:\/\/mimirs402\.github\.io\/bountyverdict\/skills\/[a-z0-9-]+\/SKILL\.md$/);
     assert.match(paid["x-use-when"], /\.$/);
     assert.ok(paid["x-service-reuse"]);
     assert.match(paid["x-free-sample"], /^https:\/\/agent\.example\/api\/(?:.+\/)?sample$/);
@@ -148,7 +148,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.match(llms, /services\/svc_5e36dabc8b434e95\/purchase/);
   assert.match(llms, /SkillVerdict is intentionally excluded/);
   assert.match(llms, /Remote MCP server: https:\/\/agent\.example\/mcp/);
-  assert.match(llms, /io\.github\.cristianmoroaica\/bountyverdict/);
+  assert.match(llms, /io\.github\.Mimirs402\/bountyverdict/);
   assert.match(llms, /plans\/plan_ec6c49878dc34636\/subscribe/);
   assert.match(llms, /up to 20 combined requests/);
   assert.match(llms, /NEAR Agent Market/);

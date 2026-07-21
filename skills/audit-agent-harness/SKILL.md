@@ -9,7 +9,7 @@ Use HarnessVerdict as a deterministic repository preflight. Treat the result as 
 
 ## Resolve and inspect the service
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json`.
 2. Require `status: active` and a credential-free HTTPS `production_api` origin.
 3. Inspect `<production_api>/api/harness/sample` and `<production_api>/openapi.json` before purchasing.
 4. Canonicalize the target to `https://github.com/owner/repository`. Audit public repositories only.

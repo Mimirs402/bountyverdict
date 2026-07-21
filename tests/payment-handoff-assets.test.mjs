@@ -30,7 +30,7 @@ test("public guidance states the real wallet boundary and exact handoff contract
     assert.match(value, /remote MCP connection does not (?:itself )?provide a wallet/i);
     assert.match(value, /x402-aware MCP client/i);
   }
-  assert.match(guide, /io\.github\.cristianmoroaica\/bountyverdict\/http-payment-handoff/);
+  assert.match(guide, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);
   assert.match(guide, /exact method and fully encoded URL/);
   assert.match(guide, /validated JSON body and its SHA-256/);
   assert.match(guide, /Never join the values into a shell string/);
@@ -39,10 +39,14 @@ test("public guidance states the real wallet boundary and exact handoff contract
   assert.match(page, /llms-install\.md/);
   assert.doesNotMatch(guide, /(?:PRIVATE_KEY|API_SECRET|WALLET_SECRET|Bearer [A-Za-z0-9])/);
   const manifest = JSON.parse(manifestText);
-  assert.equal(manifest.client_setup, "https://cristianmoroaica.github.io/bountyverdict/llms-install.md");
+  assert.equal(manifest.client_setup, "https://mimirs402.github.io/bountyverdict/llms-install.md");
   assert.equal(manifest.mcp.direct_automatic_payment_requires, "@x402/mcp");
   assert.equal(
     manifest.mcp.http_payment_handoff_extension,
+    "io.github.Mimirs402/bountyverdict/http-payment-handoff",
+  );
+  assert.equal(
+    manifest.mcp.legacy_http_payment_handoff_extension,
     "io.github.cristianmoroaica/bountyverdict/http-payment-handoff",
   );
 });

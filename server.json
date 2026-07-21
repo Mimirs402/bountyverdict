@@ -1,21 +1,22 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.cristianmoroaica/bountyverdict",
+  "name": "io.github.Mimirs402/bountyverdict",
   "title": "BountyVerdict Agent Decision Tools",
   "description": "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
   "version": "1.1.1",
   "icons": [
     {
-      "src": "https://cristianmoroaica.github.io/bountyverdict/favicon.svg",
+      "src": "https://mimirs402.github.io/bountyverdict/favicon.svg",
       "mimeType": "image/svg+xml",
       "sizes": ["any"]
     }
   ],
   "repository": {
-    "url": "https://github.com/cristianmoroaica/bountyverdict",
-    "source": "github"
+    "url": "https://github.com/Mimirs402/bountyverdict",
+    "source": "github",
+    "id": "1308131831"
   },
-  "websiteUrl": "https://cristianmoroaica.github.io/bountyverdict/",
+  "websiteUrl": "https://mimirs402.github.io/bountyverdict/",
   "remotes": [
     {
       "type": "streamable-http",
@@ -39,7 +40,7 @@
         "agent tool compatibility",
         "x402"
       ],
-      "documentation": "https://cristianmoroaica.github.io/bountyverdict/",
+      "documentation": "https://mimirs402.github.io/bountyverdict/",
       "useCases": [
         "Check one public GitHub bounty before coding",
         "Rank 2-10 public GitHub bounty opportunities",

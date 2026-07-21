@@ -432,7 +432,7 @@ test("directory monitoring tracks exact GitHub Agent Finder PR, catalog, Registr
   assert.match(directory, /const agentFinderPrNumber = 10/);
   assert.match(directory, /github\/agentfinder-catalog\/pull\/\$\{agentFinderPrNumber\}/);
   assert.match(directory, /catalog\/cristianmoroaica\/bountyverdict\.json/);
-  assert.match(directory, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.cristianmoroaica%2Fbountyverdict\/versions\/latest/);
+  assert.match(directory, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
   assert.match(directory, /https:\/\/github\.com\/agentfinder\?search=bountyverdict/);
   assert.match(directory, /async function agentFinderCatalogStatus/);
   assert.match(directory, /parseAgentFinderCatalogEntry/);

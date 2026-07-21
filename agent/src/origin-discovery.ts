@@ -2,8 +2,8 @@ import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { mcpDriftExampleInput } from "./mcp-drift-discovery.ts";
 import { MCP_HTTP_PAYMENT_HANDOFF_EXTENSION } from "./payment-handoff.ts";
 
-const REPOSITORY = "https://github.com/cristianmoroaica/bountyverdict";
-const SITE = "https://cristianmoroaica.github.io/bountyverdict";
+const REPOSITORY = "https://github.com/Mimirs402/bountyverdict";
+const SITE = "https://mimirs402.github.io/bountyverdict";
 const NETWORK_LABELS = Object.freeze({
   "eip155:8453": "Base mainnet",
   "eip155:84532": "Base Sepolia",
@@ -180,7 +180,7 @@ export function createMcpWellKnown(originInput: string, network: string) {
   const origin = canonicalOrigin(originInput);
   const paymentNetwork = networkLabel(network);
   return {
-    name: "io.github.cristianmoroaica/bountyverdict",
+    name: "io.github.Mimirs402/bountyverdict",
     title: "BountyVerdict Agent Decision APIs",
     description: AGENT_DECISION_DESCRIPTION,
     url: `${origin}/mcp`,
@@ -199,8 +199,8 @@ export function createMcpWellKnown(originInput: string, network: string) {
     },
     client_setup: `${SITE}/llms-install.md`,
     registry: {
-      name: "io.github.cristianmoroaica/bountyverdict",
-      latest: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest",
+      name: "io.github.Mimirs402/bountyverdict",
+      latest: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest",
     },
     ai_catalog: `${origin}/.well-known/ai-catalog.json`,
     api_catalog: `${origin}/.well-known/api-catalog`,
@@ -217,7 +217,7 @@ export function createMcpServerCard(originInput: string, network: string) {
     version: "1.0",
     protocolVersion: "2025-11-25",
     serverInfo: {
-      name: "io.github.cristianmoroaica/bountyverdict",
+      name: "io.github.Mimirs402/bountyverdict",
       title: "BountyVerdict Agent Decision APIs",
       version: "1.1.1",
     },
@@ -292,7 +292,7 @@ export function createApiCatalog(originInput: string) {
         "service-meta": [
           { href: `${origin}/.well-known/mcp.json`, type: "application/json" },
           {
-            href: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest",
+            href: "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest",
             type: "application/json",
           },
         ],

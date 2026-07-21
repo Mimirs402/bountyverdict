@@ -66,7 +66,7 @@ export function parseToolHiveCatalogEntry(
   const remoteMeta = record(namespace[endpoint], "remote metadata");
   const custom = record(remoteMeta.custom_metadata, "custom metadata");
   if (remoteMeta.tier !== "Community" || remoteMeta.status !== "Active" ||
-    custom.license !== "MIT" || custom.homepage !== "https://cristianmoroaica.github.io/bountyverdict/") {
+    custom.license !== "MIT" || custom.homepage !== "https://mimirs402.github.io/bountyverdict/") {
     throw new Error("ToolHive trust metadata drifted.");
   }
   const tools = exactStrings(remoteMeta.tools, TOOLHIVE_TOOLS, "tool list");

@@ -1,5 +1,5 @@
-Contact: https://github.com/cristianmoroaica/bountyverdict/security/advisories/new
+Contact: https://github.com/Mimirs402/bountyverdict/security/advisories/new
 Expires: 2027-07-20T00:00:00Z
 Preferred-Languages: en
-Canonical: https://cristianmoroaica.github.io/bountyverdict/security.txt
-Policy: https://github.com/cristianmoroaica/bountyverdict/blob/main/SECURITY.md
+Canonical: https://mimirs402.github.io/bountyverdict/security.txt
+Policy: https://github.com/Mimirs402/bountyverdict/blob/main/SECURITY.md

@@ -28,7 +28,7 @@ export const CANARY_FIXTURES = {
   ],
   harness: "https://github.com/openai/codex",
   skill: {
-    repository: "https://github.com/cristianmoroaica/bountyverdict",
+    repository: "https://github.com/Mimirs402/bountyverdict",
     path: "skills/diagnose-github-actions",
   },
   run: "https://github.com/openai/codex/actions/runs/29728148711",
@@ -223,7 +223,7 @@ export async function runFunctionalCanary(
   } else if (product === "skill") {
     const audit = await dependencies.checkSkill(CANARY_FIXTURES.skill.repository, CANARY_FIXTURES.skill.path, env);
     requireCondition(audit.product === "SkillVerdict" && audit.version === "1.0", "Skill product contract changed.");
-    requireCondition(audit.repository.full_name.toLowerCase() === "cristianmoroaica/bountyverdict", "Skill result does not match its fixture.");
+    requireCondition(audit.repository.full_name.toLowerCase() === "mimirs402/bountyverdict", "Skill result does not match its fixture.");
     requireCondition(audit.skill.path === `${CANARY_FIXTURES.skill.path}/SKILL.md`, "Skill result does not match its fixture path.");
     requireCondition(validCommit(audit.repository.commit_sha), "Skill result is not pinned to a commit.");
     requireCondition(

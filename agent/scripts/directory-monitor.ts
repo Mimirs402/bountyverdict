@@ -49,9 +49,9 @@ if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
 }
 
-const repository = "https://github.com/cristianmoroaica/bountyverdict";
+const repository = "https://github.com/Mimirs402/bountyverdict";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
-const skillsUrl = "https://skills.sh/cristianmoroaica/bountyverdict";
+const skillsUrl = "https://skills.sh/Mimirs402/bountyverdict";
 const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-skills-security/pull/38";
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
@@ -132,7 +132,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-21T15:54:20Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.0.3";
+const githubSkillReleaseTag = "v1.1.1";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
@@ -192,8 +192,8 @@ const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
   "https://raw.githubusercontent.com/stacklok/toolhive-catalog/main/registries/toolhive/servers/bountyverdict/server.json";
-const officialMcpServerName = "io.github.cristianmoroaica/bountyverdict";
-const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest";
+const officialMcpServerName = "io.github.Mimirs402/bountyverdict";
+const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
 const ardRepresentativeQueries = Object.freeze([
   "check whether a github bounty issue is still open claimed or worth coding",
@@ -2464,12 +2464,12 @@ async function githubSkillStatus(previousStatus: Record<string, any>, observedAt
     const [{ stdout: releaseOutput }, { stdout: searchOutput }] = await Promise.all([
       execFileAsync("gh", [
         "release", "view", githubSkillReleaseTag,
-        "--repo", "cristianmoroaica/bountyverdict",
+        "--repo", "Mimirs402/bountyverdict",
         "--json", "tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish",
       ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
       execFileAsync("gh", [
         "skill", "search", selectedSkill,
-        "--owner", "cristianmoroaica",
+        "--owner", "Mimirs402",
         "--limit", "20",
         "--json", "description,namespace,path,repo,skillName,stars",
       ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
@@ -2478,7 +2478,7 @@ async function githubSkillStatus(previousStatus: Record<string, any>, observedAt
     const results = JSON.parse(searchOutput) as Array<Record<string, unknown>>;
     if (!Array.isArray(results)) throw new Error(`GitHub Skill search for ${selectedSkill} was malformed.`);
     const resultIndex = results.findIndex((entry) =>
-      String(entry.repo).toLowerCase() === "cristianmoroaica/bountyverdict" && entry.skillName === selectedSkill
+      String(entry.repo).toLowerCase() === "mimirs402/bountyverdict" && entry.skillName === selectedSkill
     );
     const checked = {
       skill: selectedSkill,
@@ -2522,7 +2522,7 @@ async function githubSkillStatus(previousStatus: Record<string, any>, observedAt
     };
   } catch (error) {
     return {
-      url: `https://github.com/cristianmoroaica/bountyverdict/releases/tag/${githubSkillReleaseTag}`,
+      url: `https://github.com/Mimirs402/bountyverdict/releases/tag/${githubSkillReleaseTag}`,
       listed: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),

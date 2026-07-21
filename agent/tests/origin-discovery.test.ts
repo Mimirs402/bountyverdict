@@ -38,7 +38,7 @@ test("origin manifest publishes six exact products without changing SkillVerdict
     assert.deepEqual(tokens, ["paths", expected.path, expected.method.toLowerCase()]);
     const resolved = tokens.reduce((value: any, token) => value?.[token], openApi);
     assert.ok(resolved, `${product.name} OpenAPI operation pointer must resolve`);
-    assert.match(product.task_skill, /^https:\/\/cristianmoroaica\.github\.io\/bountyverdict\/skills\//);
+    assert.match(product.task_skill, /^https:\/\/mimirs402\.github\.io\/bountyverdict\/skills\//);
   }
   assert.equal(manifest.payment.pay_to, "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614");
   assert.equal(manifest.reliability.mutates_external_systems, false);
@@ -47,7 +47,7 @@ test("origin manifest publishes six exact products without changing SkillVerdict
   assert.equal(manifest.mcp.server_card, `${origin}/.well-known/mcp/server-card.json`);
   assert.equal(manifest.api_catalog, `${origin}/.well-known/api-catalog`);
   assert.equal(manifest.integrations, `${origin}/.well-known/integrations.json`);
-  assert.equal(manifest.client_setup, "https://cristianmoroaica.github.io/bountyverdict/llms-install.md");
+  assert.equal(manifest.client_setup, "https://mimirs402.github.io/bountyverdict/llms-install.md");
   assert.equal(manifest.mcp.direct_automatic_payment_requires, "@x402/mcp");
   assert.equal(manifest.mcp.http_payment_handoff_extension, MCP_HTTP_PAYMENT_HANDOFF_EXTENSION);
   assert.deepEqual(manifest.mcp.tools.map(({ name }) => name), [
@@ -85,14 +85,14 @@ test("origin skill uses the runtime testnet instead of inventing mainnet", () =>
 
 test("well-known MCP metadata resolves the exact paid remote without secrets", async () => {
   const metadata = createMcpWellKnown(origin, "eip155:8453");
-  assert.equal(metadata.name, "io.github.cristianmoroaica/bountyverdict");
+  assert.equal(metadata.name, "io.github.Mimirs402/bountyverdict");
   assert.equal(metadata.url, `${origin}/mcp`);
   assert.equal(metadata.transport, "streamable-http");
   assert.equal(metadata.protocol_version, "2025-11-25");
   assert.deepEqual(metadata.payment.price_range_usdc, { minimum: "0.02", maximum: "0.40" });
   assert.equal(metadata.payment.direct_automatic_payment_requires, "@x402/mcp");
   assert.equal(metadata.payment.http_payment_handoff_extension, MCP_HTTP_PAYMENT_HANDOFF_EXTENSION);
-  assert.equal(metadata.client_setup, "https://cristianmoroaica.github.io/bountyverdict/llms-install.md");
+  assert.equal(metadata.client_setup, "https://mimirs402.github.io/bountyverdict/llms-install.md");
   assert.equal(metadata.ai_catalog, `${origin}/.well-known/ai-catalog.json`);
   assert.equal(metadata.api_catalog, `${origin}/.well-known/api-catalog`);
   assert.equal(metadata.integrations, `${origin}/.well-known/integrations.json`);
@@ -222,8 +222,8 @@ test("Worker serves origin-native manifest and skill with exact content types", 
 
   const rootResponse = await app.request(`${origin}/`, {}, env);
   const root = await rootResponse.json() as Record<string, any>;
-  assert.equal(root.agent_manifest, "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json");
-  assert.equal(root.agent_skill, "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md");
+  assert.equal(root.agent_manifest, "https://mimirs402.github.io/bountyverdict/agent-manifest.json");
+  assert.equal(root.agent_skill, "https://mimirs402.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md");
   assert.equal(root.distributed_agent_manifest, "/agent-manifest.json");
   assert.equal(root.distributed_agent_skill, "/SKILL.md");
   assert.equal(root.ai_catalog, "/.well-known/ai-catalog.json");

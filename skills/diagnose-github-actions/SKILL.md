@@ -9,7 +9,7 @@ Use RunVerdict on one canonical public run URL. It reads bounded exact-attempt j
 
 ## Resolve and inspect
 
-1. Read `https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json`.
+1. Read `https://mimirs402.github.io/bountyverdict/agent-manifest.json`.
 2. Require `status: active` and a credential-free HTTPS `production_api` origin.
 3. Inspect `<production_api>/api/run/sample` and `<production_api>/openapi.json`.
 4. Require a canonical URL shaped like `https://github.com/OWNER/REPO/actions/runs/RUN_ID`.

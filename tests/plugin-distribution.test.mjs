@@ -43,7 +43,7 @@ test("Glama release packaging bridges only the existing hosted MCP without secre
 
   assert.deepEqual(glama, {
     $schema: "https://glama.ai/mcp/schemas/server.json",
-    maintainers: ["cristianmoroaica"],
+    maintainers: ["Mimirs402"],
   });
   assert.match(dockerfile, /^FROM node:22\.23\.1-alpine3\.24@sha256:[0-9a-f]{64}$/m);
   assert.deepEqual(packageJson.dependencies, { "mcp-remote": "0.1.38" });

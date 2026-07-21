@@ -141,7 +141,7 @@ const FIXTURES: Readonly<Record<SettlementCanaryProduct, SettlementCanaryFixture
       amountAtomic: "60000",
       method: "GET",
       url: fixtureUrl("/api/skill", [
-        ["repo_url", "https://github.com/cristianmoroaica/bountyverdict"],
+        ["repo_url", "https://github.com/Mimirs402/bountyverdict"],
         ["skill_path", "skills/diagnose-github-actions"],
       ]),
     }),
@@ -445,7 +445,7 @@ export function validatePaidProductContract(
     }
     exactValue(
       String(body.repository.full_name).toLowerCase(),
-      "cristianmoroaica/bountyverdict",
+      "Mimirs402/bountyverdict",
       "SKILL_FIXTURE_CHANGED",
     );
     exactValue(

@@ -50,6 +50,28 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /github_skill: githubSkill/);
 });
 
+test("directory monitoring tracks the dedicated Skills.sh adapter and indexing request", async () => {
+  const [directory, distribution, parser] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../agent/src/skills-sh.ts", import.meta.url), "utf8"),
+  ]);
+  const start = directory.indexOf("async function skillsShDedicatedStatus");
+  const end = directory.indexOf("async function agentPluginsCatalogStatus", start);
+  assert.ok(start >= 0 && end > start);
+  const dedicated = directory.slice(start, end);
+  assert.match(directory, /skills\.sh\/Mimirs402\/bountyverdict-mcp-skill/);
+  assert.match(dedicated, /vercel-labs\/skills/);
+  assert.match(dedicated, /"1754"/);
+  assert.match(dedicated, /url\.searchParams\.set\("owner", "Mimirs402"\)/);
+  assert.doesNotMatch(dedicated, /owner", "cristianmoroaica"/);
+  assert.match(directory, /skills_sh_dedicated: skillsDedicated/);
+  assert.match(parser, /Mimirs402\/bountyverdict-mcp-skill/);
+  assert.match(parser, /route-github-agent-decisions/);
+  assert.match(distribution, /Dedicated Skills\.sh adapter/);
+  assert.match(distribution, /request and owner-run retrieval are never demand or revenue/);
+});
+
 test("directory monitoring tracks the exact AgentSkills.in adapter and source cohort without claiming demand", async () => {
   const [directory, distribution, parser] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),

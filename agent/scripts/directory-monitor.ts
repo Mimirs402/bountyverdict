@@ -44,6 +44,12 @@ import {
 } from "../src/mcp-downstreams.ts";
 import { githubPrFields, readGitHubPrStatus, type GitHubPrStatus } from "../src/github-pr-telemetry.ts";
 import { parseToolHiveCatalogEntry } from "../src/toolhive.ts";
+import {
+  parseSkillsShSearchPayload,
+  SKILLS_SH_DEDICATED_ID,
+  SKILLS_SH_DEDICATED_SKILL,
+  SKILLS_SH_DEDICATED_SOURCE,
+} from "../src/skills-sh.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
@@ -52,6 +58,9 @@ if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
 const repository = "https://github.com/Mimirs402/bountyverdict";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
 const skillsUrl = "https://skills.sh/Mimirs402/bountyverdict";
+const skillsDedicatedUrl = "https://skills.sh/Mimirs402/bountyverdict-mcp-skill";
+const skillsDedicatedIssueUrl = "https://github.com/vercel-labs/skills/issues/1754";
+const skillsDedicatedIssueTitle = "Listing: Request indexing for Mimirs402/bountyverdict-mcp-skill";
 const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-skills-security/pull/38";
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
@@ -335,6 +344,103 @@ async function skillsShStatus(): Promise<Record<string, unknown>> {
   } catch (error) {
     return {
       url: skillsUrl,
+      listed: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function skillsShDedicatedStatus(): Promise<Record<string, unknown>> {
+  try {
+    const searchQueries = [
+      { type: "exact", query: SKILLS_SH_DEDICATED_SKILL },
+      ...ASKILL_BUYER_QUERIES.map((query) => ({ type: "natural", query })),
+    ];
+    const [{ stdout: issueOutput }, pageResponse, ...searchResponses] = await Promise.all([
+      execFileAsync("gh", [
+        "issue", "view", "1754",
+        "--repo", "vercel-labs/skills",
+        "--json", "number,title,state,createdAt,updatedAt,closedAt,url",
+      ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
+      fetch(skillsDedicatedUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+      ...searchQueries.map(({ query }) => {
+        const url = new URL("https://skills.sh/api/search");
+        url.searchParams.set("q", query);
+        url.searchParams.set("limit", "100");
+        url.searchParams.set("owner", "Mimirs402");
+        return fetch(url, {
+          headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      }),
+    ]);
+    const issue = JSON.parse(issueOutput) as Record<string, unknown>;
+    if (issue.number !== 1754 || issue.title !== skillsDedicatedIssueTitle || issue.url !== skillsDedicatedIssueUrl ||
+      !["OPEN", "CLOSED"].includes(String(issue.state)) ||
+      typeof issue.createdAt !== "string" || !Number.isFinite(Date.parse(issue.createdAt)) ||
+      typeof issue.updatedAt !== "string" || !Number.isFinite(Date.parse(issue.updatedAt)) ||
+      !(issue.closedAt === null ||
+        (typeof issue.closedAt === "string" && Number.isFinite(Date.parse(issue.closedAt))))) {
+      throw new Error("Skills.sh indexing request telemetry is malformed.");
+    }
+    if (!pageResponse.ok && pageResponse.status !== 404) {
+      throw new Error(`Skills.sh dedicated page returned HTTP ${pageResponse.status}.`);
+    }
+    if (searchResponses.some((response) => !response.ok)) {
+      throw new Error("Skills.sh dedicated search returned an unsuccessful response.");
+    }
+    const pageBody = await pageResponse.text();
+    const queries = await Promise.all(searchResponses.map(async (response, index) => ({
+      ...searchQueries[index],
+      ...parseSkillsShSearchPayload(
+        await response.json(),
+        SKILLS_SH_DEDICATED_ID,
+        SKILLS_SH_DEDICATED_SOURCE,
+      ),
+    })));
+    const exactFound = queries[0].found;
+    const pageListed = pageResponse.ok &&
+      pageBody.toLowerCase().includes(SKILLS_SH_DEDICATED_SOURCE.toLowerCase()) &&
+      pageBody.includes(SKILLS_SH_DEDICATED_SKILL) &&
+      !pageBody.toLowerCase().includes("not found");
+    const listed = pageListed && exactFound;
+    const naturalQueries = queries.filter(({ type }) => type === "natural");
+    return {
+      url: skillsDedicatedUrl,
+      source: SKILLS_SH_DEDICATED_SOURCE,
+      skill_id: SKILLS_SH_DEDICATED_ID,
+      http_status: pageResponse.status,
+      listed,
+      status: listed
+        ? "listed"
+        : issue.state === "OPEN"
+          ? "indexing_requested"
+          : "closed_without_exact_listing",
+      indexing_request: {
+        issue_number: issue.number,
+        issue_url: issue.url,
+        issue_state: issue.state,
+        requested_at: issue.createdAt,
+        updated_at: issue.updatedAt,
+        closed_at: issue.closedAt,
+      },
+      search_index: {
+        exact_found: exactFound,
+        exact_rank: queries[0].rank,
+        natural_found: naturalQueries.filter(({ found }) => found).length,
+        natural_top_three: naturalQueries.filter(({ rank }) => rank !== null && rank <= 3).length,
+        natural_expected: naturalQueries.length,
+        queries,
+      },
+      measurement: "indexing_request_exact_page_and_owner_run_search_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: skillsDedicatedUrl,
       listed: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
@@ -2590,6 +2696,7 @@ try {
 
 const [
   skills,
+  skillsDedicated,
   agenttool,
   mcpRepository,
   agentNdx,
@@ -2632,6 +2739,7 @@ const [
   agentSkillsMd,
 ] = await Promise.all([
   skillsShStatus(),
+  skillsShDedicatedStatus(),
   agentToolStatus(),
   mcpRepositoryStatus(),
   agentNdxStatus(),
@@ -2860,6 +2968,7 @@ const state = {
   repository,
   github_pr_monitoring: githubPrMonitoring,
   skills_sh: skills,
+  skills_sh_dedicated: skillsDedicated,
   agenttool,
   mcp_repository: mcpRepository,
   agentndx: agentNdx,

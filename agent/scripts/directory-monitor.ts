@@ -14,10 +14,14 @@ import {
 } from "../src/agent-tools-cloud.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "../src/product-catalog.ts";
 import {
+  parseClineMarketplaceCatalog,
   parseAgentageGetResponse,
   parseAwesomeMcpServersReadme,
   parseDockerMcpHubPage,
   parseDockerMcpRegistryDefinition,
+  parseKiloMarketplaceCatalog,
+  parseKiloMarketplaceDefinition,
+  parseMcpDirectoryPage,
   parseMcpServersOrgPage,
   parseMcpObservatoryDetail,
   parseTensorBlockProfile,
@@ -78,6 +82,15 @@ const mcpServersOrgSubmissionId = 4842;
 const mcpServersOrgSubmittedAt = "2026-07-21T05:32:29.746Z";
 const mcpServersOrgReceiptUrl = `https://mcpservers.org/submit-success?submission_id=${mcpServersOrgSubmissionId}`;
 const mcpServersOrgListingUrl = "https://mcpservers.org/servers/cristianmoroaica/bountyverdict";
+const mcpDirectorySubmittedAt = "2026-07-21T05:48:37Z";
+const mcpDirectoryListingUrl = "https://mcp.directory/servers/bountyverdict";
+const clineMarketplacePrNumber = 13;
+const clineMarketplacePrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplacePrNumber}`;
+const clineMarketplaceCatalogUrl = "https://cline.github.io/marketplace/catalog.json";
+const kiloMarketplacePrNumber = 192;
+const kiloMarketplacePrUrl = `https://github.com/Kilo-Org/kilo-marketplace/pull/${kiloMarketplacePrNumber}`;
+const kiloMarketplaceDefinitionUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/bountyverdict/MCP.yaml";
+const kiloMarketplaceCatalogUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/marketplace.yaml";
 const index402Listings = Object.freeze([
   { product: "single", id: "82c992cc-1a4f-44ea-b742-e798784b6a14", path: "/api/verdict", method: "GET" },
   { product: "portfolio", id: "057ea175-ec64-4c2e-8553-1f747455e6bf", path: "/api/portfolio", method: "POST" },
@@ -739,6 +752,196 @@ async function mcpServersOrgStatus(
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
       measurement: "exact_submission_receipt_and_listing_presence_not_search_impressions_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
+async function mcpDirectoryStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const listingHead = await fetch(mcpDirectoryListingUrl, {
+      method: "HEAD",
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (![200, 404].includes(listingHead.status)) {
+      throw new Error(`MCP.Directory returned HTTP ${listingHead.status}.`);
+    }
+    let listing = null;
+    if (listingHead.status === 200) {
+      const listingResponse = await fetch(mcpDirectoryListingUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (listingResponse.status !== 200) {
+        throw new Error(`MCP.Directory listing changed from HTTP 200 to ${listingResponse.status}.`);
+      }
+      listing = parseMcpDirectoryPage(await listingResponse.text(), repository, `${productionOrigin}/mcp`);
+    }
+    const remoteMetadataVerified = listing?.remote_metadata_verified === true;
+    const listed = listing?.listed === true;
+    return {
+      submitted_at: mcpDirectorySubmittedAt,
+      submission_recorded: true,
+      submission_response_http_status: 200,
+      submission_response_message: "Server submitted for review!",
+      submission_url: "https://mcp.directory/submit",
+      listing_url: mcpDirectoryListingUrl,
+      listing_http_status: listingHead.status,
+      listing,
+      listed,
+      repository_metadata_verified: listing?.repository_metadata_verified === true,
+      remote_metadata_verified: remoteMetadataVerified,
+      status: remoteMetadataVerified
+        ? "catalog_remote_metadata_verified"
+        : listed
+          ? "catalog_repository_metadata_only"
+          : "pending_review",
+      first_listed_at: listed ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "recorded_submission_http_200_and_exact_listing_presence_not_search_impressions_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      submitted_at: mcpDirectorySubmittedAt,
+      submission_recorded: true,
+      submission_response_http_status: 200,
+      submission_response_message: "Server submitted for review!",
+      submission_url: "https://mcp.directory/submit",
+      listing_url: mcpDirectoryListingUrl,
+      listed: false,
+      remote_metadata_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "recorded_submission_http_200_and_exact_listing_presence_not_search_impressions_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
+async function clineMarketplaceStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [review, catalogResponse] = await Promise.all([
+      githubPrStatus("cline", "marketplace", clineMarketplacePrNumber, clineMarketplacePrUrl),
+      fetch(clineMarketplaceCatalogUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (!catalogResponse.ok) throw new Error(`Cline Marketplace returned HTTP ${catalogResponse.status}.`);
+    const body = await catalogResponse.text();
+    if (body.length > 2_000_000) throw new Error("Cline Marketplace catalog response is unbounded.");
+    const parsed = parseClineMarketplaceCatalog(JSON.parse(body), repository, `${productionOrigin}/mcp`);
+    const prStatus = String(review.status || "unknown");
+    const status = parsed.contract_verified
+      ? "catalog_listed"
+      : parsed.listed
+        ? "catalog_contract_drift"
+        : prStatus === "merged"
+          ? "pr_merged_awaiting_catalog"
+          : prStatus === "open"
+            ? "pr_open"
+            : prStatus === "closed"
+              ? "pr_closed_without_catalog"
+              : "pr_status_unknown";
+    return {
+      url: clineMarketplacePrUrl,
+      catalog_url: clineMarketplaceCatalogUrl,
+      pr_status: prStatus,
+      pr_merged_at: review.merged_at || null,
+      pr_draft: review.draft === true,
+      pr_mergeable: review.mergeable ?? null,
+      catalog_http_status: catalogResponse.status,
+      ...parsed,
+      status,
+      first_listed_at: parsed.contract_verified ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "submission_and_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: clineMarketplacePrUrl,
+      catalog_url: clineMarketplaceCatalogUrl,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
+async function kiloMarketplaceStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [review, definitionResponse, catalogResponse] = await Promise.all([
+      githubPrStatus("Kilo-Org", "kilo-marketplace", kiloMarketplacePrNumber, kiloMarketplacePrUrl),
+      fetch(kiloMarketplaceDefinitionUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+      fetch(kiloMarketplaceCatalogUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (![200, 404].includes(definitionResponse.status) || catalogResponse.status !== 200) {
+      throw new Error(`Kilo Marketplace returned HTTP ${definitionResponse.status}/${catalogResponse.status}.`);
+    }
+    const definition = definitionResponse.status === 200
+      ? parseKiloMarketplaceDefinition(await definitionResponse.text(), repository, `${productionOrigin}/mcp`)
+      : null;
+    const catalogBody = await catalogResponse.text();
+    const catalog = parseKiloMarketplaceCatalog(catalogBody, repository, `${productionOrigin}/mcp`);
+    const prStatus = String(review.status || "unknown");
+    const contractVerified = catalog.contract_verified === true;
+    const status = contractVerified
+      ? "catalog_listed"
+      : catalog.listed
+        ? "catalog_contract_drift"
+        : definition?.contract_verified === true
+          ? "definition_merged_awaiting_catalog"
+          : prStatus === "open"
+            ? "pr_open"
+            : prStatus === "merged"
+              ? "pr_merged_definition_pending"
+              : prStatus === "closed"
+                ? "pr_closed_without_catalog"
+                : "pr_status_unknown";
+    return {
+      url: kiloMarketplacePrUrl,
+      definition_url: kiloMarketplaceDefinitionUrl,
+      catalog_url: kiloMarketplaceCatalogUrl,
+      pr_status: prStatus,
+      pr_merged_at: review.merged_at || null,
+      pr_draft: review.draft === true,
+      pr_mergeable: review.mergeable ?? null,
+      definition_http_status: definitionResponse.status,
+      catalog_http_status: catalogResponse.status,
+      definition,
+      catalog,
+      listed: catalog.listed,
+      contract_verified: contractVerified,
+      status,
+      first_listed_at: contractVerified ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "submission_and_kilo_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: kiloMarketplacePrUrl,
+      definition_url: kiloMarketplaceDefinitionUrl,
+      catalog_url: kiloMarketplaceCatalogUrl,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_kilo_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   }
 }
@@ -1515,6 +1718,9 @@ const [
   agentage,
   dockerMcpRegistry,
   mcpServersOrg,
+  mcpDirectory,
+  clineMarketplace,
+  kiloMarketplace,
   agent402,
   x402scout,
   x402scan,
@@ -1542,6 +1748,9 @@ const [
   agentageStatus(previous.agentage || {}, new Date().toISOString()),
   dockerMcpRegistryStatus(previous.docker_mcp_registry || {}, new Date().toISOString()),
   mcpServersOrgStatus(previous.mcp_servers_org || {}, new Date().toISOString()),
+  mcpDirectoryStatus(previous.mcp_directory || {}, new Date().toISOString()),
+  clineMarketplaceStatus(previous.cline_marketplace || {}, new Date().toISOString()),
+  kiloMarketplaceStatus(previous.kilo_marketplace || {}, new Date().toISOString()),
   agent402Status(),
   x402ScoutStatus(),
   x402ScanStatus(),
@@ -1615,6 +1824,9 @@ const state = {
   agentage,
   docker_mcp_registry: dockerMcpRegistry,
   mcp_servers_org: mcpServersOrg,
+  mcp_directory: mcpDirectory,
+  cline_marketplace: clineMarketplace,
+  kilo_marketplace: kiloMarketplace,
   agent402,
   x402scout,
   x402scan,

@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canReuseMcpDownstreamStatus,
+  parseClineMarketplaceCatalog,
   glamaConnectorStatus,
   parseAgentageGetResponse,
   parseAgentageSearchResponse,
   parseAwesomeMcpServersReadme,
   parseDockerMcpHubPage,
   parseDockerMcpRegistryDefinition,
+  parseKiloMarketplaceCatalog,
+  parseKiloMarketplaceDefinition,
   parseMcpObservatoryDetail,
+  parseMcpDirectoryPage,
   parseMcpServersOrgPage,
   parseMcpubGetResponse,
   parseMcpubSearchLiveResponse,
@@ -142,6 +146,118 @@ test("distinguishes MCPServers.org repository placement from a verified remote c
 
   assert.equal(parseMcpServersOrgPage("not found", repository, endpoint).listed, false);
   assert.throws(() => parseMcpServersOrgPage("x".repeat(2_000_001), repository, endpoint), /unbounded/);
+});
+
+test("distinguishes MCP.Directory repository placement from remote x402 metadata", () => {
+  const repositoryOnly = parseMcpDirectoryPage(
+    `<main><h1>BountyVerdict Agent Decision Tools</h1><a href="${repository}">GitHub</a></main>`,
+    repository,
+    endpoint,
+  );
+  assert.equal(repositoryOnly.listed, true);
+  assert.equal(repositoryOnly.repository_metadata_verified, true);
+  assert.equal(repositoryOnly.remote_metadata_verified, false);
+
+  const remote = parseMcpDirectoryPage(
+    `<main><h1>BountyVerdict Agent Decision Tools</h1><a href="${repository}">GitHub</a><code>${endpoint}</code><span>Remote streamable-http x402</span></main>`,
+    repository,
+    endpoint,
+  );
+  assert.equal(remote.remote_metadata_verified, true);
+
+  const contaminated = parseMcpDirectoryPage(
+    `<h1>BountyVerdict Agent Decision Tools</h1><a href="${repository}">GitHub</a><code>${endpoint}</code><p>streamable-http x402 /api/skill</p>`,
+    repository,
+    endpoint,
+  );
+  assert.equal(contaminated.skillverdict_contamination_risk, true);
+  assert.equal(contaminated.remote_metadata_verified, false);
+
+  assert.equal(parseMcpDirectoryPage("not found", repository, endpoint).listed, false);
+  assert.throws(() => parseMcpDirectoryPage("x".repeat(2_000_001), repository, endpoint), /unbounded/);
+});
+
+test("recognizes only the exact Cline in-agent install contract", () => {
+  const catalog = (entry: Record<string, unknown>) => ({
+    version: 1,
+    generatedAt: "2026-07-21T05:00:00.000Z",
+    baseUrl: "https://cline.github.io/marketplace",
+    counts: { total: 1, mcp: 1 },
+    entries: [entry],
+  });
+  const entry = {
+    id: "bountyverdict",
+    type: "mcp",
+    name: "BountyVerdict Agent Decision Tools",
+    description: "Six read-only tools return evidence-linked verdicts and request x402 payment only after valid input.",
+    repo: repository,
+    install: {
+      args: ["bountyverdict", "--transport", "http", endpoint],
+      command: `cline mcp install bountyverdict --transport http ${endpoint}`,
+    },
+  };
+  const exact = parseClineMarketplaceCatalog(catalog(entry), repository, endpoint);
+  assert.equal(exact.listed, true);
+  assert.equal(exact.contract_verified, true);
+
+  const drifted = parseClineMarketplaceCatalog(catalog({
+    ...entry,
+    install: { ...entry.install, args: ["bountyverdict", "--transport", "sse", endpoint] },
+  }), repository, endpoint);
+  assert.equal(drifted.listed, true);
+  assert.equal(drifted.contract_verified, false);
+
+  const contaminated = parseClineMarketplaceCatalog(catalog({
+    ...entry,
+    description: `${entry.description} Includes SkillVerdict.`,
+  }), repository, endpoint);
+  assert.equal(contaminated.skillverdict_contamination_risk, true);
+  assert.equal(contaminated.contract_verified, false);
+
+  const requiresSecret = parseClineMarketplaceCatalog(catalog({
+    ...entry,
+    install: { ...entry.install, env: { API_KEY: "required" } },
+  }), repository, endpoint);
+  assert.equal(requiresSecret.listed, true);
+  assert.equal(requiresSecret.contract_verified, false);
+
+  assert.equal(parseClineMarketplaceCatalog({ ...catalog(entry), entries: [] }, repository, endpoint).listed, false);
+  assert.throws(() => parseClineMarketplaceCatalog({ ...catalog(entry), entries: [entry, entry] }, repository, endpoint), /duplicated/);
+});
+
+test("recognizes only Kilo's exact secret-free remote marketplace contract", () => {
+  const definition = `id: bountyverdict
+name: BountyVerdict Agent Decision Tools
+description: Six read-only x402 tools return evidence-linked decisions. Invalid input is rejected before payment.
+author: Cristian Moroaica
+url: ${repository}
+category: development
+prerequisites:
+  - An x402-compatible wallet with Base USDC is required only for paid tool calls; the server requires no account or API key
+content:
+  - name: Remote Streamable HTTP
+    content: |
+      {
+        "type": "streamable-http",
+        "url": "${endpoint}"
+      }
+`;
+  const exact = parseKiloMarketplaceDefinition(definition, repository, endpoint);
+  assert.equal(exact.listed, true);
+  assert.equal(exact.contract_verified, true);
+
+  const secretRequired = parseKiloMarketplaceDefinition(
+    `${definition}parameters:\n  - name: API key\n    key: API_KEY\n`,
+    repository,
+    endpoint,
+  );
+  assert.equal(secretRequired.contract_verified, false);
+  assert.equal(parseKiloMarketplaceDefinition(definition.replace(endpoint, "https://wrong.example/mcp"), repository, endpoint).contract_verified, false);
+
+  const generated = `items:\n  - id: another\n    name: Another\n${definition.split("\n").map((line, index) => index === 0 ? `  - ${line}` : `    ${line}`).join("\n")}  - id: later\n    name: Later\n`;
+  assert.equal(parseKiloMarketplaceCatalog(generated, repository, endpoint).contract_verified, true);
+  assert.equal(parseKiloMarketplaceCatalog("items:\n  - id: another\n", repository, endpoint).listed, false);
+  assert.throws(() => parseKiloMarketplaceCatalog(`${generated}${generated}`, repository, endpoint), /duplicated/);
 });
 
 test("recognizes bounded Agentage official-registry search and detail contracts", () => {

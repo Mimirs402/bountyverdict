@@ -139,6 +139,56 @@ test("directory monitoring tracks the exact MCPServers.org submission without se
   assert.match(distribution, /exact receipt\/listing checks only, never search impressions, tool calls, purchases, or revenue/);
 });
 
+test("directory monitoring tracks the recorded MCP.Directory submission without search inflation", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /const mcpDirectorySubmittedAt = "2026-07-21T05:48:37Z"/);
+  assert.match(directory, /async function mcpDirectoryStatus/);
+  assert.match(directory, /https:\/\/mcp\.directory\/servers\/bountyverdict/);
+  assert.match(directory, /mcp_directory: mcpDirectory/);
+  assert.match(directory, /submission_recorded: true/);
+  assert.match(directory, /remote_metadata_verified/);
+  assert.match(directory, /recorded_submission_http_200_and_exact_listing_presence_not_search_impressions_tool_calls_purchases_or_revenue/);
+  assert.doesNotMatch(directory, /mcp\.directory\/servers\?q=/);
+  assert.match(distribution, /MCP\.Directory/);
+  assert.match(distribution, /free submission recorded from its HTTP 200 response/);
+  assert.match(distribution, /exact listing checks only, never search impressions, tool calls, purchases, or revenue/);
+});
+
+test("directory monitoring tracks Cline review and exact in-agent install contract without claiming demand", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /const clineMarketplacePrNumber = 13/);
+  assert.match(directory, /async function clineMarketplaceStatus/);
+  assert.match(directory, /parseClineMarketplaceCatalog/);
+  assert.match(directory, /cline_marketplace: clineMarketplace/);
+  assert.match(directory, /submission_and_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue/);
+  assert.match(distribution, /cline_marketplace: state\.cline_marketplace/);
+  assert.match(distribution, /Cline in-agent marketplace/);
+  assert.match(distribution, /exact marketplace install\/wizard contract/);
+  assert.match(distribution, /PR or catalog presence is never an impression, install, tool call, purchase, or revenue/);
+});
+
+test("directory monitoring tracks Kilo review and exact secret-free remote contract without claiming demand", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /const kiloMarketplacePrNumber = 192/);
+  assert.match(directory, /async function kiloMarketplaceStatus/);
+  assert.match(directory, /parseKiloMarketplaceDefinition/);
+  assert.match(directory, /parseKiloMarketplaceCatalog/);
+  assert.match(directory, /kilo_marketplace: kiloMarketplace/);
+  assert.match(directory, /submission_and_kilo_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue/);
+  assert.match(distribution, /kilo_marketplace: state\.kilo_marketplace/);
+  assert.match(distribution, /Kilo in-agent marketplace/);
+  assert.match(distribution, /exact secret-free remote contract/);
+});
+
 test("MCP buyer-intent reporting excludes identified directory crawlers but retains them separately", async () => {
   const [distribution, telemetry] = await Promise.all([
     readFile(distributionUrl, "utf8"),

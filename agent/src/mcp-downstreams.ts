@@ -68,6 +68,34 @@ export type McpServersOrgStatus = {
   skillverdict_contamination_risk: boolean;
 };
 
+export type McpDirectoryStatus = {
+  listed: boolean;
+  repository_metadata_verified: boolean;
+  remote_metadata_verified: boolean;
+  repository: string;
+  endpoint: string;
+  skillverdict_contamination_risk: boolean;
+};
+
+export type ClineMarketplaceStatus = {
+  listed: boolean;
+  contract_verified: boolean;
+  id: string;
+  repository: string;
+  endpoint: string;
+  install_command: string;
+  skillverdict_contamination_risk: boolean;
+};
+
+export type KiloMarketplaceStatus = {
+  listed: boolean;
+  contract_verified: boolean;
+  id: string;
+  repository: string;
+  endpoint: string;
+  skillverdict_contamination_risk: boolean;
+};
+
 export function parseAwesomeMcpServersReadme(
   markdown: unknown,
   expectedRepository: string,
@@ -270,6 +298,160 @@ export function parseMcpServersOrgPage(
     endpoint: expectedEndpoint,
     skillverdict_contamination_risk: skillverdictContaminationRisk,
   };
+}
+
+export function parseMcpDirectoryPage(
+  html: unknown,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): McpDirectoryStatus {
+  if (typeof html !== "string" || html.length > 2_000_000) {
+    throw new Error("MCP.Directory listing page is invalid or unbounded.");
+  }
+  const lines = html.split("\n");
+  if (lines.length > 50_000 || lines.some((line) => line.length > 250_000)) {
+    throw new Error("MCP.Directory listing page lines are unbounded.");
+  }
+  const skillverdictContaminationRisk = /skillverdict|\/api\/skill|preflight-agent-skills/i.test(html);
+  const repositoryMetadataVerified = /BountyVerdict Agent Decision Tools/i.test(html) &&
+    html.includes(expectedRepository);
+  const remoteMetadataVerified = repositoryMetadataVerified && html.includes(expectedEndpoint) &&
+    /streamable[ -]?http/i.test(html) && /\bx402\b/i.test(html) && !skillverdictContaminationRisk;
+  return {
+    listed: repositoryMetadataVerified,
+    repository_metadata_verified: repositoryMetadataVerified,
+    remote_metadata_verified: remoteMetadataVerified,
+    repository: expectedRepository,
+    endpoint: expectedEndpoint,
+    skillverdict_contamination_risk: skillverdictContaminationRisk,
+  };
+}
+
+export function parseClineMarketplaceCatalog(
+  value: unknown,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): ClineMarketplaceStatus {
+  const expectedId = "bountyverdict";
+  const expectedArgs = [expectedId, "--transport", "http", expectedEndpoint];
+  const expectedCommand = `cline mcp install ${expectedArgs.join(" ")}`;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Cline Marketplace catalog is not an object.");
+  }
+  const payload = value as Record<string, any>;
+  if (!Number.isSafeInteger(payload.version) || payload.version < 1 || payload.version > 100 ||
+    typeof payload.generatedAt !== "string" || !Number.isFinite(Date.parse(payload.generatedAt)) ||
+    typeof payload.baseUrl !== "string" || payload.baseUrl.length > 2_048 ||
+    !payload.counts || typeof payload.counts !== "object" || Array.isArray(payload.counts) ||
+    !Array.isArray(payload.entries) || payload.entries.length > 10_000 ||
+    payload.entries.some((entry: unknown) => !entry || typeof entry !== "object" || Array.isArray(entry) ||
+      typeof (entry as Record<string, unknown>).id !== "string" || String((entry as Record<string, unknown>).id).length > 200)) {
+    throw new Error("Cline Marketplace catalog is malformed or unbounded.");
+  }
+  const matching = payload.entries.filter((entry: Record<string, unknown>) =>
+    entry.id === expectedId || entry.repo === expectedRepository
+  );
+  if (matching.length > 1) throw new Error("Cline Marketplace duplicated the exact BountyVerdict entry.");
+  if (matching.length === 0) {
+    return {
+      listed: false,
+      contract_verified: false,
+      id: expectedId,
+      repository: expectedRepository,
+      endpoint: expectedEndpoint,
+      install_command: expectedCommand,
+      skillverdict_contamination_risk: false,
+    };
+  }
+  const entry = matching[0] as Record<string, any>;
+  const serialized = JSON.stringify(entry);
+  if (serialized.length > 100_000 || typeof entry.description !== "string" || entry.description.length > 10_000 ||
+    !entry.install || typeof entry.install !== "object" || Array.isArray(entry.install) ||
+    !Array.isArray(entry.install.args) || entry.install.args.length > 20 ||
+    entry.install.args.some((argument: unknown) => typeof argument !== "string" || String(argument).length > 2_048)) {
+    throw new Error("Cline Marketplace BountyVerdict entry is malformed or unbounded.");
+  }
+  const skillverdictContaminationRisk = /skillverdict|\/api\/skill|preflight-agent-skills/i.test(serialized);
+  const installEnvIsEmpty = entry.install.env === undefined ||
+    (entry.install.env && typeof entry.install.env === "object" && !Array.isArray(entry.install.env) &&
+      Object.keys(entry.install.env).length === 0);
+  const contractVerified = entry.id === expectedId && entry.type === "mcp" &&
+    entry.name === "BountyVerdict Agent Decision Tools" && entry.repo === expectedRepository &&
+    JSON.stringify(entry.install.args) === JSON.stringify(expectedArgs) &&
+    entry.install.command === expectedCommand && /six read-only tools/i.test(entry.description) &&
+    /\bx402\b/i.test(entry.description) && installEnvIsEmpty && !skillverdictContaminationRisk;
+  return {
+    listed: true,
+    contract_verified: contractVerified,
+    id: expectedId,
+    repository: expectedRepository,
+    endpoint: expectedEndpoint,
+    install_command: expectedCommand,
+    skillverdict_contamination_risk: skillverdictContaminationRisk,
+  };
+}
+
+function kiloMarketplaceContract(
+  block: string,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): Omit<KiloMarketplaceStatus, "listed"> {
+  const skillverdictContaminationRisk = /skillverdict|\/api\/skill|preflight-agent-skills/i.test(block);
+  const hasSensitiveConfiguration = /(?:^|\n)\s*(?:parameters|env):\s*(?:\n|$)/m.test(block) ||
+    /\{\{[^}]+\}\}|API[_-]KEY|AUTHORIZATION|BEARER/i.test(block);
+  const contractVerified = /(?:^|\n)\s*-?\s*id: bountyverdict\s*(?:\n|$)/m.test(block) &&
+    /(?:^|\n)\s*name: BountyVerdict Agent Decision Tools\s*(?:\n|$)/m.test(block) &&
+    block.includes(`url: ${expectedRepository}`) && /(?:^|\n)\s*category: development\s*(?:\n|$)/m.test(block) &&
+    /Six read-only x402 tools/i.test(block) && /Invalid input is\s+rejected before payment/i.test(block) &&
+    block.includes('"type": "streamable-http"') && block.includes(`"url": "${expectedEndpoint}"`) &&
+    block.split(expectedRepository).length === 2 && block.split(expectedEndpoint).length === 2 &&
+    !hasSensitiveConfiguration && !skillverdictContaminationRisk;
+  return {
+    contract_verified: contractVerified,
+    id: "bountyverdict",
+    repository: expectedRepository,
+    endpoint: expectedEndpoint,
+    skillverdict_contamination_risk: skillverdictContaminationRisk,
+  };
+}
+
+export function parseKiloMarketplaceDefinition(
+  yaml: unknown,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): KiloMarketplaceStatus {
+  if (typeof yaml !== "string" || yaml.length > 200_000) {
+    throw new Error("Kilo Marketplace definition is invalid or unbounded.");
+  }
+  const idMatches = yaml.match(/^id: bountyverdict\s*$/gm) || [];
+  if (idMatches.length > 1) throw new Error("Kilo Marketplace definition duplicated the BountyVerdict id.");
+  if (idMatches.length === 0) {
+    return { listed: false, ...kiloMarketplaceContract("", expectedRepository, expectedEndpoint) };
+  }
+  return { listed: true, ...kiloMarketplaceContract(yaml, expectedRepository, expectedEndpoint) };
+}
+
+export function parseKiloMarketplaceCatalog(
+  yaml: unknown,
+  expectedRepository: string,
+  expectedEndpoint: string,
+): KiloMarketplaceStatus {
+  if (typeof yaml !== "string" || yaml.length > 5_000_000) {
+    throw new Error("Kilo Marketplace catalog is invalid or unbounded.");
+  }
+  const marker = "  - id: bountyverdict\n";
+  const starts: number[] = [];
+  for (let index = yaml.indexOf(marker); index !== -1; index = yaml.indexOf(marker, index + marker.length)) {
+    starts.push(index);
+  }
+  if (starts.length > 1) throw new Error("Kilo Marketplace catalog duplicated the BountyVerdict entry.");
+  if (starts.length === 0) {
+    return { listed: false, ...kiloMarketplaceContract("", expectedRepository, expectedEndpoint) };
+  }
+  const next = yaml.indexOf("\n  - id:", starts[0] + marker.length);
+  const block = yaml.slice(starts[0], next === -1 ? yaml.length : next);
+  if (block.length > 100_000) throw new Error("Kilo Marketplace BountyVerdict entry is unbounded.");
+  return { listed: true, ...kiloMarketplaceContract(block, expectedRepository, expectedEndpoint) };
 }
 
 function mcpTextResult(value: unknown, label: string): string {

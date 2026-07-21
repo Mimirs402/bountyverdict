@@ -40,7 +40,7 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
     displayName: "BountyVerdict Agent Decision Tools",
     mediaType: "application/mcp-server+json",
     url: registryLatestUrl,
-    description: "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift.",
+    description: "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
     metadata: {
       sourceSet: "bountyverdict",
       repoPath: "server.json",
@@ -64,7 +64,7 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
     server: {
       name,
       title: "BountyVerdict Agent Decision Tools",
-      description: "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift.",
+      description: "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
       version,
       repository: { url: repository, source: "github" },
       remotes: [{ type: "streamable-http", url: endpoint }],

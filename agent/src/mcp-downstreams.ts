@@ -1,3 +1,6 @@
+export const BOUNTYVERDICT_REGISTRY_DESCRIPTION =
+  "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.";
+
 export type QtMcpRegistryStatus = {
   listed: boolean;
   expected_name: string;
@@ -143,7 +146,7 @@ export function parseAgentFinderCatalogEntry(
     entry.displayName === "BountyVerdict Agent Decision Tools" &&
     entry.mediaType === "application/mcp-server+json" &&
     entry.url === expectedRegistryUrl &&
-    entry.description === "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift." &&
+    entry.description === BOUNTYVERDICT_REGISTRY_DESCRIPTION &&
     entry.metadata.sourceSet === "bountyverdict" &&
     entry.metadata.repoPath === "server.json" &&
     entry.metadata.serverName === expectedServerName &&
@@ -190,7 +193,7 @@ export function parseAgentFinderRegistryLatest(
   return {
     contract_verified: server.name === expectedServerName &&
       server.title === "BountyVerdict Agent Decision Tools" &&
-      server.description === "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift." &&
+      server.description === BOUNTYVERDICT_REGISTRY_DESCRIPTION &&
       server.repository.url === expectedRepository && server.repository.source === "github" &&
       matchingRemotes.length === 1 && active && latest,
     name: server.name,
@@ -262,7 +265,7 @@ export function parseAgentFinderSearchPage(
     contract_verified: entry.id === expectedIdentifier && entry.name === expectedIdentifier &&
       entry.full_name === expectedIdentifier && entry.api_name === expectedIdentifier &&
       entry.display_name === "BountyVerdict Agent Decision Tools" &&
-      entry.description === "Choose GitHub bounties, diagnose Actions failures, audit agent instructions, and detect MCP drift." &&
+      entry.description === BOUNTYVERDICT_REGISTRY_DESCRIPTION &&
       entry.url === expectedRegistryUrl && entry.extension_type === "MCP server",
     rank,
     total_results: metadata.total,

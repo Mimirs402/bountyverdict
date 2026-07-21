@@ -64,6 +64,7 @@
     "@img/sharp-linux-x64": "0.34.5"
   },
   "overrides": {
+    "@hono/node-server": "2.0.11",
     "axios": "1.18.1"
   }
 }

@@ -142,21 +142,32 @@ jobs:
             });
           '
           # A newly added route can briefly resolve to the previous Worker at a
-          # different edge after deploy. Retry only this additive route before
-          # declaring the release unhealthy.
-          owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/x402" | node -e '
-            let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
-              const value = JSON.parse(body);
-              const expected = ["/api/bounty-preflight", "/api/portfolio", "/api/harness", "/api/skill", "/api/run", "/api/flake", "/api/mcp-drift"]
-                .map((path) => `${process.env.PRODUCTION_API_URL}${path}`);
-              if (value.spec !== "agent402-service-manifest/1" || value.version !== 1) process.exit(1);
-              if (JSON.stringify(value.resources) !== JSON.stringify(expected)) process.exit(1);
-              if (value.payment?.x402?.primaryNetwork !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.x402?.payTo || "")) process.exit(1);
-              if (value.discovery?.agentManifest !== "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json") process.exit(1);
-              if (value.discovery?.agentSkill !== "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
-              if (value.discovery?.aiCatalog !== `${process.env.PRODUCTION_API_URL}/.well-known/ai-catalog.json`) process.exit(1);
-            });
-          '
+          # different edge after deploy. A stale response is HTTP 200, so curl's
+          # transport retry is insufficient: retry semantic convergence too.
+          x402_ready=false
+          for attempt in {1..12}; do
+            if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/x402" | node -e '
+              let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
+                const value = JSON.parse(body);
+                const expected = ["/api/bounty-preflight", "/api/portfolio", "/api/harness", "/api/skill", "/api/run", "/api/flake", "/api/mcp-drift"]
+                  .map((path) => `${process.env.PRODUCTION_API_URL}${path}`);
+                if (value.spec !== "agent402-service-manifest/1" || value.version !== 1) process.exit(1);
+                if (JSON.stringify(value.resources) !== JSON.stringify(expected)) process.exit(1);
+                if (value.payment?.x402?.primaryNetwork !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.x402?.payTo || "")) process.exit(1);
+                if (value.discovery?.agentManifest !== "https://cristianmoroaica.github.io/bountyverdict/agent-manifest.json") process.exit(1);
+                if (value.discovery?.agentSkill !== "https://cristianmoroaica.github.io/bountyverdict/skills/route-github-agent-checks/SKILL.md") process.exit(1);
+                if (value.discovery?.aiCatalog !== `${process.env.PRODUCTION_API_URL}/.well-known/ai-catalog.json`) process.exit(1);
+              });
+            '; then
+              x402_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$x402_ready" != "true" ]]; then
+            echo "Production x402 manifest did not converge to the deployed contract" >&2
+            exit 1
+          fi
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/mcp.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);

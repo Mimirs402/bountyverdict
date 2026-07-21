@@ -387,3 +387,16 @@ Ran six broad buyer tasks and five product-adjacent tasks through live Bazaar se
 Mapped the production origin through integrations.sh's public discovery stream at no cost. It detected `integrations.json`, RFC 9727 API catalog, OpenAPI, MCP server card, live MCP, and `llms.txt`, then persisted one REST surface, the six declared paid routes, and the production Streamable HTTP MCP server. This is an additional agent-readable distribution surface, never a hit, purchase, or customer.
 
 Held every product and price constant. The evidence-backed post-gate backlog is public-source evidence packaging, recurring change monitoring, agent endpoint/procurement trust, terms-compliant structured extraction, and paid-work opportunity intelligence. No eighth product will be built before ten genuine non-owner purchases.
+
+## 2026-07-21 — Canonical POST admission pilot
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Tracked acquisition costs: **$1.011**
+- Current recognized-USDC profit before historic gas conversion: **-$1.011**
+
+Kept the product catalog, price, output, and handlers frozen and migrated only BountyVerdict's canonical marketplace transport from `GET /api/verdict` to `POST /api/bounty-preflight`. The old GET route remains payable for compatibility but deliberately carries no Bazaar metadata. The canonical POST accepts one strict JSON `issue_url`, rejects malformed or extra input before payment, preserves the body through x402 verification, and advertises an exact JSON schema plus truthful body-handoff guidance. Both transports aggregate into the same product and revenue bucket.
+
+Commit `b4e49f4` passed 327 agent tests, 73 public tests, type checking, synchronized discovery contracts, Cloudflare dry deployment, CI, Pages, and the full live REST/MCP release suite. The first deployment verifier encountered a real multi-edge propagation race: the new root contract was visible while another successful HTTP response still carried a stale discovery document. Re-running the same immutable deployment passed; the workflow now retries semantic x402-manifest convergence rather than retrying transport errors only.
+
+Before activation, the new canonical URL was absent from the exact CDP merchant catalog. One policy-bound owner activation then paid exactly **0.05 USDC** on Base from the dedicated excluded buyer to the production seller. Transaction `0xb6bf59c090d69126f43b57a57aa2bcfd9b4028264262538b4827146767ac7dd8` settled, returned HTTP 200 with a real `AVOID` verdict, and the live Worker tail recorded Bazaar extension status `processing` followed by the paid success without exceptions. Onchain reconciliation reports nine dedicated-buyer proofs totaling 0.44 USDC as owner canary transfers, zero recognized customer purchases, and zero customer revenue. The new transaction is also pinned by hash as immutable non-revenue evidence. No retry, synthetic customer, fabricated traffic, or product expansion was used.

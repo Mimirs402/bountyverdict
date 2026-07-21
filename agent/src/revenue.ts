@@ -16,6 +16,7 @@ export const KNOWN_NON_REVENUE_TX_HASHES = [
   "0x5cb517f6e3c621f7ba0bc99f70ee9e4be0e9d464accba7482b7fda8f6ccbbf10",
   "0x498267e8a4759de4a337bb70880bd90c51ad82305d78d932b7edaa45b4b599f6",
   "0x67f812091da8a9538daf8e6ec15ac5ce9487d40e7e806ef4fec65d7686fe91de",
+  "0xb6bf59c090d69126f43b57a57aa2bcfd9b4028264262538b4827146767ac7dd8",
 ] as const;
 
 export interface SettlementTransfer {

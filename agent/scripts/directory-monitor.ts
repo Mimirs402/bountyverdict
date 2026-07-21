@@ -48,7 +48,8 @@ const mcpObservatoryServerId = "github:cristianmoroaica/bountyverdict";
 const mcpObservatoryUrl = `https://mcpobservatory.com/api/servers/${mcpObservatoryServerId}`;
 const lobeHubIssueNumber = 17401;
 const lobeHubIssueUrl = `https://github.com/lobehub/lobehub/issues/${lobeHubIssueNumber}`;
-const lobeHubListingUrl = "https://market.lobehub.com/s/plugins/io-github-cristianmoroaica-bountyverdict";
+const lobeHubListingId = "io-github-cristianmoroaica-bountyverdict";
+const lobeHubListingUrl = `https://market.lobehub.com/s/plugins/${lobeHubListingId}`;
 const index402Listings = Object.freeze([
   { product: "single", id: "82c992cc-1a4f-44ea-b742-e798784b6a14", path: "/api/verdict", method: "GET" },
   { product: "portfolio", id: "057ea175-ec64-4c2e-8553-1f747455e6bf", path: "/api/portfolio", method: "POST" },
@@ -290,10 +291,10 @@ async function lobeHubStatus(
     }
     const body = await listingResponse.text();
     if (body.length > 1_000_000) throw new Error("LobeHub listing response is unbounded.");
-    const exactListing = listingResponse.ok && (
-      body.includes("io.github.cristianmoroaica/bountyverdict") ||
-      body.includes(`${productionOrigin}/mcp`)
-    );
+    const exactListing = listingResponse.ok &&
+      body.includes("# BountyVerdict Agent Decision Tools") &&
+      body.includes(`\`${lobeHubListingId}\``) &&
+      body.includes("**Connection Type:** remote");
     const labels = issue.labels.map((label: Record<string, unknown>) => String(label.name || ""))
       .filter(Boolean)
       .sort();

@@ -66,6 +66,8 @@ test("directory monitoring tracks LobeHub review and exact listing without calli
   assert.match(directory, /const lobeHubIssueNumber = 17401/);
   assert.match(directory, /lobehub\/lobehub/);
   assert.match(directory, /io-github-cristianmoroaica-bountyverdict/);
+  assert.match(directory, /# BountyVerdict Agent Decision Tools/);
+  assert.match(directory, /Connection Type:\*\* remote/);
   assert.match(directory, /submission_review_and_catalog_presence_not_impressions_tool_calls_purchases_or_revenue/);
   assert.match(directory, /lobehub: lobeHub/);
   assert.match(distribution, /LobeHub MCP marketplace/);

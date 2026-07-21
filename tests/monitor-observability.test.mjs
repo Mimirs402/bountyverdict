@@ -47,6 +47,23 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /github_skill: githubSkill/);
 });
 
+test("directory monitoring tracks the exact AgentSkills.in adapter and source cohort without claiming demand", async () => {
+  const [directory, distribution, parser] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../agent/src/agentskills-in.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(directory, /agentSkillsInStatus/);
+  assert.match(directory, /Karanjot786\/agent-skills-cli/);
+  assert.match(directory, /agent_skills_in: agentSkillsIn/);
+  assert.match(parser, /AGENT_SKILLS_IN_REPOSITORY = "cristianmoroaica\/bountyverdict-mcp-skill"/);
+  assert.match(parser, /AGENT_SKILLS_IN_SKILL_NAME = "route-github-agent-decisions"/);
+  assert.match(parser, /submission_and_exact_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue|pending_indexing/);
+  assert.match(distribution, /AgentSkills\.in adapter/);
+  assert.match(distribution, /mcp_by_channel\?\.agent_skills_marketplace/);
+  assert.match(distribution, /submission\/listing and aggregate events are not installs, unique agents, purchases, or revenue/);
+});
+
 test("distribution monitoring treats Payan demand state as a funnel and receipts as settlement attribution", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /async function payanDemandStatus/);

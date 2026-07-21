@@ -13,6 +13,7 @@ import {
   parseAgentToolsCloudListing,
 } from "../src/agent-tools-cloud.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "../src/product-catalog.ts";
+import { parseAgentSkillsInSearchPayload } from "../src/agentskills-in.ts";
 import {
   parseAgentFinderCatalogEntry,
   parseAgentFinderRegistryLatest,
@@ -58,6 +59,11 @@ const directory402Api = "https://402directory.com/api";
 const directory402SubmissionIds = Object.freeze([50, 51, 52, 53, 54, 55, 56]);
 const index402Api = "https://402index.io/api/v1/services";
 const agentSkillSearchUrl = "https://agentskill.sh/api/agent/search?q=bountyverdict&limit=20";
+const agentSkillsInSearchUrl = "https://www.agentskills.in/api/skills?name=route-github-agent-decisions&author=cristianmoroaica&limit=20";
+const agentSkillsInListingUrl = "https://www.agentskills.in/marketplace/%40cristianmoroaica/route-github-agent-decisions";
+const agentSkillsInSubmissionIssueNumber = 23;
+const agentSkillsInSubmissionIssueUrl =
+  `https://github.com/Karanjot786/agent-skills-cli/issues/${agentSkillsInSubmissionIssueNumber}`;
 const githubSkillReleaseTag = "v1.0.3";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
@@ -1838,6 +1844,70 @@ async function agentSkillStatus(
   }
 }
 
+async function agentSkillsInStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [{ stdout }, response] = await Promise.all([
+      execFileAsync("gh", [
+        "issue", "view", String(agentSkillsInSubmissionIssueNumber),
+        "--repo", "Karanjot786/agent-skills-cli",
+        "--json", "number,title,state,createdAt,updatedAt,closedAt,url,labels,comments",
+      ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
+      fetch(agentSkillsInSearchUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (!response.ok) throw new Error(`AgentSkills.in search returned HTTP ${response.status}.`);
+    const issue = JSON.parse(stdout) as Record<string, any>;
+    if (issue.number !== agentSkillsInSubmissionIssueNumber || issue.url !== agentSkillsInSubmissionIssueUrl ||
+      !Array.isArray(issue.labels) || !Array.isArray(issue.comments) || !["OPEN", "CLOSED"].includes(issue.state)) {
+      throw new Error("AgentSkills.in submission issue telemetry is malformed.");
+    }
+    const catalog = parseAgentSkillsInSearchPayload(await response.json());
+    const listed = catalog.listed === true;
+    return {
+      url: agentSkillsInSubmissionIssueUrl,
+      listing_url: agentSkillsInListingUrl,
+      search_url: agentSkillsInSearchUrl,
+      http_status: response.status,
+      ...catalog,
+      status: listed
+        ? "listed"
+        : catalog.status === "contract_drift"
+          ? "catalog_contract_drift"
+          : issue.state === "CLOSED"
+            ? "submission_closed_without_listing"
+            : "submitted_pending_indexing",
+      submission: {
+        issue_number: issue.number,
+        issue_state: issue.state,
+        issue_created_at: issue.createdAt,
+        issue_updated_at: issue.updatedAt,
+        issue_closed_at: issue.closedAt,
+        labels: issue.labels.map((label: Record<string, unknown>) => String(label.name || "")).filter(Boolean).sort(),
+        maintainer_comments: issue.comments.length,
+        direct_endpoint_attempts: 2,
+        direct_endpoint_result: "backend_failed_403_then_cloudflare_1101",
+      },
+      exposed_at: listed ? previousStatus.exposed_at || observedAt : null,
+      measurement: "submission_and_exact_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: agentSkillsInSubmissionIssueUrl,
+      listing_url: agentSkillsInListingUrl,
+      listed: false,
+      expected_skills: 1,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_exact_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
 async function githubSkillStatus(previousStatus: Record<string, any>, observedAt: string): Promise<Record<string, unknown>> {
   try {
     const hour = Math.floor(Date.parse(observedAt) / (60 * 60 * 1000));
@@ -2002,6 +2072,7 @@ const [
   directory402,
   index402,
   githubSkill,
+  agentSkillsIn,
 ] = await Promise.all([
   skillsShStatus(),
   agentToolStatus(),
@@ -2035,6 +2106,7 @@ const [
   directory402Status(),
   index402Status(),
   githubSkillStatus(previous.github_skill || {}, new Date().toISOString()),
+  agentSkillsInStatus(previous.agent_skills_in || {}, new Date().toISOString()),
 ]);
 if (Number(x402scan.listed_resources || 0) > 0) {
   x402scan.exposed_at = previous.x402scan?.exposed_at || new Date().toISOString();
@@ -2087,6 +2159,7 @@ const state = {
   mcp_observatory: mcpObservatory,
   mcpub_crawler_pr: mcpubCrawlerPr,
   agentskill,
+  agent_skills_in: agentSkillsIn,
   github_skill: githubSkill,
   security_directory_pr: securityDirectoryPr,
   x402_directory_pr: x402DirectoryPr,

@@ -92,6 +92,10 @@ test("loads legacy epoch-one baselines and rejects malformed records", () => {
   delete baseline.epoch_id;
   assert.equal(trustedFunnelBaseline(baseline)?.epoch_id, 1);
   assert.equal(trustedFunnelBaseline({ ...baseline, schema_version: 2 }), null);
+  assert.equal(
+    trustedFunnelBaseline({ ...baseline, funnel_collector_heartbeat_at: "not-a-date" })?.funnel_collector_heartbeat_at,
+    baseline.funnel_observed_through,
+  );
 });
 
 test("epoch stability ignores owner and unsigned preflight noise but changes on conversion-capable events", () => {

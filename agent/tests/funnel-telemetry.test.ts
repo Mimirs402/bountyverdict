@@ -204,6 +204,14 @@ test("records signed successes as funnel evidence rather than purchase proof", (
 
 test("ignores samples, internal routes, wrong methods, hosts, and scripts", () => {
   assert.equal(classifyFunnelTailEvent(event("/api/sample", 200)), null);
+  const readiness = classifyDiscoveryTailEvent(event(
+    "/api/sample",
+    200,
+    { "user-agent": "bountyverdict-funnel-smoke/1.0" },
+  ));
+  assert.ok(readiness);
+  assert.equal(readiness.surface, "sample_single");
+  assert.equal(readiness.source, "owner_automation");
   assert.equal(classifyFunnelTailEvent(event("/_internal/canary/single", 200)), null);
   assert.equal(classifyFunnelTailEvent(event("/api/portfolio", 402, {}, "GET")), null);
   assert.equal(classifyFunnelTailEvent({ ...event("/api/verdict", 402), scriptName: "other" }), null);

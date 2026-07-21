@@ -130,7 +130,8 @@ export function trustedFunnelBaseline(value: unknown): TrustedFunnelBaseline | n
     funnel_observed_through: typeof baseline.funnel_observed_through === "string"
       ? baseline.funnel_observed_through
       : baseline.initialized_at,
-    funnel_collector_heartbeat_at: typeof baseline.funnel_collector_heartbeat_at === "string"
+    funnel_collector_heartbeat_at: typeof baseline.funnel_collector_heartbeat_at === "string" &&
+      Number.isFinite(Date.parse(baseline.funnel_collector_heartbeat_at))
       ? baseline.funnel_collector_heartbeat_at
       : (typeof baseline.funnel_observed_through === "string" ? baseline.funnel_observed_through : baseline.initialized_at),
     cohort_capture_started_at: typeof baseline.cohort_capture_started_at === "string"

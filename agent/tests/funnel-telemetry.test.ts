@@ -60,8 +60,8 @@ test("learns MCP conversion stages without retaining tool arguments or request i
   }, "POST");
   Object.assign(value, {
     logs: [
-      { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 1, stage: "payment_required", product: "single", source: "external" })] },
-      { message: JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 1, stage: "validation_error", product: "mcpdrift", source: "external" }) },
+      { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 2, stage: "payment_required", product: "single", source: "external", client_family: "not_applicable" })] },
+      { message: JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 2, stage: "validation_error", product: "mcpdrift", source: "external", client_family: "not_applicable" }) },
       { message: ["private raw console output", { secret: true }] },
     ],
   });
@@ -80,11 +80,31 @@ test("learns MCP conversion stages without retaining tool arguments or request i
   assert.equal(snapshot.mcp_by_product_source.single.automated_client.payment_required, 1);
   assert.equal(snapshot.mcp_by_source.automated_client.events, 2);
   assert.equal(snapshot.mcp_by_client_class.agent_runtime.events, 2);
+  assert.equal(snapshot.mcp_by_client_family.not_applicable.events, 2);
   assert.equal(snapshot.mcp_by_channel.github.events, 2);
   assert.equal(snapshot.mcp_by_day["2026-07-20"].events, 2);
   assert.equal(snapshot.mcp_by_hour["2026-07-20T20"].events, 2);
   const serialized = JSON.stringify(snapshot);
   assert.doesNotMatch(serialized, /private|repository|token|secret|Codex|private-build/);
+  assert.equal(isFunnelSnapshot(snapshot), true);
+});
+
+test("retains only an allowlisted MCP initialize client family", () => {
+  const value = event("/mcp", 200, { "user-agent": "private-client/123" }, "POST");
+  Object.assign(value, { logs: [{ message: [JSON.stringify({
+    type: "bountyverdict_mcp_funnel",
+    schema_version: 2,
+    stage: "initialize",
+    product: null,
+    source: "external",
+    client_family: "codex",
+  })] }] });
+  const observations = classifyMcpTailEvents(value);
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].client_family, "codex");
+  const snapshot = recordMcpObservation(createFunnelSnapshot("2026-07-20T19:00:00.000Z"), observations[0]);
+  assert.equal(snapshot.mcp_by_client_family.codex.initialize, 1);
+  assert.doesNotMatch(JSON.stringify(snapshot), /private-client|123/);
   assert.equal(isFunnelSnapshot(snapshot), true);
 });
 

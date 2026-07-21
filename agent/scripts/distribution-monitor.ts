@@ -43,7 +43,7 @@ const TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
 const GITHUB_REPOSITORY = "cristianmoroaica/bountyverdict";
 const MCP_REGISTRY_NAME = "io.github.cristianmoroaica/bountyverdict";
-const MCP_REGISTRY_VERSION = "1.0.0";
+const MCP_REGISTRY_VERSION = "1.0.1";
 
 const configuration = loadDistributionMonitorConfiguration(process.env);
 const api = configuration.productionApi;
@@ -1398,6 +1398,7 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
       mcp_learning_stage: mcpLearningStage,
       mcp_by_source: state.mcp_by_source,
       mcp_by_client_class: state.mcp_by_client_class,
+      mcp_by_client_family: state.mcp_by_client_family,
       mcp_by_channel: state.mcp_by_channel,
       mcp_by_day: state.mcp_by_day,
       mcp_by_hour: state.mcp_by_hour,
@@ -1485,6 +1486,9 @@ function renderMonitorNote(report: Record<string, any>): string {
   const activeClients = Object.entries(funnel.trusted_by_client_class || {})
     .filter(([client, counters]: [string, any]) => !["owner_automation", "legacy_unclassified"].includes(client) && Number(counters?.requests || 0) > 0)
     .sort((left: [string, any], right: [string, any]) => Number(right[1]?.requests || 0) - Number(left[1]?.requests || 0));
+  const activeMcpClientFamilies = Object.entries(funnel.mcp_by_client_family || {})
+    .filter(([family, counters]: [string, any]) => !["owner_automation", "not_applicable"].includes(family) && Number(counters?.initialize || 0) > 0)
+    .sort((left: [string, any], right: [string, any]) => Number(right[1]?.initialize || 0) - Number(left[1]?.initialize || 0));
   const externalDiscoverySurfaces = Object.entries(funnel.trusted_external_discovery_by_surface || {})
     .filter(([, count]) => Number(count || 0) > 0)
     .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
@@ -1539,7 +1543,7 @@ Owner-funded launch proofs and every settlement from the dedicated owner canary 
 
 ## Current milestone
 
-The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six independently distributed non-SkillVerdict contracts are now exposed as real paid MCP 2025-11-25 tools through one stateless Streamable HTTP endpoint and listed in the official MCP Registry as \`io.github.cristianmoroaica/bountyverdict@1.0.0\`; SkillVerdict remains excluded while its earned-placement experiment is frozen. The same six products remain independently buyable through the402, NEAR Agent Market, and PayanAgent, all seven paid endpoints are registered through x402scan, and six method-compatible endpoints are live on 402 Index. Agent Tools Cloud also discovered the origin organically; its exact resource coverage, health, payee, price range, and metadata breadth are monitored as catalog evidence only, never as impressions or revenue. Privacy-safe edge capture now distinguishes both REST and MCP discovery, validation, challenge, payment-presentation, and success stages without retaining visitor identifiers, request content, tool arguments, or payment material. Distribution is the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers.
+The seven-product suite is healthy in production and unattended GitHub-to-Cloudflare deployment is verified end to end. Six independently distributed non-SkillVerdict contracts are now exposed as real paid MCP 2025-11-25 tools through one stateless Streamable HTTP endpoint and listed in the official MCP Registry as \`io.github.cristianmoroaica/bountyverdict@${MCP_REGISTRY_VERSION}\`; SkillVerdict remains excluded while its earned-placement experiment is frozen. The same six products remain independently buyable through the402, NEAR Agent Market, and PayanAgent, all seven paid endpoints are registered through x402scan, and six method-compatible endpoints are live on 402 Index. Agent Tools Cloud also discovered the origin organically; its exact resource coverage, health, payee, price range, and metadata breadth are monitored as catalog evidence only, never as impressions or revenue. Privacy-safe edge capture now distinguishes both REST and MCP discovery, validation, challenge, payment-presentation, and success stages without retaining visitor identifiers, request content, tool arguments, or payment material. Distribution is the sole product milestone: no eighth tool will be built until ten genuine purchases have been recognized from external payers.
 
 ## What is next
 
@@ -1624,6 +1628,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - Edge funnel capture: ${funnel.available ? `${Number(funnel.trusted_external_402_challenges || 0)} trusted external challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}; ${Number(funnel.external_402_challenges || 0)} older/lifetime external-or-unattributed challenges retained but excluded from rates` : "unavailable"} (aggregate HTTP telemetry only; onchain ledger remains authoritative)
 - Discovery-surface capture: ${funnel.available ? `${Number(funnel.trusted_external_discovery_requests || 0)} trusted external since the clean boundary; ${Number(funnel.external_discovery_requests || 0)} lifetime external` : "unavailable"} (homepage, OpenAPI, llms.txt, samples, and common agent-convention probes)
 - MCP-native capture: ${funnel.available ? `${Number(funnel.mcp_external?.initialize || 0)} initialize, ${Number(funnel.mcp_external?.tools_list || 0)} tools/list, ${Number(funnel.mcp_external?.tool_not_found || 0)} unknown-tool calls, ${Number(funnel.mcp_external?.validation_error || 0)} invalid calls, ${Number(funnel.mcp_external?.payment_required || 0)} unpaid valid calls, ${Number(funnel.mcp_external?.payment_present || 0)} payment presentations, ${Number(funnel.mcp_external?.paid_success || 0)} paid successes, ${Number(funnel.mcp_external?.paid_error || 0)} paid errors` : "unavailable"} (${funnel.mcp_learning_stage || "not started"}; owner probes excluded)
+- MCP initialize client families: ${activeMcpClientFamilies.length ? activeMcpClientFamilies.map(([family, counters]: [string, any]) => `${family} (${Number(counters.initialize || 0)})`).join(", ") : "none identified yet"} (allowlisted aggregates only; raw names and versions discarded)
 - External discovery surfaces observed: ${externalDiscoverySurfaces.length ? externalDiscoverySurfaces.map(([surface, count]) => `${surface} (${Number(count)})`).join(", ") : "none yet"}
 - Enhanced learning dimensions active since: ${funnel.enhanced_capture_started_at || "unavailable"}
 - Cross-dimensional product/channel/input/payment cohorts active since: ${funnel.cohort_capture_started_at || "unavailable"}

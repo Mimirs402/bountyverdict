@@ -42,7 +42,7 @@ Then ask, for example:
 
 Task-specific skills are the least-privilege path. Install all seven only when needed with `npx skills add cristianmoroaica/bountyverdict --skill '*' -y`.
 
-MCP-compatible agents can instead connect to the production Streamable HTTP server at `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`. It exposes six real paid tools matching the independently distributed products; SkillVerdict remains excluded from this channel. Tool schemas are discoverable with `tools/list`, semantically invalid inputs are rejected before payment, and valid calls return an exact x402 USDC requirement for the selected tool. The publishable registry contract is [`server.json`](server.json) under `io.github.cristianmoroaica/bountyverdict`.
+MCP-compatible agents can instead connect to the production Streamable HTTP server at `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`. It exposes six real paid tools matching the independently distributed products; SkillVerdict remains excluded from this channel. Tool schemas are discoverable with `tools/list`, include task-selection boundaries and canonical input patterns, reject invalid input before payment, and return an exact x402 USDC requirement for a valid selected tool. The official registry contract is [`server.json`](server.json) under `io.github.cristianmoroaica/bountyverdict`; its publisher metadata includes unbranded task keywords and use cases so downstream MCP aggregators can index what each tool actually solves.
 
 ## Inspect before paying
 

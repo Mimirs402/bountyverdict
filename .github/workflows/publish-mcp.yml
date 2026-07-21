@@ -20,22 +20,43 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify live MCP endpoint
+      - name: Read immutable manifest coordinates
+        id: manifest
         run: |
+          name=$(jq -er '.name' server.json)
+          version=$(jq -er '.version' server.json)
+          remote=$(jq -er '[.remotes[] | select(.type == "streamable-http") | .url] | if length == 1 then .[0] else error("expected exactly one Streamable HTTP remote") end' server.json)
+          [[ "$name" == io.github.cristianmoroaica/* ]]
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$remote" == "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp" ]]
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "remote=$remote" >> "$GITHUB_OUTPUT"
+
+      - name: Verify live MCP endpoint
+        env:
+          SERVER_VERSION: ${{ steps.manifest.outputs.version }}
+          SERVER_REMOTE: ${{ steps.manifest.outputs.remote }}
+        run: |
+          payload=$(jq -cn --arg version "$SERVER_VERSION" '{jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"registry-release-check",version:$version}}}')
           response=$(curl --fail --silent --show-error \
             --user-agent "bountyverdict-owner-audit/1.0" \
             --header "Accept: application/json, text/event-stream" \
             --header "Content-Type: application/json" \
             --header "MCP-Protocol-Version: 2025-11-25" \
-            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"registry-release-check","version":"1.0.0"}}}' \
-            "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp")
-          jq -e '.result.protocolVersion == "2025-11-25" and .result.serverInfo.name == "BountyVerdict"' <<<"$response" >/dev/null
+            --data "$payload" \
+            "$SERVER_REMOTE")
+          jq -e --arg version "$SERVER_VERSION" '.result.protocolVersion == "2025-11-25" and .result.serverInfo.name == "BountyVerdict" and .result.serverInfo.version == $version' <<<"$response" >/dev/null
 
       - name: Check whether this immutable version already exists
         id: existing
+        env:
+          SERVER_NAME: ${{ steps.manifest.outputs.name }}
+          SERVER_VERSION: ${{ steps.manifest.outputs.version }}
         run: |
-          response=$(curl --fail --silent --show-error 'https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.cristianmoroaica%2Fbountyverdict')
-          if jq -e '.servers[]? | select(.server.name == "io.github.cristianmoroaica/bountyverdict" and .server.version == "1.0.0")' <<<"$response" >/dev/null; then
+          encoded_name=$(jq -rn --arg value "$SERVER_NAME" '$value|@uri')
+          response=$(curl --fail --silent --show-error "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
+          if jq -e --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" '.servers[]? | select(.server.name == $name and .server.version == $version)' <<<"$response" >/dev/null; then
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
@@ -55,10 +76,15 @@ jobs:
           ./mcp-publisher publish
 
       - name: Verify registry listing
+        env:
+          SERVER_NAME: ${{ steps.manifest.outputs.name }}
+          SERVER_VERSION: ${{ steps.manifest.outputs.version }}
+          SERVER_REMOTE: ${{ steps.manifest.outputs.remote }}
         run: |
+          encoded_name=$(jq -rn --arg value "$SERVER_NAME" '$value|@uri')
           for attempt in $(seq 1 12); do
-            response=$(curl --fail --silent --show-error 'https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.cristianmoroaica%2Fbountyverdict')
-            if jq -e '.servers[]? | select(.server.name == "io.github.cristianmoroaica/bountyverdict" and .server.version == "1.0.0" and .server.remotes[0].type == "streamable-http" and .server.remotes[0].url == "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp")' <<<"$response" >/dev/null; then
+            response=$(curl --fail --silent --show-error "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
+            if jq -e --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" --arg remote "$SERVER_REMOTE" '.servers[]? | select(.server.name == $name and .server.version == $version and .server.remotes[0].type == "streamable-http" and .server.remotes[0].url == $remote)' <<<"$response" >/dev/null; then
               exit 0
             fi
             sleep 5

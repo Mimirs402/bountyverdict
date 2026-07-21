@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
-import { MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
+import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 
 const origin = "https://bountyverdict.example";
@@ -41,7 +41,10 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   });
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
+  assert.equal(body.result.serverInfo.version, "1.0.1");
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
+  assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
+  assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
   assert.match(body.result.instructions, /Payment identifies the fixed-price tool, not its arguments/);
 });
 
@@ -62,6 +65,24 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   }
   const drift = body.result.tools.find((tool: any) => tool.name === "check_mcp_tool_drift");
   assert.deepEqual(drift.inputSchema.required, ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]);
+  assert.equal(drift.inputSchema.additionalProperties, false);
+  assert.equal(drift.inputSchema.properties.baseline.properties.protocol_version.const, "2025-11-25");
+  assert.equal(drift.inputSchema.properties.baseline.properties.complete.const, true);
+  assert.equal(drift.inputSchema.properties.baseline.properties.tools.maxItems, 128);
+  assert.deepEqual(drift.inputSchema.properties.baseline.properties.tools.items.required, ["name", "inputSchema"]);
+  const single = body.result.tools.find((tool: any) => tool.name === "check_github_bounty");
+  assert.match(single.inputSchema.properties.issue_url.pattern, /github/);
+  assert.match(single.inputSchema.properties.issue_url.description, /Canonical public GitHub issue URL/);
+  const portfolio = body.result.tools.find((tool: any) => tool.name === "rank_github_bounties");
+  assert.equal(portfolio.inputSchema.properties.issue_urls.minItems, 2);
+  assert.equal(portfolio.inputSchema.properties.issue_urls.maxItems, 10);
+  assert.match(portfolio.inputSchema.properties.issue_urls.description, /distinct/);
+  const run = body.result.tools.find((tool: any) => tool.name === "diagnose_github_actions_run");
+  const flake = body.result.tools.find((tool: any) => tool.name === "classify_github_actions_flake");
+  assert.match(run.description, /root cause/);
+  assert.match(run.description, /classify_github_actions_flake/);
+  assert.match(flake.description, /retried once or fixed/);
+  assert.match(flake.description, /diagnose_github_actions_run/);
 });
 
 test("MCP rejects invalid semantic input before producing payment requirements", async () => {
@@ -70,10 +91,19 @@ test("MCP rejects invalid semantic input before producing payment requirements",
     arguments: { issue_url: "not-a-github-issue" },
   });
   assert.equal(body.result.isError, true);
-  assert.equal(body.result.structuredContent.error, "INVALID_ISSUE_URL");
-  assert.equal(body.result.structuredContent.payment_challenge_issued, false);
-  assert.equal(body.result.structuredContent.accepts, undefined);
-  assert.deepEqual(JSON.parse(body.result.content[0].text), body.result.structuredContent);
+  assert.match(body.result.content[0].text, /validation error/i);
+  assert.equal(body.result.structuredContent, undefined);
+  assert.doesNotMatch(body.result.content[0].text, /accepts|payment/i);
+});
+
+test("MCP client identity is reduced to a privacy-safe allowlisted family", () => {
+  const initialize = (name?: string) => ({ method: "initialize", params: { clientInfo: name === undefined ? {} : { name, version: "private-build-123" } } });
+  assert.equal(classifyMcpClientFamily(initialize("Claude Desktop nightly")), "claude");
+  assert.equal(classifyMcpClientFamily(initialize("Codex CLI")), "codex");
+  assert.equal(classifyMcpClientFamily(initialize("unknown-private-client")), "other_declared");
+  assert.equal(classifyMcpClientFamily(initialize()), "missing");
+  assert.equal(classifyMcpClientFamily({ method: "tools/list" }), "not_applicable");
+  assert.equal(classifyMcpClientFamily(initialize("Codex CLI"), true), "owner_automation");
 });
 
 test("MCP rejects schema-invalid and unknown tool calls before payment", async () => {

@@ -304,7 +304,9 @@ async function mcpIntentPageStatus(): Promise<Record<string, unknown>> {
   const body = await response.text();
   if (body.length > 100_000 || !body.includes("<title>GitHub Actions Failure Diagnosis MCP Server</title>") ||
     !body.includes("diagnose_github_actions_run") || !body.includes("classify_github_actions_flake") ||
-    !body.includes("io.github.cristianmoroaica/bountyverdict")) {
+    !body.includes("io.github.cristianmoroaica/bountyverdict") ||
+    !body.includes("Use $route-github-agent-decisions for [REAL_PUBLIC_GITHUB_ACTIONS_RUN_URL]") ||
+    !body.includes("pay only if it is exactly $0.04 Base USDC and my explicit budget authorizes it")) {
     throw new Error("MCP intent page content is incomplete or drifted.");
   }
   return {
@@ -312,6 +314,7 @@ async function mcpIntentPageStatus(): Promise<Record<string, unknown>> {
     url: MCP_INTENT_PAGE,
     checked_at: new Date().toISOString(),
     scope: ["diagnose_github_actions_run", "classify_github_actions_flake"],
+    copy_ready_prompt: true,
     accounting_note: "Availability is distribution evidence only; this owner-run check is not an impression, purchase, or revenue.",
   };
 }
@@ -1995,7 +1998,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Official MCP Registry:** ${report.acquisition?.mcp_registry?.listed ? `${report.acquisition.mcp_registry.name}@${report.acquisition.mcp_registry.version} listed at the exact production Streamable HTTP endpoint` : `unavailable (${report.acquisition?.mcp_registry?.error || "not checked"})`} (placement only, never a purchase)
 - **Agentic Resource Discovery catalog (last audited snapshot):** ${report.acquisition?.ard_catalog?.live ? `${report.acquisition.ard_catalog.representative_queries} neutral buyer queries and ${report.acquisition.ard_catalog.capabilities} MCP capabilities live` : report.acquisition?.ard_catalog?.status || "unavailable"} (${report.acquisition?.ard_catalog?.url || "origin catalog not checked"}; direct catalog availability is not registry indexing, an impression, a tool call, or a purchase)
 - **MCP paid-call handoff:** ${report.health?.mcp_metadata?.payment?.http_payment_handoff_extension === "io.github.cristianmoroaica/bountyverdict/http-payment-handoff" && report.health?.mcp_metadata?.payment?.direct_automatic_payment_requires === "@x402/mcp" ? "live — direct MCP payment requires @x402/mcp; standard hosts receive the exact versioned HTTP handoff for a separately authorized wallet" : "unavailable or drifted"}
-- **GitHub Actions MCP intent page:** ${report.acquisition?.mcp_intent_page?.live ? "live with root-cause and flaky-retry routing" : `unavailable (${report.acquisition?.mcp_intent_page?.error || "not checked"})`} (owner-checked availability, never an impression or purchase)
+- **GitHub Actions MCP intent page:** ${report.acquisition?.mcp_intent_page?.live && report.acquisition?.mcp_intent_page?.copy_ready_prompt ? "live with direct adapter install and a copy-ready schema-valid $0.04 call prompt" : `unavailable or drifted (${report.acquisition?.mcp_intent_page?.error || "required call prompt not verified"})`} (owner-checked availability, never an impression or purchase)
 - **MCP downstream propagation:** 1MCP ${mcpDownstreams.one_mcp?.status === "confirmed_direct_official_registry_consumer" ? "confirmed" : "unavailable"}; MCPProxy ${mcpDownstreams.mcp_proxy?.status === "direct_official_registry_consumer" ? "available through direct official lookup" : "unavailable"}; mcpub ${mcpDownstreams.mcpub?.live_verified ? "live verified" : mcpDownstreams.mcpub?.listed ? "archive registered" : "pending registration"}; Qt Creator ${mcpDownstreams.qt_creator?.listed ? "listed" : "pending scheduled mirror"}; Glama ${mcpDownstreams.glama?.listed ? "listed" : "pending registry ingestion"} (bounded owner-run checks, never impressions or purchases)
 - **MCPRepository:** ${report.acquisition?.mcp_repository?.status || "unavailable"} (${report.acquisition?.mcp_repository?.url || "submission not recorded"}; placement is never an impression, install, or purchase)
 - **AgentNDX MCP/x402 registry:** ${report.acquisition?.agentndx?.status || "unavailable"} (${report.acquisition?.agentndx?.listed ? "exact listing active" : "submitted for review"}; catalog presence is never an impression, tool call, purchase, or revenue)

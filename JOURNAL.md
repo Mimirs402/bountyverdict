@@ -1,5 +1,18 @@
 # BountyVerdict Journey
 
+## 2026-07-21 — ToolHive distribution submitted on a hardened release
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Current recognized-USDC profit before historic gas conversion: **-$1.01**
+- Pending Taskmarket opportunity: **5 submissions / $10.788919 gross / $9.97975 net if awarded**
+
+Published patch release `v1.1.1` without changing any paid tool, route, price, or result contract. The release removes a mutable `releases/latest` executable download, pins the official MCP Registry publisher to `v1.8.0`, verifies its exact SHA-256 digest before execution, and shortens the Registry description to satisfy the current 100-character schema bound. All **67** repository tests, **299** Worker tests, typechecking, Cloudflare dry deployment, Glama bridge smoke verification, zero-vulnerability npm audit, workflow YAML parsing, and the official MCP Registry validator passed. CI run `29832108812`, production deploy `29832215386`, and Registry publish `29832338919` all succeeded; production reports version `1.1.1` and exactly six tools.
+
+Submitted the existing remote MCP to ToolHive's agent-facing catalog through issue [#1384](https://github.com/stacklok/toolhive-catalog/issues/1384) and PR [#1385](https://github.com/stacklok/toolhive-catalog/pull/1385). The catalog's complete validation and Go test suite pass locally, the commit carries the required DCO sign-off, and ToolHive needs no secret or API key. Upstream checks currently await the maintainer approval required for a first-time external contributor; the PR is distribution placement only and is not an impression, install, purchase, or revenue event.
+
+Smithery remains publish-ready but unauthenticated: the CLI still reports no API key after the browser login was opened. Publication therefore remains behind the one-time publisher approval and namespace step; no credential was placed in Git.
+
 ## 2026-07-21 — Clean conversion measurement restored
 
 - Customer revenue: **$0.00**

@@ -25,6 +25,8 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(distribution, /marketplace_search: previousReport\.acquisition\?\.marketplace_search/);
   assert.match(distribution, /agenticMarket = previousReport\.marketplaces\?\.agentic_market/);
   assert.match(distribution, /Security action required:[^\n]+x402\.jobs API key/);
+  assert.match(distribution, /ToolHive in-agent catalog:[^\n]+PR \[#1385\]/);
+  assert.match(distribution, /Placement and review state are not impressions, installs, purchases, or revenue/);
   assert.match(auditedRunner, /FUNNEL_ROTATION_ID: rotationId/);
   assert.match(auditedRunner, /if \(monitor === "distribution"\) loadDistributionMonitorConfiguration\(process\.env\)/);
   assert.match(auditedRunner, /process\.env\.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE = monitor/);

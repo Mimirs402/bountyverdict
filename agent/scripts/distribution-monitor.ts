@@ -67,7 +67,7 @@ const TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
 const GITHUB_REPOSITORY = "Mimirs402/bountyverdict";
 const MCP_REGISTRY_NAME = "io.github.Mimirs402/bountyverdict";
-const MCP_REGISTRY_VERSION = "1.1.2";
+const MCP_REGISTRY_VERSION = "1.1.3";
 const MCP_REGISTRY_TIMEOUT_MS = 45_000;
 const ONE_MCP_PACKAGE = "@1mcp/agent@0.34.3";
 const QT_MCP_REGISTRY = "https://qtccache.qt.io/mcp/registry.json";
@@ -277,7 +277,7 @@ async function requireJsonObject(path: string): Promise<Record<string, any>> {
 }
 
 async function mcpRegistryStatus(): Promise<Record<string, unknown>> {
-  const endpoint = `${api}/mcp`;
+  const endpoint = `${api}/mcp?source=mcp-registry`;
   const response = await monitoredFetch(
     `https://registry.modelcontextprotocol.io/v0.1/servers?search=${encodeURIComponent(MCP_REGISTRY_NAME)}`,
     undefined,
@@ -327,7 +327,7 @@ async function mcpIntentPageStatus(): Promise<Record<string, unknown>> {
 
 async function mcpDownstreamStatus(previous: Record<string, any> = {}): Promise<Record<string, unknown>> {
   const now = new Date();
-  const endpoint = `${api}/mcp`;
+  const endpoint = `${api}/mcp?source=mcp-registry`;
   if (canReuseMcpDownstreamStatus(previous, MCP_REGISTRY_NAME, MCP_REGISTRY_VERSION, endpoint, now.getTime(), MCP_DOWNSTREAM_CHECK_INTERVAL_MS)) {
     return { ...previous, reused_at: now.toISOString() };
   }

@@ -689,6 +689,8 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
           ? "kilo_marketplace"
           : declaredSource === "glama-release"
             ? "glama"
+            : declaredSource === "mcp-registry"
+              ? "registry_or_directory"
             : null;
   const observations: McpFunnelObservation[] = [];
   for (const message of mcpLogMessages(tail.logs)) {

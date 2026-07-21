@@ -132,7 +132,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-21T15:54:20Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.1.2";
+const githubSkillReleaseTag = "v1.1.3";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
@@ -693,7 +693,7 @@ async function agentageStatus(
     const detail = parseAgentageGetResponse(
       await call(1, "mcp_get", { slug: agentageSlug }),
       agentageSlug,
-      `${productionOrigin}/mcp`,
+      `${productionOrigin}/mcp?source=mcp-registry`,
     );
     const contractVerified = detail?.contract_verified === true;
     return {
@@ -1300,7 +1300,7 @@ async function geminiCliGalleryStatus(
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
     const contractVerified = Boolean(entry && entry.url === repository && entry.extensionName === "bountyverdict" &&
-      entry.extensionVersion === "1.1.2" && entry.hasMCP === true);
+      entry.extensionVersion === "1.1.3" && entry.hasMCP === true);
     return {
       url: "https://geminicli.com/extensions/",
       catalog_url: geminiCliGalleryUrl,

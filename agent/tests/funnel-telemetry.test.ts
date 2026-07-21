@@ -511,6 +511,12 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(glamaObservations.length, 1);
   assert.equal(glamaObservations[0].channel, "glama");
 
+  const registry = event("/mcp?source=mcp-registry", 200, { "user-agent": "MCP Registry/1.0" }, "POST");
+  Object.assign(registry, { logs: kiro.logs });
+  const registryObservations = classifyMcpTailEvents(registry);
+  assert.equal(registryObservations.length, 1);
+  assert.equal(registryObservations[0].channel, "registry_or_directory");
+
   const owner = event("/mcp?source=agent-skills-marketplace", 200, { "user-agent": "bountyverdict-owner-audit/1.0" }, "POST");
   Object.assign(owner, { logs: [{ message: [JSON.stringify({
     type: "bountyverdict_mcp_funnel",
@@ -554,6 +560,7 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...marketplace,
       ...clineMarketplace,
       ...kiloMarketplace,
+      ...registryObservations,
       ...ownerMarker,
       ...rejected,
       ...unknownMarker,

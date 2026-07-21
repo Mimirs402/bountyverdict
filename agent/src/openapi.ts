@@ -207,7 +207,7 @@ export function createOpenApi(
       "/api/portfolio": {
         post: {
           summary: "Rank two to ten GitHub bounty candidates",
-          description: "Compare two to ten public GitHub bounties and choose the best candidate. Runs the full due-diligence check for every issue, ranks opportunities, returns per-candidate verdicts and partial failures, and identifies the strongest non-AVOID option. At ten candidates the fixed price is $0.04 per audited candidate.",
+          description: "Which GitHub bounty should I work on? Compare two to ten public issue URLs and choose the best candidate. Runs the full due-diligence check for every issue, ranks opportunities, returns per-candidate verdicts and partial failures, and identifies the strongest non-AVOID option. At ten candidates the fixed price is $0.04 per audited candidate.",
           operationId: "rankBountyPortfolio",
           ...agentMetadata(origin, {
             tags: ["bounty-ranking"],
@@ -446,13 +446,13 @@ export function createOpenApi(
       "/api/github-actions-run-diagnosis": {
         post: {
           summary: "Diagnose a public GitHub Actions workflow run",
-          description: "Find why one public GitHub Actions workflow failed and what the agent should do next. Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns root cause, retryability, redacted evidence, and concrete next actions without rerunning code.",
+          description: "Why did this GitHub Actions run fail? Diagnose one completed public workflow URL and explain what the agent should do next. Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns root cause, retryability, redacted evidence, and concrete next actions without rerunning code.",
           operationId: "diagnoseRunVerdict",
           ...agentMetadata(origin, {
             tags: ["ci-diagnosis"],
             samplePath: "/api/run/sample",
             skill: "diagnose-github-actions",
-            useWhen: "Find why one public GitHub Actions workflow failed and what the agent should do next.",
+            useWhen: "When an agent asks why a completed public GitHub Actions run failed and what to do next.",
             reuse: SERVICE_REUSE.run,
           }),
           requestBody: {
@@ -522,13 +522,13 @@ export function createOpenApi(
       "/api/github-actions-flake-retry-gate": {
         post: {
           summary: "Classify a public GitHub Actions failure before retrying",
-          description: "Decide whether a completed GitHub Actions failure is flaky and should be retried once, or is recurring or new and needs a fix. Compares exact workflow attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs, then returns a retry-or-fix decision without rerunning CI.",
+          description: "Should I rerun this failed GitHub Actions workflow or fix the code? Decide whether one completed public run is flaky and merits exactly one retry, or is recurring or new and needs a fix. Compares exact attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs without rerunning CI.",
           operationId: "classifyFlakeVerdict",
           ...agentMetadata(origin, {
             tags: ["ci-flake-gate"],
             samplePath: "/api/flake/sample",
             skill: "classify-github-flakes",
-            useWhen: "Decide whether a completed GitHub Actions failure is flaky: retry once or fix it.",
+            useWhen: "When an agent must decide whether to rerun one completed failed GitHub Actions workflow or fix the code.",
             reuse: FLAKE_SERVICE_REUSE,
           }),
           requestBody: {

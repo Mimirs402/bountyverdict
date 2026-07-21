@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env production",
+    "deploy:testnet": "wrangler deploy --env=''",
     "deploy:dry": "wrangler deploy --dry-run --env=''",
     "payment:inspect": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/payment-smoke.ts",
     "payment:smoke": "EXECUTE_PAYMENT=YES node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/payment-smoke.ts",

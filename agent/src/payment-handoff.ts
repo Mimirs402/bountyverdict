@@ -1,4 +1,5 @@
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
+import { PRODUCT_SELECTION_PREVIEWS } from "./selection-preview.ts";
 
 export const MCP_HTTP_PAYMENT_HANDOFF_EXTENSION =
   "io.github.cristianmoroaica/bountyverdict/http-payment-handoff";
@@ -56,9 +57,25 @@ const HTTP_HANDOFF_SCHEMA = Object.freeze({
       required: ["capability", "use_exact_request"],
       additionalProperties: false,
     },
+    selection_preview: {
+      type: "object",
+      properties: {
+        product: { type: "string" },
+        price: { type: "string" },
+        currency: { type: "string", const: "USDC" },
+        use_when: { type: "string" },
+        not_for: { type: "string" },
+        decision_returned: { type: "array", items: { type: "string" } },
+        why_pay: { type: "string" },
+        free_sample: { type: "string" },
+        unsigned_call_can_charge: { type: "boolean", const: false },
+      },
+      required: ["product", "price", "currency", "use_when", "not_for", "decision_returned", "why_pay", "free_sample", "unsigned_call_can_charge"],
+      additionalProperties: false,
+    },
     payment: { type: "object" },
   },
-  required: ["version", "direct_mcp", "wallet_mcp", "payment"],
+  required: ["version", "direct_mcp", "wallet_mcp", "selection_preview", "payment"],
   additionalProperties: false,
 });
 
@@ -216,6 +233,7 @@ export async function declareMcpHttpPaymentHandoff(
     exactRequest,
     PRODUCT_CATALOG[product].amountAtomic.toString(),
   );
+  const preview = PRODUCT_SELECTION_PREVIEWS[product];
   return {
     [MCP_HTTP_PAYMENT_HANDOFF_EXTENSION]: {
       info: {
@@ -227,6 +245,17 @@ export async function declareMcpHttpPaymentHandoff(
         wallet_mcp: {
           capability: "make_x402_request",
           use_exact_request: true,
+        },
+        selection_preview: {
+          product: preview.product,
+          price: PRODUCT_CATALOG[product].priceUsd,
+          currency: "USDC",
+          use_when: preview.useWhen,
+          not_for: preview.notFor,
+          decision_returned: preview.decisionReturned,
+          why_pay: preview.whyPay,
+          free_sample: new URL(preview.samplePath, `${validatedOrigin(origin)}/`).toString(),
+          unsigned_call_can_charge: false,
         },
         payment,
       },

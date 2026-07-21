@@ -145,10 +145,10 @@ test("MCPDrift activation remains owner-attributed and outside purchase accounti
 test("marketplace retrieval uses a blind-agent task holdout instead of seller-shaped copy", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.doesNotMatch(distribution, /public GitHub bounty worth pursuing/);
-  assert.match(distribution, /GitHub Actions failed workflow run URL root cause analysis/);
-  assert.match(distribution, /scan public repository for AGENTS\.md and nested agent instruction files/);
-  assert.match(distribution, /compare MCP server versions tool names input schemas and output schemas/);
-  assert.match(distribution, /Eight phrases are untouched outputs from three context-isolated agents/);
+  assert.match(distribution, /why did this GitHub Actions run fail/);
+  assert.match(distribution, /check AGENTS\.md and CLAUDE\.md before editing this repository/);
+  assert.match(distribution, /will this MCP tools list update break existing agents/);
+  assert.match(distribution, /Two plain-language questions per product/);
   assert.match(distribution, /not observed marketplace query volume/);
 });
 

@@ -8,6 +8,8 @@ import app from "../src/index.ts";
 import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import { MCP_HTTP_PAYMENT_HANDOFF_EXTENSION } from "../src/payment-handoff.ts";
+import { PRODUCT_CATALOG } from "../src/product-catalog.ts";
+import { PRODUCT_SELECTION_PREVIEWS } from "../src/selection-preview.ts";
 
 const origin = "https://bountyverdict.example";
 const payTo = "0x1111111111111111111111111111111111111111";
@@ -50,7 +52,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
-  assert.match(body.result.instructions, /one unsigned call is a free, non-settling preview/);
+  assert.match(body.result.instructions, /first unsigned call with real canonical input cannot charge/i);
   assert.match(body.result.instructions, /Never call with missing, invented, or placeholder arguments/);
   assert.match(body.result.instructions, /Payment identifies the fixed-price tool, not its arguments/);
 });
@@ -61,11 +63,10 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.equal(body.result.tools.length, 6);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
   for (const tool of body.result.tools) {
-    assert.match(tool.description, /Costs \$0\.\d+ USDC on Base via x402/);
-    assert.match(tool.description, /one unsigned call is a free, non-settling preview/);
-    assert.match(tool.description, /Payment occurs only after an authorized retry/);
-    assert.match(tool.description, /Never call with missing, invented, or placeholder arguments/);
-    assert.match(tool.description, /Free output sample: https:\/\//);
+    assert.match(tool.description, /^First unsigned call with real input cannot charge/);
+    assert.match(tool.description, /free \$0 selection preview and exact quote/);
+    assert.match(tool.description, /Only an authorized signed retry costs \$0\.\d+ USDC on Base/);
+    assert.match(tool.description, /never invent/i);
     assert.deepEqual(tool.annotations, {
       readOnlyHint: true,
       destructiveHint: false,
@@ -78,7 +79,7 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
     assert.equal(tool.outputSchema.additionalProperties, true);
     assert.ok(Buffer.byteLength(tool.description) <= 1_500, `${tool.name} description exceeds the tools/list context budget`);
   }
-  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) <= 6_000);
+  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_000);
   const drift = body.result.tools.find((tool: any) => tool.name === "check_mcp_tool_drift");
   assert.deepEqual(drift.inputSchema.required, ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]);
   assert.equal(drift.inputSchema.additionalProperties, false);
@@ -86,25 +87,21 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.equal(drift.inputSchema.properties.baseline.properties.complete.const, true);
   assert.equal(drift.inputSchema.properties.baseline.properties.tools.maxItems, 128);
   assert.deepEqual(drift.inputSchema.properties.baseline.properties.tools.items.required, ["name", "inputSchema"]);
-  assert.match(drift.description, /"contract_version":"mcp-drift\/1"/);
-  assert.match(drift.description, /replace both tools arrays with the complete aggregated catalogs/);
+  assert.match(drift.description, /complete baseline and current snapshots/);
+  assert.match(drift.description, /never invent or truncate snapshot arguments/i);
   const single = body.result.tools.find((tool: any) => tool.name === "check_github_bounty");
   assert.match(single.inputSchema.properties.issue_url.pattern, /github/);
   assert.match(single.inputSchema.properties.issue_url.description, /Canonical public GitHub issue URL/);
-  assert.match(single.description, /"issue_url":"https:\/\/github\.com\/owner\/repository\/issues\/123"/);
   const portfolio = body.result.tools.find((tool: any) => tool.name === "rank_github_bounties");
   assert.equal(portfolio.inputSchema.properties.issue_urls.minItems, 2);
   assert.equal(portfolio.inputSchema.properties.issue_urls.maxItems, 10);
   assert.match(portfolio.inputSchema.properties.issue_urls.description, /distinct/);
-  assert.match(portfolio.description, /"issue_urls":\["https:\/\/github\.com\/owner\/repository\/issues\/123"/);
   const run = body.result.tools.find((tool: any) => tool.name === "diagnose_github_actions_run");
   const flake = body.result.tools.find((tool: any) => tool.name === "classify_github_actions_flake");
-  assert.match(run.description, /root cause/);
+  assert.match(run.description, /find why/);
   assert.match(run.description, /classify_github_actions_flake/);
   assert.match(flake.description, /retried once or fixed/);
   assert.match(flake.description, /diagnose_github_actions_run/);
-  assert.match(single.description, /Call for every distinct candidate/);
-  assert.match(flake.description, /again after a new attempt appears/);
 
   assert.deepEqual(single.outputSchema.properties.verdict.enum, ["AVOID", "CAUTION", "VIABLE"]);
   assert.ok(single.outputSchema.required.includes("service_reuse"));
@@ -197,6 +194,15 @@ const challengeCases = [
   ["check_mcp_tool_drift", mcpDriftExampleInput, "20000"],
 ] as const;
 
+const challengeProducts = {
+  check_github_bounty: "single",
+  rank_github_bounties: "portfolio",
+  audit_agent_harness: "harness",
+  diagnose_github_actions_run: "run",
+  classify_github_actions_flake: "flake",
+  check_mcp_tool_drift: "mcpdrift",
+} as const;
+
 for (const [name, args, amount] of challengeCases) {
   test(`${name} returns an exact spec-shaped unpaid MCP payment challenge`, async () => {
     const body = await rpcBody(10, "tools/call", { name, arguments: args });
@@ -220,12 +226,25 @@ for (const [name, args, amount] of challengeCases) {
     assert.equal(handoff.info.direct_mcp.payment_meta_key, "x402/payment");
     assert.equal(handoff.info.wallet_mcp.capability, "make_x402_request");
     assert.equal(handoff.info.wallet_mcp.use_exact_request, true);
+    const expectedPreview = PRODUCT_SELECTION_PREVIEWS[challengeProducts[name]];
+    assert.equal(handoff.info.selection_preview.product, expectedPreview.product);
+    assert.equal(handoff.info.selection_preview.price, PRODUCT_CATALOG[challengeProducts[name]].priceUsd);
+    assert.equal(handoff.info.selection_preview.currency, "USDC");
+    assert.equal(handoff.info.selection_preview.use_when, expectedPreview.useWhen);
+    assert.equal(handoff.info.selection_preview.not_for, expectedPreview.notFor);
+    assert.deepEqual(handoff.info.selection_preview.decision_returned, expectedPreview.decisionReturned);
+    assert.equal(handoff.info.selection_preview.why_pay, expectedPreview.whyPay);
+    assert.equal(handoff.info.selection_preview.free_sample, `${origin}${expectedPreview.samplePath}`);
+    assert.equal(handoff.info.selection_preview.unsigned_call_can_charge, false);
+    assert.equal(JSON.stringify(handoff.info.selection_preview).includes("owner/repo"), false);
     assert.equal(handoff.info.payment.max_amount_atomic, amount);
     assert.equal(handoff.info.payment.agentic_wallet.executable, "npx");
     assert.equal(handoff.info.payment.agentic_wallet.execute_as_argument_vector, true);
     assert.equal(handoff.info.payment.agentic_wallet.do_not_join_into_shell_string, true);
     assert.deepEqual(handoff.info.payment.agentic_wallet.argv.slice(-3), ["--max-amount", amount, "--json"]);
     assert.equal(handoff.schema.properties.version.const, "1");
+    assert.equal(handoff.schema.properties.selection_preview.properties.unsigned_call_can_charge.const, false);
+    assert.ok(handoff.schema.required.includes("selection_preview"));
   });
 }
 

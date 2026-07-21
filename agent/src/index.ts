@@ -44,6 +44,7 @@ import {
   PRODUCT_CATALOG,
 } from "./product-catalog.ts";
 import { buildPaymentHandoff } from "./payment-handoff.ts";
+import { PRODUCT_SELECTION_PREVIEWS } from "./selection-preview.ts";
 import { createX402ServiceManifest } from "./x402-service-manifest.ts";
 import {
   createAiCatalog,
@@ -271,25 +272,18 @@ function preflightFailure(
 
 type UnpaidDecisionPreview = {
   productKey: keyof typeof PRODUCT_CATALOG;
-  product: string;
-  description: string;
-  useWhen: string;
-  notFor: string;
-  decisionReturned: string[];
-  whyPay: string;
-  samplePath: string;
-  skillName: string;
   method: "GET" | "POST";
   legacyTransport?: boolean;
 };
 
 async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPRequestContext) {
   const requestUrl = context.adapter.getUrl();
+  const selection = PRODUCT_SELECTION_PREVIEWS[preview.productKey];
   const requestBody = preview.method === "POST" && context.adapter.getBody
     ? await context.adapter.getBody()
     : undefined;
   if (preview.method === "POST" && requestBody === undefined) {
-    throw new Error(`Validated POST body is unavailable for ${preview.product}; refusing to construct a payment challenge.`);
+    throw new Error(`Validated POST body is unavailable for ${selection.product}; refusing to construct a payment challenge.`);
   }
   const catalog = PRODUCT_CATALOG[preview.productKey];
   const canonical = catalog.method === preview.method && !preview.legacyTransport;
@@ -297,7 +291,7 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
   const legacyPath = LEGACY_GET_PATHS[preview.productKey as keyof typeof LEGACY_GET_PATHS];
   const legacy = preview.method === "GET" && preview.legacyTransport === true && legacyPath === requestPath;
   if (!canonical && !legacy) {
-    throw new Error(`Payment handoff method drifted for ${preview.product}.`);
+    throw new Error(`Payment handoff method drifted for ${selection.product}.`);
   }
   const payment = await buildPaymentHandoff({
     method: preview.method,
@@ -308,16 +302,16 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
     contentType: "application/json",
     body: {
       error: "PAYMENT_REQUIRED",
-      product: preview.product,
+      product: selection.product,
       price: catalog.priceUsd,
       currency: "USDC",
-      description: preview.description,
-      use_when: preview.useWhen,
-      not_for: preview.notFor,
-      decision_returned: preview.decisionReturned,
-      why_pay: preview.whyPay,
-      free_sample: preview.samplePath,
-      skill: `${SKILLS_URL}${preview.skillName}/SKILL.md`,
+      description: selection.description,
+      use_when: selection.useWhen,
+      not_for: selection.notFor,
+      decision_returned: selection.decisionReturned,
+      why_pay: selection.whyPay,
+      free_sample: selection.samplePath,
+      skill: `${SKILLS_URL}${selection.skillName}/SKILL.md`,
       documentation: `${PRODUCT_URL}agents.html`,
       payment,
     },
@@ -345,14 +339,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "single",
-      product: "BountyVerdict",
-      description: "Pay once to receive a fresh evidence-linked bounty risk verdict.",
-      useWhen: "Before coding one public GitHub bounty issue.",
-      notFor: "Private repositories or payout guarantees.",
-      decisionReturned: ["AVOID", "CAUTION", "VIABLE"],
-      whyPay: "Checks withdrawn rewards, maintainer rejection, competing pull requests, failed-attempt saturation, and repository AI-contribution policy in one bounded pass.",
-      samplePath: "/api/sample",
-      skillName: "preflight-github-bounties",
       method: "POST",
     }, context),
   };
@@ -363,21 +349,13 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: requireCdpResourceDescription("Compare two to ten public GitHub bounties and choose the best candidate to work on. Runs the full due-diligence check for every issue, ranks opportunities, returns per-candidate verdicts and partial failures, and identifies the strongest non-AVOID option in one call."),
+    description: requireCdpResourceDescription("Which GitHub bounty should I work on? Compare two to ten public issue URLs and choose the best candidate. Runs the full due-diligence check for every issue, ranks opportunities, returns per-candidate verdicts and partial failures, and identifies the strongest non-AVOID option in one call."),
     mimeType: "application/json",
     serviceName: "BountyVerdict Portfolio",
     tags: ["compare-bounties", "best-candidate", "candidate-selection", "opportunity-ranking", "github-bounties", "portfolio"],
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "portfolio",
-      product: "BountyVerdict Portfolio",
-      description: "Pay once to rank up to ten bounty candidates with full evidence-linked verdicts.",
-      useWhen: "When choosing among two to ten public GitHub bounty candidates.",
-      notFor: "One candidate, duplicate issue URLs, or private issues.",
-      decisionReturned: ["ranked_verdicts", "best_candidate", "counts", "partial_failures"],
-      whyPay: "One call performs two to ten full audits; at ten candidates the fixed price is $0.04 per candidate.",
-      samplePath: "/api/portfolio/sample",
-      skillName: "preflight-github-bounties",
       method: "POST",
     }, context),
   };
@@ -385,14 +363,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     ...routeConfig,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "single",
-      product: "BountyVerdict",
-      description: "Pay once to receive a fresh evidence-linked bounty risk verdict.",
-      useWhen: "Before coding one public GitHub bounty issue.",
-      notFor: "Private repositories or payout guarantees.",
-      decisionReturned: ["AVOID", "CAUTION", "VIABLE"],
-      whyPay: "Checks withdrawn rewards, maintainer rejection, competing pull requests, failed-attempt saturation, and repository AI-contribution policy in one bounded pass.",
-      samplePath: "/api/sample",
-      skillName: "preflight-github-bounties",
       method: "GET",
       legacyTransport: true,
     }, context),
@@ -411,14 +381,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "harness",
-      product: "HarnessVerdict",
-      description: "Pay once for a commit-pinned, evidence-linked repository instruction audit.",
-      useWhen: "Before autonomous coding in a public GitHub repository.",
-      notFor: "Generic code quality review or private repositories.",
-      decisionReturned: ["READY", "REVIEW", "REPAIR"],
-      whyPay: "Maps AGENTS.md, CLAUDE.md, GEMINI.md, Copilot, Cursor, and SKILL.md coverage at an immutable commit and returns evidence-linked fixes.",
-      samplePath: "/api/harness/sample",
-      skillName: "audit-agent-harness",
       method: "POST",
     }, context),
   };
@@ -426,14 +388,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     ...harnessRouteConfig,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "harness",
-      product: "HarnessVerdict",
-      description: "Pay once for a commit-pinned, evidence-linked repository instruction audit.",
-      useWhen: "Before autonomous coding in a public GitHub repository.",
-      notFor: "Generic code quality review or private repositories.",
-      decisionReturned: ["READY", "REVIEW", "REPAIR"],
-      whyPay: "Maps AGENTS.md, CLAUDE.md, GEMINI.md, Copilot, Cursor, and SKILL.md coverage at an immutable commit and returns evidence-linked fixes.",
-      samplePath: "/api/harness/sample",
-      skillName: "audit-agent-harness",
       method: "GET",
       legacyTransport: true,
     }, context),
@@ -452,14 +406,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "skill",
-      product: "SkillVerdict",
-      description: "Pay once for a commit-pinned, non-executing security audit before installing a public agent skill.",
-      useWhen: "Before installing or running a third-party public SKILL.md bundle.",
-      notFor: "Runtime sandboxing, private skills, or a guarantee that code is safe.",
-      decisionReturned: ["LOW_RISK", "REVIEW", "BLOCK"],
-      whyPay: "Scans the whole pinned skill directory for credential theft, remote execution, destructive actions, persistence, privilege escalation, hidden files, and undeclared capabilities without executing it.",
-      samplePath: "/api/skill/sample",
-      skillName: "preflight-agent-skills",
       method: "GET",
     }, context),
   };
@@ -470,21 +416,13 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: requireCdpResourceDescription("Find why one public GitHub Actions workflow failed and what the agent should do next. Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns root cause, retryability, redacted evidence, and concrete next actions without rerunning code."),
+    description: requireCdpResourceDescription("Why did this GitHub Actions run fail? Diagnose one completed public workflow URL and explain what the agent should do next. Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns root cause, retryability, redacted evidence, and concrete next actions without rerunning code."),
     mimeType: "application/json",
     serviceName: "RunVerdict",
     tags: ["workflow-failure", "why-failed", "root-cause", "failed-run", "next-action", "github-actions"],
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "run",
-      product: "RunVerdict",
-      description: "Pay once to learn why a public GitHub Actions run failed and what to do next.",
-      useWhen: "After a failed run when the agent needs root cause and next action.",
-      notFor: "The narrower retry-once-versus-fix flake decision.",
-      decisionReturned: ["PASS", "WAIT", "RETRY", "FIX", "INVESTIGATE"],
-      whyPay: "Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns redacted evidence without rerunning code.",
-      samplePath: "/api/run/sample",
-      skillName: "diagnose-github-actions",
       method: "POST",
     }, context),
   };
@@ -492,14 +430,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     ...runRouteConfig,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "run",
-      product: "RunVerdict",
-      description: "Pay once to learn why a public GitHub Actions run failed and what to do next.",
-      useWhen: "After a failed run when the agent needs root cause and next action.",
-      notFor: "The narrower retry-once-versus-fix flake decision.",
-      decisionReturned: ["PASS", "WAIT", "RETRY", "FIX", "INVESTIGATE"],
-      whyPay: "Reads exact-attempt jobs and bounded failed-job logs, separates primary failures from downstream summaries, and returns redacted evidence without rerunning code.",
-      samplePath: "/api/run/sample",
-      skillName: "diagnose-github-actions",
       method: "GET",
       legacyTransport: true,
     }, context),
@@ -511,21 +441,13 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: requireCdpResourceDescription("Decide whether a completed GitHub Actions failure is flaky and should be retried once, or is recurring or new and needs a fix. Compares exact workflow attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs, then returns a retry-or-fix decision without rerunning CI."),
+    description: requireCdpResourceDescription("Should I rerun this failed GitHub Actions workflow or fix the code? Decide whether one completed public run is flaky and merits exactly one retry, or is recurring or new and needs a fix. Compares exact attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs without rerunning CI."),
     mimeType: "application/json",
     serviceName: "FlakeVerdict",
     tags: ["flaky-ci", "should-i-retry", "retry-or-fix", "workflow-attempts", "historical-run-comparison", "github-actions"],
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "flake",
-      product: "FlakeVerdict",
-      description: "Pay once to decide whether one public GitHub Actions failure merits exactly one retry or needs a fix.",
-      useWhen: "After a completed failed run when the decision is retry once versus fix.",
-      notFor: "Root-cause diagnosis; use RunVerdict when the question is why the run failed.",
-      decisionReturned: ["CONFIRMED_FLAKE", "LIKELY_FLAKE", "RECURRING_FAILURE", "NEW_FAILURE", "INCONCLUSIVE", "NOT_FAILED"],
-      whyPay: "Compares exact attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs to avoid a wasted CI rerun.",
-      samplePath: PRODUCT_CATALOG.flake.samplePath,
-      skillName: "classify-github-flakes",
       method: "POST",
     }, context),
   };
@@ -533,14 +455,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     ...flakeRouteConfig,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "flake",
-      product: "FlakeVerdict",
-      description: "Pay once to decide whether one public GitHub Actions failure merits exactly one retry or needs a fix.",
-      useWhen: "After a completed failed run when the decision is retry once versus fix.",
-      notFor: "Root-cause diagnosis; use RunVerdict when the question is why the run failed.",
-      decisionReturned: ["CONFIRMED_FLAKE", "LIKELY_FLAKE", "RECURRING_FAILURE", "NEW_FAILURE", "INCONCLUSIVE", "NOT_FAILED"],
-      whyPay: "Compares exact attempts, same-commit outcomes, failed-step fingerprints, and bounded historical runs to avoid a wasted CI rerun.",
-      samplePath: PRODUCT_CATALOG.flake.samplePath,
-      skillName: "classify-github-flakes",
       method: "GET",
       legacyTransport: true,
     }, context),
@@ -559,14 +473,6 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "mcpdrift",
-      product: "MCPDriftVerdict",
-      description: "Pay once to receive the already-computed compatibility verdict for this exact MCP tools/list snapshot pair.",
-      useWhen: "After a complete MCP tools/list change and before an agent accepts the server upgrade.",
-      notFor: "Malware or prompt-injection scanning, private catalogs, or invoking MCP tools.",
-      decisionReturned: ["UNCHANGED", "SAFE_ADDITIVE", "REVIEW", "INCONCLUSIVE", "BREAKING", "SECURITY_REGRESSION"],
-      whyPay: "Provides an exact-hash structural compatibility gate for removed tools, new required arguments, incompatible schemas, and model-facing safety regressions.",
-      samplePath: PRODUCT_CATALOG.mcpdrift.samplePath,
-      skillName: "check-mcp-tool-drift",
       method: "POST",
     }, context),
   };

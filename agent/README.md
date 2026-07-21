@@ -189,7 +189,7 @@ npx wrangler secret put GITHUB_TOKEN --env production
 npx wrangler secret put CDP_API_KEY_ID --env production
 npx wrangler secret put CDP_API_KEY_SECRET --env production
 npx wrangler secret put CANARY_TOKEN --env production
-npm run deploy -- --env production
+npm run deploy
 ```
 
 The receiving address is public on-chain, but storing it as a binding keeps deployment configuration separate from source. GitHub, CDP, and canary credentials are secrets and must never be committed.

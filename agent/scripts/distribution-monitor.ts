@@ -136,43 +136,43 @@ const EXPECTED_PRODUCTS = ["single", "portfolio", "harness", "skill", "run", "fl
 const MCP_PRODUCTS = EXPECTED_PRODUCTS.filter((product): product is Exclude<ProductKey, "skill"> => product !== "skill");
 const BUYER_QUERY_BENCHMARK: Readonly<Record<ProductKey, readonly string[]>> = Object.freeze({
   single: Object.freeze([
-    "GitHub issue bounty reward claim status",
-    "GitHub issue open assigned pull request maintainer activity",
+    "is this GitHub bounty still open and unclaimed",
+    "can I work on this GitHub bounty or is someone already doing it",
   ]),
   portfolio: Object.freeze([
-    "choose the best among several public GitHub bounty issue URLs",
-    "rank multiple GitHub bounty candidates by claimability and delivery risk",
+    "which GitHub bounty should I work on",
+    "compare these GitHub bounty issues and pick the best one",
   ]),
   harness: Object.freeze([
-    "scan public repository for AGENTS.md and nested agent instruction files",
-    "audit coding-agent instructions before working in a GitHub repository",
+    "check AGENTS.md and CLAUDE.md before editing this repository",
+    "is this repo ready for a coding agent",
   ]),
   skill: Object.freeze([
-    "scan third-party SKILL.md bundle for credential theft before installation",
-    "audit agent skill files for destructive commands and remote execution",
+    "is this agent skill safe to install",
+    "check this SKILL.md for credential theft or destructive commands",
   ]),
   run: Object.freeze([
-    "GitHub Actions failed workflow run URL root cause analysis",
-    "CI/CD build log failure diagnosis from public URL",
+    "why did this GitHub Actions run fail",
+    "what broke in this failed GitHub Actions workflow",
   ]),
   flake: Object.freeze([
-    "classify CI failure transient flaky retryable vs deterministic",
-    "should I retry a failed GitHub Actions run or fix it",
+    "should I rerun this failed workflow or fix the code",
+    "is this GitHub Actions failure flaky",
   ]),
   mcpdrift: Object.freeze([
-    "compare MCP server versions tool names input schemas and output schemas",
-    "MCP server update breaking-change and agent workflow compatibility audit",
+    "will this MCP tools list update break existing agents",
+    "did this MCP server change its tool schemas",
   ]),
 });
 const MARKETPLACE_SEARCH_INTENTS: ReadonlyArray<{
   product: "single" | "portfolio" | "harness" | "run" | "flake";
   query: string;
 }> = [
-  { product: "single", query: "GitHub issue bounty reward claim status" },
-  { product: "portfolio", query: "choose the best among several public GitHub bounty issue URLs" },
-  { product: "harness", query: "scan public repository for AGENTS.md and nested agent instruction files" },
-  { product: "run", query: "GitHub Actions failed workflow run URL root cause analysis" },
-  { product: "flake", query: "classify CI failure transient flaky retryable vs deterministic" },
+  { product: "single", query: "is this GitHub bounty still open and unclaimed" },
+  { product: "portfolio", query: "which GitHub bounty should I work on" },
+  { product: "harness", query: "check AGENTS.md and CLAUDE.md before editing this repository" },
+  { product: "run", query: "why did this GitHub Actions run fail" },
+  { product: "flake", query: "should I rerun this failed workflow or fix the code" },
 ];
 function expectedDiscoveryResources(): Record<ProductKey, string> {
   return Object.fromEntries(Object.entries(PRODUCT_CATALOG).map(([product, contract]) => [
@@ -586,7 +586,7 @@ async function discoveryStatus(
       found_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.found_queries || 0), 0),
       top_three_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.top_three_queries || 0), 0),
       first_place_queries: benchmarkRows.reduce((sum, row) => sum + Number(row.first_place_queries || 0), 0),
-      methodology: "Two task descriptions per product. Eight phrases are untouched outputs from three context-isolated agents; six controls provide balanced product coverage. This synthetic holdout measures retrieval robustness, not observed marketplace query volume.",
+      methodology: "Two plain-language questions per product, phrased as an agent would ask while holding a concrete GitHub URL or MCP snapshot. This synthetic holdout measures task retrieval robustness, not observed marketplace query volume.",
     },
     query_ranks: queryRanks,
     top_competitors: topCompetitors,

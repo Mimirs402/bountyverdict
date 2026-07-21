@@ -114,10 +114,12 @@ const mcpDirectoryListingUrl = "https://mcp.directory/servers/bountyverdict";
 const clineMarketplacePrNumber = 13;
 const clineMarketplacePrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplacePrNumber}`;
 const clineMarketplaceCatalogUrl = "https://cline.github.io/marketplace/catalog.json";
+const clineMarketplaceEndpoint = `${productionOrigin}/mcp?source=cline-marketplace`;
 const kiloMarketplacePrNumber = 192;
 const kiloMarketplacePrUrl = `https://github.com/Kilo-Org/kilo-marketplace/pull/${kiloMarketplacePrNumber}`;
 const kiloMarketplaceDefinitionUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/bountyverdict/MCP.yaml";
 const kiloMarketplaceCatalogUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/marketplace.yaml";
+const kiloMarketplaceEndpoint = `${productionOrigin}/mcp?source=kilo-marketplace`;
 const geminiCliGalleryUrl = "https://geminicli.com/extensions.json";
 const agentFinderPrNumber = 10;
 const agentFinderPrUrl = `https://github.com/github/agentfinder-catalog/pull/${agentFinderPrNumber}`;
@@ -885,7 +887,7 @@ async function clineMarketplaceStatus(
     if (!catalogResponse.ok) throw new Error(`Cline Marketplace returned HTTP ${catalogResponse.status}.`);
     const body = await catalogResponse.text();
     if (body.length > 2_000_000) throw new Error("Cline Marketplace catalog response is unbounded.");
-    const parsed = parseClineMarketplaceCatalog(JSON.parse(body), repository, `${productionOrigin}/mcp`);
+    const parsed = parseClineMarketplaceCatalog(JSON.parse(body), repository, clineMarketplaceEndpoint);
     const prStatus = String(review.status || "unknown");
     const status = parsed.contract_verified
       ? "catalog_listed"
@@ -942,10 +944,10 @@ async function kiloMarketplaceStatus(
       throw new Error(`Kilo Marketplace returned HTTP ${definitionResponse.status}/${catalogResponse.status}.`);
     }
     const definition = definitionResponse.status === 200
-      ? parseKiloMarketplaceDefinition(await definitionResponse.text(), repository, `${productionOrigin}/mcp`)
+      ? parseKiloMarketplaceDefinition(await definitionResponse.text(), repository, kiloMarketplaceEndpoint)
       : null;
     const catalogBody = await catalogResponse.text();
-    const catalog = parseKiloMarketplaceCatalog(catalogBody, repository, `${productionOrigin}/mcp`);
+    const catalog = parseKiloMarketplaceCatalog(catalogBody, repository, kiloMarketplaceEndpoint);
     const prStatus = String(review.status || "unknown");
     const contractVerified = catalog.contract_verified === true;
     const status = contractVerified

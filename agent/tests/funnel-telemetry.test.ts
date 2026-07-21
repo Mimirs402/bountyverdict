@@ -404,6 +404,18 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(marketplace.length, 1);
   assert.equal(marketplace[0].channel, "agent_skills_marketplace");
 
+  const cline = event("/mcp?source=cline-marketplace", 200, { "user-agent": "Cline/1.0" }, "POST");
+  Object.assign(cline, { logs: kiro.logs });
+  const clineMarketplace = classifyMcpTailEvents(cline);
+  assert.equal(clineMarketplace.length, 1);
+  assert.equal(clineMarketplace[0].channel, "cline_marketplace");
+
+  const kilo = event("/mcp?source=kilo-marketplace", 200, { "user-agent": "Kilo Code/1.0" }, "POST");
+  Object.assign(kilo, { logs: kiro.logs });
+  const kiloMarketplace = classifyMcpTailEvents(kilo);
+  assert.equal(kiloMarketplace.length, 1);
+  assert.equal(kiloMarketplace[0].channel, "kilo_marketplace");
+
   const glama = event("/mcp?source=glama-release", 200, { "user-agent": "Glama/1.0" }, "POST");
   Object.assign(glama, { logs: kiro.logs });
   const glamaObservations = classifyMcpTailEvents(glama);
@@ -429,12 +441,36 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(rejected.length, 1);
   assert.equal(rejected[0].channel, "direct_or_hidden");
 
+  for (const path of [
+    "/mcp?source=cline-marketplace&private=discard",
+    "/mcp?source=cline-marketplace&source=cline-marketplace",
+    "/mcp?source=kilo-marketplace&private=discard",
+    "/mcp?source=kilo-marketplace&source=kilo-marketplace",
+  ]) {
+    const ambiguous = event(path, 200, { "user-agent": "Codex/1.0" }, "POST");
+    Object.assign(ambiguous, { logs: kiro.logs });
+    const observations = classifyMcpTailEvents(ambiguous);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0].channel, "direct_or_hidden");
+  }
+
   const unknown = event("/mcp?source=private-campaign", 200, { "user-agent": "Codex/1.0" }, "POST");
   Object.assign(unknown, { logs: kiro.logs });
   const unknownMarker = classifyMcpTailEvents(unknown);
   assert.equal(unknownMarker.length, 1);
   assert.equal(unknownMarker[0].channel, "direct_or_hidden");
-  assert.doesNotMatch(JSON.stringify([...exact, ...marketplace, ...ownerMarker, ...rejected, ...unknownMarker]), /private|discard|kiro-power|campaign/i);
+  assert.doesNotMatch(
+    JSON.stringify([
+      ...exact,
+      ...marketplace,
+      ...clineMarketplace,
+      ...kiloMarketplace,
+      ...ownerMarker,
+      ...rejected,
+      ...unknownMarker,
+    ]),
+    /private|discard|kiro-power|cline-marketplace|kilo-marketplace|campaign/i,
+  );
 });
 
 test("Glama release probes remain distribution evidence and never enter the buyer-candidate funnel", () => {

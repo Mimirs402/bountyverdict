@@ -28,6 +28,8 @@ import {
 const name = "io.github.cristianmoroaica/bountyverdict";
 const version = "1.1.0";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
+const clineEndpoint = `${endpoint}?source=cline-marketplace`;
+const kiloEndpoint = `${endpoint}?source=kilo-marketplace`;
 const repository = "https://github.com/cristianmoroaica/bountyverdict";
 const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.cristianmoroaica:bountyverdict";
 const registryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest";
@@ -286,37 +288,53 @@ test("recognizes only the exact Cline in-agent install contract", () => {
     description: "Six read-only tools return evidence-linked verdicts and request x402 payment only after valid input.",
     repo: repository,
     install: {
-      args: ["bountyverdict", "--transport", "http", endpoint],
-      command: `cline mcp install bountyverdict --transport http ${endpoint}`,
+      args: ["bountyverdict", "--transport", "http", clineEndpoint],
+      command: `cline mcp install bountyverdict --transport http "${clineEndpoint}"`,
     },
   };
-  const exact = parseClineMarketplaceCatalog(catalog(entry), repository, endpoint);
+  const exact = parseClineMarketplaceCatalog(catalog(entry), repository, clineEndpoint);
   assert.equal(exact.listed, true);
   assert.equal(exact.contract_verified, true);
 
   const drifted = parseClineMarketplaceCatalog(catalog({
     ...entry,
-    install: { ...entry.install, args: ["bountyverdict", "--transport", "sse", endpoint] },
-  }), repository, endpoint);
+    install: { ...entry.install, args: ["bountyverdict", "--transport", "sse", clineEndpoint] },
+  }), repository, clineEndpoint);
   assert.equal(drifted.listed, true);
   assert.equal(drifted.contract_verified, false);
 
   const contaminated = parseClineMarketplaceCatalog(catalog({
     ...entry,
     description: `${entry.description} Includes SkillVerdict.`,
-  }), repository, endpoint);
+  }), repository, clineEndpoint);
   assert.equal(contaminated.skillverdict_contamination_risk, true);
   assert.equal(contaminated.contract_verified, false);
 
   const requiresSecret = parseClineMarketplaceCatalog(catalog({
     ...entry,
     install: { ...entry.install, env: { API_KEY: "required" } },
-  }), repository, endpoint);
+  }), repository, clineEndpoint);
   assert.equal(requiresSecret.listed, true);
   assert.equal(requiresSecret.contract_verified, false);
 
-  assert.equal(parseClineMarketplaceCatalog({ ...catalog(entry), entries: [] }, repository, endpoint).listed, false);
-  assert.throws(() => parseClineMarketplaceCatalog({ ...catalog(entry), entries: [entry, entry] }, repository, endpoint), /duplicated/);
+  for (const wrongEndpoint of [
+    endpoint,
+    `${endpoint}?source=kilo-marketplace`,
+    `${clineEndpoint}&private=discard`,
+    `${endpoint}?source=cline-marketplace&source=cline-marketplace`,
+  ]) {
+    const wrong = {
+      ...entry,
+      install: {
+        args: ["bountyverdict", "--transport", "http", wrongEndpoint],
+        command: `cline mcp install bountyverdict --transport http "${wrongEndpoint}"`,
+      },
+    };
+    assert.equal(parseClineMarketplaceCatalog(catalog(wrong), repository, clineEndpoint).contract_verified, false);
+  }
+
+  assert.equal(parseClineMarketplaceCatalog({ ...catalog(entry), entries: [] }, repository, clineEndpoint).listed, false);
+  assert.throws(() => parseClineMarketplaceCatalog({ ...catalog(entry), entries: [entry, entry] }, repository, clineEndpoint), /duplicated/);
 });
 
 test("recognizes only Kilo's exact secret-free remote marketplace contract", () => {
@@ -333,25 +351,35 @@ content:
     content: |
       {
         "type": "streamable-http",
-        "url": "${endpoint}"
+        "url": "${kiloEndpoint}"
       }
 `;
-  const exact = parseKiloMarketplaceDefinition(definition, repository, endpoint);
+  const exact = parseKiloMarketplaceDefinition(definition, repository, kiloEndpoint);
   assert.equal(exact.listed, true);
   assert.equal(exact.contract_verified, true);
 
   const secretRequired = parseKiloMarketplaceDefinition(
     `${definition}parameters:\n  - name: API key\n    key: API_KEY\n`,
     repository,
-    endpoint,
+    kiloEndpoint,
   );
   assert.equal(secretRequired.contract_verified, false);
-  assert.equal(parseKiloMarketplaceDefinition(definition.replace(endpoint, "https://wrong.example/mcp"), repository, endpoint).contract_verified, false);
+  for (const wrongEndpoint of [
+    endpoint,
+    clineEndpoint,
+    `${kiloEndpoint}&private=discard`,
+    `${endpoint}?source=kilo-marketplace&source=kilo-marketplace`,
+  ]) {
+    assert.equal(
+      parseKiloMarketplaceDefinition(definition.replace(kiloEndpoint, wrongEndpoint), repository, kiloEndpoint).contract_verified,
+      false,
+    );
+  }
 
   const generated = `items:\n  - id: another\n    name: Another\n${definition.split("\n").map((line, index) => index === 0 ? `  - ${line}` : `    ${line}`).join("\n")}  - id: later\n    name: Later\n`;
-  assert.equal(parseKiloMarketplaceCatalog(generated, repository, endpoint).contract_verified, true);
-  assert.equal(parseKiloMarketplaceCatalog("items:\n  - id: another\n", repository, endpoint).listed, false);
-  assert.throws(() => parseKiloMarketplaceCatalog(`${generated}${generated}`, repository, endpoint), /duplicated/);
+  assert.equal(parseKiloMarketplaceCatalog(generated, repository, kiloEndpoint).contract_verified, true);
+  assert.equal(parseKiloMarketplaceCatalog("items:\n  - id: another\n", repository, kiloEndpoint).listed, false);
+  assert.throws(() => parseKiloMarketplaceCatalog(`${generated}${generated}`, repository, kiloEndpoint), /duplicated/);
 });
 
 test("recognizes bounded Agentage official-registry search and detail contracts", () => {

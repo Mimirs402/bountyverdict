@@ -509,7 +509,10 @@ export function parseClineMarketplaceCatalog(
 ): ClineMarketplaceStatus {
   const expectedId = "bountyverdict";
   const expectedArgs = [expectedId, "--transport", "http", expectedEndpoint];
-  const expectedCommand = `cline mcp install ${expectedArgs.join(" ")}`;
+  const shellArgument = (argument: string): string => /^[A-Za-z0-9_./:@-]+$/.test(argument)
+    ? argument
+    : JSON.stringify(argument);
+  const expectedCommand = `cline mcp install ${expectedArgs.map(shellArgument).join(" ")}`;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Cline Marketplace catalog is not an object.");
   }

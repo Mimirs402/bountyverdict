@@ -243,7 +243,9 @@ test("directory monitoring tracks Cline review and exact in-agent install contra
   assert.match(distribution, /cline_marketplace: state\.cline_marketplace/);
   assert.match(distribution, /Cline in-agent marketplace/);
   assert.match(distribution, /exact marketplace install\/wizard contract/);
-  assert.match(distribution, /PR or catalog presence is never an impression, install, tool call, purchase, or revenue/);
+  assert.match(distribution, /Cline marketplace source capture/);
+  assert.match(distribution, /mcpClineMarketplace\.paid_success/);
+  assert.match(distribution, /aggregate events, not installs, unique agents, purchases, or revenue/);
 });
 
 test("directory PR monitoring uses authenticated GitHub reads instead of exhausted anonymous API quota", async () => {
@@ -282,6 +284,8 @@ test("directory monitoring tracks Kilo review and exact secret-free remote contr
   assert.match(distribution, /kilo_marketplace: state\.kilo_marketplace/);
   assert.match(distribution, /Kilo in-agent marketplace/);
   assert.match(distribution, /exact secret-free remote contract/);
+  assert.match(distribution, /Kilo marketplace source capture/);
+  assert.match(distribution, /mcpKiloMarketplace\.paid_success/);
 });
 
 test("directory monitoring tracks Gemini CLI gallery propagation without claiming demand", async () => {
@@ -346,6 +350,8 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(funnel, /url\.searchParams\.size === 1/);
   assert.match(funnel, /declaredSource === "kiro-power"/);
   assert.match(funnel, /declaredSource === "agent-skills-marketplace"/);
+  assert.match(funnel, /declaredSource === "cline-marketplace"/);
+  assert.match(funnel, /declaredSource === "kilo-marketplace"/);
   assert.match(funnel, /\? "agent_skills_marketplace"/);
   assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);

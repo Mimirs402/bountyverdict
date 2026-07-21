@@ -6,6 +6,7 @@ import {
   discoveryExtension,
   exampleVerdict,
   portfolioDiscoveryExtension,
+  portfolioDiscoveryExample,
   portfolioExample,
 } from "../src/discovery.ts";
 import { harnessDiscoveryExtension } from "../src/harness-discovery.ts";
@@ -16,6 +17,10 @@ import {
   CDP_RESOURCE_DESCRIPTION_MAX_LENGTH,
   requireCdpResourceDescription,
 } from "../src/x402-resource-server.ts";
+import {
+  SETTLEMENT_CANARY_PRODUCTS,
+  getSettlementCanaryFixture,
+} from "../src/settlement-canary.ts";
 import app from "../src/index.ts";
 
 const crawlerEnv = {
@@ -72,6 +77,26 @@ test("portfolio POST declaration passes Bazaar schema and protocol validation", 
   assert.equal(extension.info.input.bodyType, "json");
   assert.deepEqual(validateDiscoveryExtensionSpec(extension), { valid: true });
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
+  assert.equal(extension.info.output.example, portfolioDiscoveryExample);
+});
+
+test("every production payment challenge fits a common single-header budget", async () => {
+  for (const product of SETTLEMENT_CANARY_PRODUCTS) {
+    const fixture = getSettlementCanaryFixture(product);
+    const url = new URL(fixture.url);
+    const response = await app.request(`${url.pathname}${url.search}`, {
+      method: fixture.method,
+      headers: fixture.body ? { "Content-Type": "application/json" } : undefined,
+      body: fixture.body,
+    }, crawlerEnv);
+    assert.equal(response.status, 402, `${product} must produce a payment challenge`);
+    const encoded = response.headers.get("payment-required");
+    assert.ok(encoded, `${product} must include PAYMENT-REQUIRED`);
+    assert.ok(
+      encoded.length < 16_000,
+      `${product} PAYMENT-REQUIRED must remain under a common single-header budget`,
+    );
+  }
 });
 
 test("public bounty samples exactly match the real evidence snapshots advertised to agents", async () => {

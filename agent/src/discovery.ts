@@ -380,6 +380,71 @@ export const portfolioExample = {
   checked_at: "2026-07-21T20:19:51.393Z",
 };
 
+// Keep the Bazaar example representative but compact. PAYMENT-REQUIRED is a
+// single HTTP header, so embedding the full two-verdict public sample can make
+// standard Node clients reject the response before an agent can pay. The full
+// evidence-rich example remains available at /api/portfolio/sample.
+export const portfolioDiscoveryExample = {
+  product: "BountyVerdict Portfolio",
+  version: "1.0",
+  recommendation: "Do not start the checked candidate; one other issue could not be checked.",
+  service_reuse: SERVICE_REUSE.portfolio,
+  best_candidate: null,
+  counts: { submitted: 2, checked: 1, viable: 0, caution: 0, avoid: 1, failed: 1 },
+  ranked: [{
+    product: "BountyVerdict",
+    version: "1.0",
+    verdict: "AVOID",
+    score: 0,
+    summary: "The issue is already assigned and its reward was withdrawn.",
+    service_reuse: SERVICE_REUSE.single,
+    issue: {
+      url: "https://github.com/typeorm/typeorm/issues/3357",
+      submitted_url: "https://github.com/typeorm/typeorm/issues/3357",
+      transferred: false,
+      title: "Migration generation drops and creates columns instead of altering resulting in data loss",
+      state: "open",
+      repository: "typeorm/typeorm",
+    },
+    signals: [{
+      label: "Issue is already assigned",
+      impact: -70,
+      detail: "GitHub lists an assignee.",
+      evidence_url: "https://github.com/typeorm/typeorm/issues/3357",
+      hard_stop: true,
+    }],
+    contribution_policy: { ai_use: "NO_EXPLICIT_RULE_FOUND", documents: [] },
+    reward: {
+      state: "WITHDRAWN",
+      verification: "NONE",
+      platform: null,
+      amount: null,
+      currency: null,
+      evidence_url: "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437",
+    },
+    coverage: {
+      comments_scanned: 96,
+      comments_total: 96,
+      comment_pages_scanned: 1,
+      comments_truncated: false,
+      timeline_events_scanned: 205,
+      timeline_events_total: 205,
+      timeline_pages_scanned: 3,
+      timeline_truncated: false,
+      linked_pull_requests_found: 37,
+      policy_documents_scanned: 1,
+      github_rate_limit_remaining: 38,
+    },
+    checked_at: "2026-07-21T20:19:51.393Z",
+    limitations: ["Confirm current reward terms and contribution policy before coding."],
+  }],
+  failures: [{
+    issue_url: "https://github.com/acme/widget/issues/12",
+    error: { code: "ISSUE_NOT_FOUND", message: "The issue could not be checked." },
+  }],
+  checked_at: "2026-07-21T20:19:51.393Z",
+};
+
 export const portfolioOutputSchema = {
   properties: {
     product: { type: "string", const: "BountyVerdict Portfolio" },
@@ -460,7 +525,7 @@ export const portfolioDiscoveryExtension = addHttpMethod(declareDiscoveryExtensi
     additionalProperties: false,
   },
   output: {
-    example: portfolioExample,
+    example: portfolioDiscoveryExample,
     schema: portfolioOutputSchema,
   },
 }), "POST");

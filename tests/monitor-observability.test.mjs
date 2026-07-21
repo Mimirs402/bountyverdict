@@ -258,14 +258,16 @@ test("directory monitoring verifies the origin ARD catalog without calling publi
   assert.match(distribution, /direct catalog availability is not registry indexing/);
 });
 
-test("Kiro Power source attribution remains aggregate and separate from purchase proof", async () => {
+test("declared MCP source attribution remains allowlisted, aggregate, and separate from purchase proof", async () => {
   const [funnel, distribution] = await Promise.all([
     readFile(new URL("../agent/src/funnel-telemetry.ts", import.meta.url), "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
   assert.match(funnel, /url\.searchParams\.size === 1/);
-  assert.match(funnel, /url\.searchParams\.get\("source"\) === "kiro-power"/);
-  assert.match(funnel, /declaredKiroPower \? "kiro_power"/);
+  assert.match(funnel, /declaredSource === "kiro-power"/);
+  assert.match(funnel, /declaredSource === "agent-skills-marketplace"/);
+  assert.match(funnel, /\? "agent_skills_marketplace"/);
+  assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);
   assert.match(distribution, /source marker is aggregate attribution, not proof of install, identity, or purchase/);
 });

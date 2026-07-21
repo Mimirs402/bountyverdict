@@ -1,0 +1,17 @@
+[Unit]
+Description=BountyVerdict read-only public funded-demand watcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/demand-watch.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+TimeoutStartSec=2min
+
+[Install]
+WantedBy=default.target

@@ -58,6 +58,8 @@ const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/acquisition-experiment.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
+const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/demand-watch.json`;
 const funnelStateFile = process.env.FUNNEL_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/funnel-telemetry.json`;
 const trustedFunnelBaselineFile = process.env.TRUSTED_FUNNEL_BASELINE_FILE ||
@@ -882,6 +884,50 @@ async function payanDemandStatus(): Promise<Record<string, any>> {
   };
 }
 
+async function publicDemandStatus(): Promise<Record<string, any>> {
+  const state = JSON.parse(await readFile(publicDemandStateFile, "utf8")) as Record<string, any>;
+  const molt = state.sources?.moltjobs;
+  const open = state.sources?.openjobs;
+  if (state.schema_version !== 1 || state.read_only !== true || state.actions_enabled !== false ||
+    state.errors !== 0 || typeof state.checked_at !== "string" || !Number.isFinite(Date.parse(state.checked_at)) ||
+    !molt || typeof molt !== "object" || Array.isArray(molt) ||
+    !open || typeof open !== "object" || Array.isArray(open)) {
+    throw new Error("Public demand watcher state is malformed or not strictly read-only.");
+  }
+  const ageMs = Date.now() - Date.parse(state.checked_at);
+  if (ageMs < 0 || ageMs > 30 * 60 * 1000) throw new Error("Public demand watcher state is stale.");
+  for (const [source, fields] of [[molt, [
+    "open_jobs", "verified_funded_open_jobs", "exact_candidate_count",
+    "rejected_unfunded_or_expired", "rejected_funded_non_matches",
+  ]], [open, [
+    "open_jobs", "usdc_open_jobs", "eligible_usdc_open_jobs", "wage_open_jobs", "exact_candidate_count",
+  ]]] as Array<[Record<string, any>, string[]]>) {
+    for (const field of fields) {
+      if (!Number.isSafeInteger(source[field]) || source[field] < 0) {
+        throw new Error(`Public demand watcher counter ${field} is invalid.`);
+      }
+    }
+    if (!Array.isArray(source.exact_candidates) || source.exact_candidates.length !== source.exact_candidate_count) {
+      throw new Error("Public demand watcher candidates disagree with their counter.");
+    }
+  }
+  if (!/^\d+(?:\.\d{1,6})?$/.test(molt.nominal_open_budget_usdc) ||
+    !/^\d+(?:\.\d{1,6})?$/.test(molt.verified_funded_budget_usdc)) {
+    throw new Error("Public demand watcher budget telemetry is invalid.");
+  }
+  return {
+    healthy: true,
+    checked_at: state.checked_at,
+    age_seconds: Math.round(ageMs / 1000),
+    read_only: true,
+    actions_enabled: false,
+    moltjobs: molt,
+    openjobs: open,
+    excluded: state.sources.excluded || {},
+    measurement: "public_inventory_and_exact_fit_acquisition_evidence_never_purchase_or_revenue",
+  };
+}
+
 async function payanStatus(): Promise<Record<string, unknown>> {
   if (!payanApiKey || !/^pk_live_[A-Za-z0-9_-]+$/.test(payanApiKey)) throw new Error("PAYAN_API_KEY is missing or invalid.");
   if (payanAgentId !== PAYAN_PROVIDER_ID) throw new Error("PAYAN_AGENT_ID does not match the pinned provider.");
@@ -1360,6 +1406,9 @@ function renderMonitorNote(report: Record<string, any>): string {
   const totalSkillInstalls = report.acquisition?.skills_sh?.total_installs;
   const skillsShSearch = report.acquisition?.skills_sh?.search_index || {};
   const experiment = report.acquisition?.experiment || {};
+  const publicDemand = report.acquisition?.public_demand_watch || {};
+  const moltDemand = publicDemand.moltjobs || {};
+  const openDemand = publicDemand.openjobs || {};
   const buyerQuerySummary = report.discovery?.buyer_query_summary || {};
   const buyerQueryBenchmark = report.discovery?.buyer_query_benchmark || {};
   const buyerBenchmarkSummary = Number.isFinite(Number(buyerQuerySummary.query_count))
@@ -1411,6 +1460,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"}
 - **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **Payan exact-fit demand capture:** ${payanDemand.healthy ? "enabled and healthy" : "unavailable or degraded"}; ${Number(payanDemand.open_requests_seen || 0)} open seen, ${Number(payanDemand.exact_matches || 0)} exact fits, ${Number(payanDemand.tracked_requests || 0)} tracked bids, ${Number(payanDemand.accepted || 0)} accepted, ${Number(payanDemand.fulfilled || 0)} fulfilled, ${Number(payanDemand.approved || 0)} approved (never bids on incomplete or mismatched briefs)
+- **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits (inventory is never counted as revenue)
 - **Agentic Market automatic directory:** ${report.marketplaces?.agentic_market?.exact_contracts_verified ? `${report.marketplaces.agentic_market.endpoint_count} / 7 exact contracts indexed` : "unavailable or drifted"}${agenticMissing.length ? `; pending ${agenticMissing.join(", ")}` : ""}
 - **Agent402 open router:** ${report.acquisition?.agent402?.listed ? `${report.acquisition.agent402.found_queries ?? 0} / ${report.acquisition.agent402.query_count ?? 7} unbranded buyer queries retrieve the exact route; ${report.acquisition.agent402.top_three_queries ?? 0} top-three` : "unavailable or missing"} (${report.acquisition?.agent402?.listing_source || "unknown source"}; owner-run benchmark, not impressions)
 - **x402scan registry:** ${report.acquisition?.x402scan?.listed_resources ?? "unavailable"} / ${report.acquisition?.x402scan?.expected_resources ?? 7} paid endpoints (${report.acquisition?.x402scan?.status || "unavailable"}; registry presence only, never a purchase)
@@ -1641,6 +1691,15 @@ try {
 }
 
 acquisition = await acquisitionStatus();
+
+try {
+  acquisition = {
+    ...acquisition,
+    public_demand_watch: await publicDemandStatus(),
+  };
+} catch (error) {
+  errors.push(`Public demand watcher: ${error instanceof Error ? error.message : String(error)}`);
+}
 
 try {
   acquisition = {

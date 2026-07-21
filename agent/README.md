@@ -114,6 +114,14 @@ node --env-file="$HOME/.config/bountyverdict/payan.env" --experimental-strip-typ
 
 `PAYAN_BID=YES` and `PAYAN_FULFILL=YES` enable the two live mutations. The systemd unit sets both only after the dry run and tests pass.
 
+The separate public-demand watcher polls MoltJobs and OpenJobs without credentials and never applies, bids, accepts, pays, or submits work. MoltJobs inventory is counted as funded only when its official funded feed agrees with the open feed, both onchain escrow identifiers are present, no worker is assigned, and the deadline is still in the future. OpenJobs `WAGE` tasks are kept separate from USDC. Only complete inputs that exactly equal an existing product contract are surfaced as candidates:
+
+```bash
+npm run demand:watch
+```
+
+Its mode-0600 state is written to `~/.local/state/bountyverdict/demand-watch.json`; the distribution monitor rejects stale state or any state that is not explicitly read-only with actions disabled. The ten-minute systemd timer requires no secrets. Market inventory and candidates are acquisition evidence only and never purchases or revenue.
+
 It atomically writes the latest machine-readable snapshot to `~/.local/state/bountyverdict/distribution-status.json` and overwrites the SSH-friendly milestone dashboard at `~/notes/mimirx402.md`, keeping health, next work, customer revenue, tracked costs, and profit at the top. The versioned user-service templates in `ops/systemd/` run it every 15 minutes; per-product merchant indexing and semantic-search rank are tracked without treating normal discovery-cache delay as a health failure. Owner-funded production proofs and marketplace registration costs are retained separately and excluded from customer purchases and earned revenue.
 
 the402 provider credentials are written outside the repository to `~/.config/bountyverdict/the402.env` with mode `0600`, mirrored to encrypted Worker and GitHub Actions secret stores, and loaded by the distribution monitor. The public production service-ID map contains six existing products; SkillVerdict stays excluded until its isolated earned-placement experiment ends. Each listing publishes the canonical typed output schema and is checked for contract drift. The same six services are bundled in the `BountyVerdict Agent Engineering Monthly` plan at $1.05 agent price for up to 20 combined requests; the monitor validates its exact public contract and persists explicitly attributed subscription settlements as one purchase each. The signed `request.created` feed evaluates future buyer postings and bids only when the complete brief and explicit intent match one of those six existing schemas; ambiguous, expired, subcontracted, over-tier, or unrelated work is ignored.

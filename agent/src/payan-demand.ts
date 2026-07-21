@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
-import { PAYAN_API, PAYAN_OFFERS, PAYAN_PROVIDER_ID } from "./payan.ts";
-import type { The402Product } from "./the402.ts";
+import { PAYAN_API, PAYAN_PROVIDER_ID } from "./payan.ts";
+import {
+  selectExactPublicDemand,
+  stableDemandInput,
+  type ExactDemandDecision,
+} from "./exact-demand.ts";
 
 const idPattern = /^[a-z0-9]{20,64}$/;
-const githubIssuePattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/issues\/[1-9][0-9]*$/;
-const githubRepoPattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+(?:\.git)?$/;
-const githubRunPattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/actions\/runs\/[1-9][0-9]*$/;
 const requestStatuses = new Set(["open", "accepted", "fulfilled", "completing", "approved", "cancelled", "disputed"]);
 const bidStatuses = new Set(["pending", "accepted", "rejected", "withdrawn"]);
 const maximumOutputBytes = 1_048_576;
@@ -38,14 +38,7 @@ export type PayanBid = {
 
 export type PayanRequestDetail = { request: PayanRequest; bids: PayanBid[] };
 
-export type PayanDemandDecision = {
-  product: Exclude<The402Product, "mcpdrift">;
-  input: Record<string, unknown>;
-  input_sha256: string;
-  price_cents: number;
-  estimated_duration_seconds: number;
-  message: string;
-};
+export type PayanDemandDecision = ExactDemandDecision;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -141,71 +134,20 @@ export function parsePayanOpenRequests(value: unknown): PayanRequest[] {
   return requests;
 }
 
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (!isObject(value)) return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
-}
-
 export function stablePayanInput(input: Record<string, unknown>): string {
-  return JSON.stringify(stableValue(input));
-}
-
-function inputHash(input: Record<string, unknown>): string {
-  return createHash("sha256").update(stablePayanInput(input)).digest("hex");
-}
-
-function publicGithubUrls(text: string): string[] {
-  const values = text.match(/https:\/\/github\.com\/[^\s<>"'`]+/gi) || [];
-  return [...new Set(values.map((value) => value.replace(/[),.;:!?\]}]+$/g, "")))];
-}
-
-function decision(
-  product: PayanDemandDecision["product"],
-  input: Record<string, unknown>,
-): PayanDemandDecision {
-  const offer = PAYAN_OFFERS.find((entry) => entry.product === product);
-  if (!offer) throw new Error(`Payan offer is missing for ${product}.`);
-  const inputSha256 = inputHash(input);
-  return {
-    product,
-    input,
-    input_sha256: inputSha256,
-    price_cents: offer.priceCents,
-    estimated_duration_seconds: 180,
-    message: `${offer.title} can fulfill only the complete public JSON input identified by SHA-256 ${inputSha256}. It is an existing automated, read-only service with the published exact output contract; any hidden input drift will be rejected rather than substituted. Typical delivery is under three minutes after acceptance.`,
-  };
+  return stableDemandInput(input);
 }
 
 export function selectPayanDemandBid(value: unknown): PayanDemandDecision | null {
   const request = parsePayanRequest(value);
   if (request.status !== "open" || request.buyerId === PAYAN_PROVIDER_ID) return null;
-  const text = `${request.title}\n${request.description}`;
-  const intent = text.toLowerCase();
-  const urls = publicGithubUrls(text);
-  let selected: PayanDemandDecision | null = null;
-  if (
-    urls.length >= 2 && urls.length <= 10 && urls.every((url) => githubIssuePattern.test(url)) &&
-    /rank|compare|portfolio|best.{0,20}bount|which.{0,20}bount/.test(intent)
-  ) selected = decision("portfolio", { issue_urls: urls });
-  else if (
-    urls.length === 1 && githubIssuePattern.test(urls[0]) &&
-    /bount|reward|worth.{0,20}(pursu|work)|eligib|claim/.test(intent)
-  ) selected = decision("single", { issue_url: urls[0] });
-  else if (
-    urls.length === 1 && githubRepoPattern.test(urls[0]) &&
-    /agents?\.md|claude\.md|gemini\.md|coding.agent|agent instruction|agent harness|repository instruction/.test(intent)
-  ) selected = decision("harness", { repo_url: urls[0] });
-  else if (
-    urls.length === 1 && githubRunPattern.test(urls[0]) &&
-    /flak|retry|intermittent|nondetermin/.test(intent)
-  ) selected = decision("flake", { run_url: urls[0] });
-  else if (
-    urls.length === 1 && githubRunPattern.test(urls[0]) &&
-    /diagnos|root cause|why.{0,20}fail|failure.{0,20}cause|failed.{0,20}workflow|actions.{0,20}fail/.test(intent)
-  ) selected = decision("run", { run_url: urls[0] });
-  if (!selected || selected.price_cents > request.budgetMaxCents) return null;
-  return selected;
+  return selectExactPublicDemand({
+    title: request.title,
+    description: request.description,
+    budget_cents: request.budgetMaxCents,
+    buyer_id: request.buyerId,
+    provider_id: PAYAN_PROVIDER_ID,
+  });
 }
 
 async function requestDetail(input: {

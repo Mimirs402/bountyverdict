@@ -6,6 +6,8 @@ const distributionUrl = new URL("../agent/scripts/distribution-monitor.ts", impo
 const auditedRunnerUrl = new URL("../agent/scripts/run-audited-monitor.ts", import.meta.url);
 const directoryMonitorUrl = new URL("../agent/scripts/directory-monitor.ts", import.meta.url);
 const acquisitionUrl = new URL("../agent/src/acquisition.ts", import.meta.url);
+const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.url);
+const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 
 test("frequent reporting samples merchant activity without semantic retrieval while full audits establish a drain", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
@@ -51,4 +53,21 @@ test("directory monitoring separates Awesome Copilot review and catalog presence
   assert.match(directory, /issues\/2369/);
   assert.match(distribution, /Awesome Copilot default marketplace/);
   assert.match(distribution, /default-marketplace presence is not an impression, install, or purchase/);
+});
+
+test("public demand monitoring is scheduled read-only and excluded from commerce accounting", async () => {
+  const [distribution, watcher, service] = await Promise.all([
+    readFile(distributionUrl, "utf8"),
+    readFile(demandWatchUrl, "utf8"),
+    readFile(demandServiceUrl, "utf8"),
+  ]);
+  assert.match(watcher, /read_only: true/);
+  assert.match(watcher, /actions_enabled: false/);
+  assert.match(watcher, /acquisition evidence only; they are never purchases, settlements, or revenue/);
+  assert.doesNotMatch(watcher, /Authorization|api[_-]?key|place_bid|accept_job/i);
+  assert.match(distribution, /async function publicDemandStatus/);
+  assert.match(distribution, /state\.read_only !== true \|\| state\.actions_enabled !== false/);
+  assert.match(distribution, /public_inventory_and_exact_fit_acquisition_evidence_never_purchase_or_revenue/);
+  assert.match(distribution, /Public funded-demand watcher/);
+  assert.doesNotMatch(service, /EnvironmentFile/);
 });

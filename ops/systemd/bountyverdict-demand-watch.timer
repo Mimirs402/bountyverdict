@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll public marketplaces for exact funded demand every ten minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=bountyverdict-demand-watch.service
+
+[Install]
+WantedBy=timers.target

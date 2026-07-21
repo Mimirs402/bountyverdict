@@ -56,7 +56,7 @@ Use the client-specific [`llms-install.md`](llms-install.md) guide for Codex, Cl
 
 Agentic Resource Discovery crawlers can ingest the origin-owned [`ai-catalog.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json). It advertises the existing MCP server with six unbranded representative buyer queries for semantic retrieval; catalog fetches are measured separately from tool calls, payments, and purchases.
 
-For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP Server](https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html) guide compares the root-cause and flaky-retry tools, publishes the remote client configuration, exact prices, free samples, typed outputs, and mutation boundary.
+For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP Server](https://cristianmoroaica.github.io/bountyverdict/mcp-github-actions-diagnosis.html) guide compares the root-cause and flaky-retry tools, leads with the source-marked routing-adapter install, and publishes exact prices, free samples, typed outputs, and the mutation boundary.
 
 ## Inspect before paying
 

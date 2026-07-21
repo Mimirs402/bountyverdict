@@ -62,7 +62,7 @@ try {
   assert.deepEqual(names, expectedTools);
   for (const tool of result.tools) {
     assert.equal(typeof tool.description, "string");
-    assert.match(tool.description || "", /Costs \$0\.\d{2} USDC on Base via x402 per successful call/);
+    assert.match(tool.description || "", /^First unsigned call with real input cannot charge;.*Only an authorized signed retry costs \$0\.\d{2} USDC on Base\./);
   }
 } catch (error) {
   if (stderr) console.error(stderr.slice(0, 4_000));

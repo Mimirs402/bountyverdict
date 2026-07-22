@@ -14,6 +14,7 @@ import {
   parseAgentMrrSecret,
   readAgentMrrJsonResponse,
   validateAgentMrrPublicationGate,
+  validateAgentMrrCodeReleaseState,
   validateAgentMrrReleaseState,
 } from "../src/agentmrr.ts";
 import { trustedFunnelBaseline } from "../src/funnel-epoch.ts";
@@ -24,6 +25,7 @@ const configDirectory = `${homedir()}/.config/bountyverdict`;
 const stateDirectory = `${homedir()}/.local/state/bountyverdict`;
 const secretFile = `${configDirectory}/agentmrr.env`;
 const releaseStateFile = `${stateDirectory}/post-boundary-hardening-release.json`;
+const codeReleaseStateFile = `${stateDirectory}/agentmrr-code-release.json`;
 const baselineFile = `${stateDirectory}/funnel-trusted-baseline.json`;
 const historyFile = `${stateDirectory}/funnel-trusted-epochs.json`;
 const collectorStateFile = `${stateDirectory}/funnel-telemetry.json`;
@@ -92,6 +94,14 @@ if (existing) {
       release.metadata.uid,
       expectedUid,
     );
+    const codeRelease = await secureReadFile(codeReleaseStateFile, "AgentMRR code release receipt");
+    const codeReleaseState = JSON.parse(codeRelease.raw);
+    validateAgentMrrCodeReleaseState(
+      codeReleaseState,
+      codeRelease.metadata.mode & 0o777,
+      codeRelease.metadata.uid,
+      expectedUid,
+    );
 
     const rotationId = `agentmrr-publish-${Date.now().toString(36)}-${randomBytes(8).toString("hex")}`;
     const rotationScript = new URL("./start-funnel-epoch.ts", import.meta.url);
@@ -122,9 +132,10 @@ if (existing) {
     try {
       await funnelLock.writeFile(`${process.pid}\n`);
       await funnelLock.sync();
-      const [freshRelease, baselineFileState, historyFileState, collectorFileState] =
+      const [freshRelease, freshCodeRelease, baselineFileState, historyFileState, collectorFileState] =
         await Promise.all([
           secureReadFile(releaseStateFile, "AgentMRR release receipt"),
+          secureReadFile(codeReleaseStateFile, "AgentMRR code release receipt"),
           secureReadFile(baselineFile, "Trusted funnel baseline"),
           secureReadFile(historyFile, "Trusted funnel history"),
           secureReadFile(collectorStateFile, "Funnel collector state"),
@@ -135,6 +146,9 @@ if (existing) {
         releaseState: JSON.parse(freshRelease.raw),
         releaseMode: freshRelease.metadata.mode & 0o777,
         releaseOwnerUid: freshRelease.metadata.uid,
+        codeReleaseState: JSON.parse(freshCodeRelease.raw),
+        codeReleaseMode: freshCodeRelease.metadata.mode & 0o777,
+        codeReleaseOwnerUid: freshCodeRelease.metadata.uid,
         baselineMode: baselineFileState.metadata.mode & 0o777,
         baselineOwnerUid: baselineFileState.metadata.uid,
         historyMode: historyFileState.metadata.mode & 0o777,

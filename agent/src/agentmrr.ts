@@ -7,6 +7,8 @@ import {
 
 export const AGENTMRR_BASE_URL = "https://agentmrr.ai";
 export const AGENTMRR_REQUIRED_RELEASE_COMMIT = "eaa4c2481ac0ccc15a931790f490b950e623e291";
+export const AGENTMRR_REVIEWED_SOURCE_COMMIT = "f23f043142f356584393992f399f6b11e560920d";
+export const AGENTMRR_CODE_RELEASE_CONTRACT = "agentmrr-attribution-v1";
 export const AGENTMRR_AGENT_NAME = "BountyVerdict";
 export const AGENTMRR_CATALOG_LIMIT = 1_000;
 export const AGENTMRR_ROTATION_REASON =
@@ -52,6 +54,9 @@ export interface AgentMrrPublicationGateInput {
   releaseState: unknown;
   releaseMode: number;
   releaseOwnerUid: number;
+  codeReleaseState: unknown;
+  codeReleaseMode: number;
+  codeReleaseOwnerUid: number;
   baselineMode: number;
   baselineOwnerUid: number;
   historyMode: number;
@@ -239,11 +244,35 @@ export function validateAgentMrrReleaseState(
   }
 }
 
+export function validateAgentMrrCodeReleaseState(
+  codeReleaseState: unknown,
+  codeReleaseMode: number,
+  codeReleaseOwnerUid: number,
+  expectedUid: number,
+): void {
+  const release = record(codeReleaseState);
+  if (codeReleaseMode !== 0o600 || codeReleaseOwnerUid !== expectedUid || expectedUid < 0 ||
+      release.schema_version !== 1 || release.status !== "complete" ||
+      release.reviewed_source !== AGENTMRR_REVIEWED_SOURCE_COMMIT ||
+      release.code_contract !== AGENTMRR_CODE_RELEASE_CONTRACT ||
+      typeof release.release_commit !== "string" || !/^[a-f0-9]{40}$/.test(release.release_commit) ||
+      release.remote_main !== release.release_commit ||
+      typeof release.completed_at !== "string" || !Number.isFinite(Date.parse(release.completed_at))) {
+    throw new Error("AgentMRR publication requires the exact completed code release.");
+  }
+}
+
 export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateInput): void {
   const release = record(input.releaseState);
   const ledger = record(input.funnelLedger);
   const rotation = record(ledger.rotation);
   validateAgentMrrReleaseState(release, input.releaseMode, input.releaseOwnerUid, input.expectedUid);
+  validateAgentMrrCodeReleaseState(
+    input.codeReleaseState,
+    input.codeReleaseMode,
+    input.codeReleaseOwnerUid,
+    input.expectedUid,
+  );
   if (input.baselineMode !== 0o600 || input.baselineOwnerUid !== input.expectedUid ||
       input.historyMode !== 0o600 || input.historyOwnerUid !== input.expectedUid ||
       input.collectorMode !== 0o600 || input.collectorOwnerUid !== input.expectedUid ||

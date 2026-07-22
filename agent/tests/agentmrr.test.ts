@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   AGENTMRR_PRODUCT,
+  AGENTMRR_CODE_RELEASE_CONTRACT,
   AGENTMRR_REQUIRED_RELEASE_COMMIT,
+  AGENTMRR_REVIEWED_SOURCE_COMMIT,
   AGENTMRR_ROTATION_REASON,
   AGENTMRR_RUN_ENDPOINT,
   AGENTMRR_MCP_ENDPOINT,
@@ -17,6 +19,7 @@ import {
   readAgentMrrJsonResponse,
   solveAgentMrrChallenge,
   validateAgentMrrPublicationGate,
+  validateAgentMrrCodeReleaseState,
 } from "../src/agentmrr.ts";
 import {
   createFunnelSnapshot,
@@ -147,6 +150,17 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
     releaseState: { schema_version: 1, status: "complete", release_commit: AGENTMRR_REQUIRED_RELEASE_COMMIT },
     releaseMode: 0o600,
     releaseOwnerUid: 1000,
+    codeReleaseState: {
+      schema_version: 1,
+      status: "complete",
+      reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
+      code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
+      release_commit: "a".repeat(40),
+      remote_main: "a".repeat(40),
+      completed_at: "2026-07-22T07:00:00.000Z",
+    },
+    codeReleaseMode: 0o600,
+    codeReleaseOwnerUid: 1000,
     baselineMode: 0o600,
     baselineOwnerUid: 1000,
     historyMode: 0o600,
@@ -182,6 +196,11 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
   };
   assert.doesNotThrow(() => validateAgentMrrPublicationGate(valid));
   assert.throws(() => validateAgentMrrPublicationGate({ ...valid, releaseMode: 0o644 }), /reviewed release/);
+  assert.throws(() => validateAgentMrrPublicationGate({ ...valid, codeReleaseMode: 0o644 }), /code release/);
+  assert.throws(() => validateAgentMrrPublicationGate({
+    ...valid,
+    codeReleaseState: { ...valid.codeReleaseState, code_contract: "drifted" },
+  }), /code release/);
   assert.throws(() => validateAgentMrrPublicationGate({
     ...valid,
     releaseState: { ...valid.releaseState, release_commit: "wrong" },
@@ -247,6 +266,21 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
       collector_heartbeat_at: now.toISOString(),
     },
   }), /draining rotation/);
+});
+
+test("AgentMRR code release receipt binds the reviewed source and remote main", () => {
+  const receipt = {
+    schema_version: 1,
+    status: "complete",
+    reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
+    code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
+    release_commit: "b".repeat(40),
+    remote_main: "b".repeat(40),
+    completed_at: "2026-07-22T07:00:00.000Z",
+  };
+  assert.doesNotThrow(() => validateAgentMrrCodeReleaseState(receipt, 0o600, 1000, 1000));
+  assert.throws(() => validateAgentMrrCodeReleaseState({ ...receipt, remote_main: "c".repeat(40) }, 0o600, 1000, 1000), /code release/);
+  assert.throws(() => validateAgentMrrCodeReleaseState(receipt, 0o644, 1000, 1000), /code release/);
 });
 
 test("AgentMRR response parsing rejects oversized and malformed JSON bodies", async () => {

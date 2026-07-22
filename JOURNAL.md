@@ -830,3 +830,15 @@ The focused MCP suite passes **22 / 22**, the full Worker and operations suite p
 MCP Marketplace imports the Registry server as `free`, but its documented paid models are one-time and monthly licenses rather than usage-based x402. Assigning either would add an unrelated marketplace charge on top of the disclosed per-call settlement. The prepared `LAUNCHGUIDE.md` therefore keeps connection requirements honest, states the **$0.02-$0.40 USDC** usage prices prominently, and supplies task-first prompts, features, tags, and the exact Registry endpoint for an eventual owner claim. Claiming still requires the repository owner's GitHub OAuth session; the noninteractive `gh` credential cannot safely substitute for that consent step.
 
 Epoch **44** activated at **2026-07-22T11:02:08.433Z** after **925 seconds** of stable drain. Its immutable buyer-candidate baseline is **507 initialize / 444 tools/list / 12 validation errors / 0 valid calls or payment presentations**. All seven post-experiment-baseline enumeration pairs observed during the audit and drain remain excluded. The 25-event server-description cohort may now resume without crediting those probes; no broad marketplace retrieval will run inside the active epoch.
+
+## 2026-07-22 — Unknown-tool invocation retained in the selection boundary
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Experiment status at discovery: **15 / 25 eligible tools/list events**
+
+Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call` request for an unknown tool name. The exact name, arguments, request, and caller are intentionally not retained. Because the selection experiment previously omitted `tool_not_found` and `protocol_error`, a terminal report could have incorrectly labeled this real invocation attempt as no invocation and rejected only the copy hypothesis.
+
+Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage. Unknown-tool calls contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
+
+The change affects only the private report classifier. It does not alter the production Worker, product contracts, prices, traffic, or settlement accounting. All **146 / 146** public tests and **426 / 426** Worker and operations tests, TypeScript checking, `git diff --check`, Cloudflare dry deployment, and the zero-vulnerability production dependency audit pass.

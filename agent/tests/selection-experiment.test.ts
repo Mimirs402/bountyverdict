@@ -5,6 +5,8 @@ import { updateSelectionPreviewExperiment, type SelectionExperimentCounters } fr
 const prefix: SelectionExperimentCounters = {
   initialize: 110,
   tools_list: 109,
+  protocol_error: 0,
+  tool_not_found: 0,
   validation_error: 0,
   capacity_rejected: 0,
   payment_required: 0,
@@ -15,6 +17,8 @@ const prefix: SelectionExperimentCounters = {
 const clean = (overrides: Partial<SelectionExperimentCounters> = {}): SelectionExperimentCounters => ({
   initialize: 0,
   tools_list: 0,
+  protocol_error: 0,
+  tool_not_found: 0,
   validation_error: 0,
   capacity_rejected: 0,
   payment_required: 0,
@@ -244,6 +248,49 @@ test("holds on unattributed input friction instead of declaring copy failure", (
   assert.equal(result.decision, "input_friction_observed_without_attributable_runtime");
 });
 
+test("classifies a buyer-candidate protocol failure before declaring copy rejection", () => {
+  const result = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({ initialize: 43, tools_list: 41, protocol_error: 1 }),
+    rawDelta: clean({ initialize: 157, tools_list: 154, protocol_error: 1 }),
+  });
+  assert.equal(result.decision, "mcp_protocol_friction_observed");
+});
+
+test("classifies an unknown-tool attempt as an invocation without claiming session attribution", () => {
+  const result = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({ initialize: 43, tools_list: 41, tool_not_found: 1 }),
+    rawDelta: clean({ initialize: 157, tools_list: 154, tool_not_found: 1 }),
+  });
+  assert.equal(result.decision, "unknown_tool_invocation_observed");
+  assert.equal((result.event_ratios as Record<string, unknown>).invalid_call_share_percent, 100);
+});
+
+test("known-tool input evidence outranks unrelated unknown-tool and protocol failures", () => {
+  const result = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({
+      initialize: 43,
+      tools_list: 41,
+      protocol_error: 1,
+      tool_not_found: 1,
+      validation_error: 1,
+    }),
+    rawDelta: clean({
+      initialize: 157,
+      tools_list: 154,
+      protocol_error: 1,
+      tool_not_found: 1,
+      validation_error: 1,
+    }),
+  });
+  assert.equal(result.decision, "input_friction_observed_without_attributable_runtime");
+});
+
 test("migrates an in-flight schema-one report without losing its active epoch", () => {
   const schemaTwo = update({
     currentEpochId: 37,
@@ -255,6 +302,8 @@ test("migrates an in-flight schema-one report without losing its active epoch", 
   schemaOne.accounting_schema_version = 1;
   for (const field of ["raw_delta", "delta", "eligible_delta", "ineligible_or_draining_delta", "clean_completed_delta", "clean_active_epoch_delta"]) {
     delete schemaOne[field].paid_error;
+    delete schemaOne[field].protocol_error;
+    delete schemaOne[field].tool_not_found;
   }
   delete schemaOne.attributable_runtime_completed;
   delete schemaOne.attributable_runtime_active;
@@ -268,7 +317,34 @@ test("migrates an in-flight schema-one report without losing its active epoch", 
     rawDelta: clean({ initialize: 117, tools_list: 116 }),
     previous: { id: "mcp-selection-preview-parity-v2", ...schemaOne },
   });
-  assert.equal(migrated.accounting_schema_version, 2);
+  assert.equal(migrated.accounting_schema_version, 3);
   assert.equal(migrated.attributable_runtime_tools_list, 2);
   assert.equal((migrated.eligible_delta as SelectionExperimentCounters).tools_list, 112);
+});
+
+test("migrates an in-flight schema-two report with new failure counters at zero", () => {
+  const schemaThree = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({ initialize: 2, tools_list: 2 }),
+    attributableRuntimeDelta: clean({ tools_list: 1 }),
+  });
+  const schemaTwo = structuredClone(schemaThree) as Record<string, any>;
+  schemaTwo.accounting_schema_version = 2;
+  for (const field of ["raw_delta", "delta", "eligible_delta", "ineligible_or_draining_delta", "clean_completed_delta", "clean_active_epoch_delta", "attributable_runtime_completed", "attributable_runtime_active", "attributable_runtime"]) {
+    delete schemaTwo[field].protocol_error;
+    delete schemaTwo[field].tool_not_found;
+  }
+
+  const migrated = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({ initialize: 3, tools_list: 3, tool_not_found: 1 }),
+    attributableRuntimeDelta: clean({ tools_list: 2 }),
+    rawDelta: clean({ initialize: 117, tools_list: 116, tool_not_found: 1 }),
+    previous: { id: "mcp-selection-preview-parity-v2", ...schemaTwo },
+  });
+  assert.equal(migrated.accounting_schema_version, 3);
+  assert.equal((migrated.eligible_delta as SelectionExperimentCounters).tool_not_found, 1);
+  assert.equal(migrated.decision, "awaiting_eligible_tools_list_target");
 });

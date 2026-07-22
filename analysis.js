@@ -343,7 +343,37 @@ function opireRewardState(comments) {
   return { listing, claimed, empty, rejections };
 }
 
-function platformClaimState(comments, openPulls, opire, reward) {
+function platformClaimState(comments, openPulls, opire, reward, platformEvidence) {
+  if (platformEvidence?.platform === "BountyHub") {
+    if (platformEvidence.state === "SOLVED") {
+      return {
+        label: "Bounty platform reports reward awarded",
+        detail: "BountyHub reports that this bounty has already been solved.",
+        evidenceUrl: platformEvidence.evidence_url,
+      };
+    }
+    if (platformEvidence.state === "RETRACTED") {
+      return {
+        label: "Bounty platform reports reward withdrawn",
+        detail: "BountyHub reports that this bounty was retracted or deleted.",
+        evidenceUrl: platformEvidence.evidence_url,
+      };
+    }
+    if (platformEvidence.state === "FROZEN") {
+      return {
+        label: "Bounty platform reports reward frozen",
+        detail: "BountyHub reports that this bounty is frozen; do not start work until the platform clears it.",
+        evidenceUrl: platformEvidence.evidence_url,
+      };
+    }
+    if (platformEvidence.state === "CLAIMED") {
+      return {
+        label: "Bounty platform reports active competition",
+        detail: "BountyHub reports an existing claim for this bounty.",
+        evidenceUrl: platformEvidence.evidence_url,
+      };
+    }
+  }
   const official = comments.filter((comment) => TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug));
   const stateComments = official
     .filter((comment) => /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(comment.body ?? "") || /bounty is (?:now )?up for grabs/i.test(comment.body ?? ""))
@@ -480,7 +510,23 @@ function openBountyAvailability(issue, comments) {
     : null;
 }
 
-function rewardEvidence(issue, comments, opire) {
+function rewardEvidence(issue, comments, opire, platformEvidence) {
+  if (platformEvidence?.platform === "BountyHub") {
+    return {
+      state: platformEvidence.state === "SOLVED"
+        ? "PAID_OR_AWARDED"
+        : platformEvidence.state === "RETRACTED"
+          ? "WITHDRAWN"
+          : platformEvidence.secured_amount > 0
+            ? "LISTED"
+            : "PROMISED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   const officialAlgora = comments
     .filter((comment) =>
     TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug) &&
@@ -644,7 +690,7 @@ function activeClaimIntent(comments, now) {
   );
 }
 
-export function analyzeBounty({ issue, repository, comments = [], timeline = [], policyDocuments = [], coverage = {}, now = new Date() }) {
+export function analyzeBounty({ issue, repository, comments = [], timeline = [], platformEvidence = null, policyDocuments = [], coverage = {}, now = new Date() }) {
   const signals = [];
   const assignees = Array.isArray(issue.assignees)
     ? issue.assignees.filter((assignee) => typeof assignee?.login === "string" && assignee.login.trim())
@@ -661,11 +707,11 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments([issue, ...comments], NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
-  const reward = rewardEvidence(issue, comments, opire);
+  const reward = rewardEvidence(issue, comments, opire, platformEvidence);
   const platformRejection = relevantOpireRejection(issue, opire, reward);
   const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
-  const externalPlatformSource = externalSource ? null : externalBountySource(issue);
+  const externalPlatformSource = externalSource || platformEvidence ? null : externalBountySource(issue);
   const bountyContext = reward.state !== "NOT_FOUND" ||
     /(?:bounty|reward)/i.test(authoredIssueRewardText(issue)) ||
     issueLabelNames(issue).some((label) => /(?:bounty|reward)/i.test(label));
@@ -705,7 +751,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.currency = null;
     reward.evidenceUrl = platformEmpty.html_url ?? issue.html_url;
   }
-  const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward);
+  const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward, platformEvidence);
   const aiPolicyBlocks = policyDocuments.filter((document) =>
     AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );
@@ -832,14 +878,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Trusted platform listing found",
       5,
-      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a $${reward.amount} USD`} reward, but acceptance and payout are still not guaranteed.`,
+      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a $${reward.amount} USD`} reward${platformEvidence?.platform === "BountyHub" ? `; $${platformEvidence.secured_amount} is platform-held/prepaid and $${platformEvidence.promised_amount} remains pay-when-solved` : ""}, but creator approval and payout are still not guaranteed.`,
       reward.evidenceUrl,
     ));
   } else if (reward.state === "PROMISED") {
     signals.push(signal(
-      "Maintainer reward promise found",
+      platformEvidence?.platform === "BountyHub" ? "Platform pay-when-solved promise found" : "Maintainer reward promise found",
       0,
-      "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
+      platformEvidence?.platform === "BountyHub"
+        ? `BountyHub records a $${platformEvidence.promised_amount} pay-when-solved reward, but no platform-held/prepaid amount; creator approval and payout are not guaranteed.`
+        : "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
       reward.evidenceUrl,
     ));
   } else if (reward.state === "UNVERIFIED") {
@@ -847,7 +895,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Reward is unverified",
       -25,
-      "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
+      "The issue advertises a bounty or reward without a trusted platform record or maintainer-authored payment statement.",
       reward.evidenceUrl,
     ));
     if (!MAINTAINER_ASSOCIATIONS.has(issue.author_association)) {

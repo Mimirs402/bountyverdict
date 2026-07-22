@@ -742,7 +742,7 @@ ${nearMarketServices}
 
 ## Differentiation
 
-BountyVerdict checks the first and newest bounded comment windows, up to four bounded timeline pages, current Algora status tables, rewarded labels, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. It reports truncation explicitly and never returns VIABLE from incomplete evidence. Important signals include public evidence URLs and coverage counts.
+BountyVerdict checks the first and newest bounded comment windows, up to four bounded timeline pages, current Algora status tables, exact BountyHub records and pledge-level prepaid-versus-promised funding when an issue references that platform, rewarded labels, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. BountyHub creator approval remains required and platform-held funds are not a payout guarantee. The check reports truncation explicitly and never returns VIABLE from incomplete evidence. Important signals include public evidence URLs and coverage counts.
 
 The portfolio product runs the full check on every submitted candidate, ranks VIABLE before CAUTION before AVOID, recommends the strongest candidate, and reports partial upstream failures.
 

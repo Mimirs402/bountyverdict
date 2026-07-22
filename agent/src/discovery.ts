@@ -3,7 +3,7 @@ import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const BOUNTY_DISCOVERY_DESCRIPTION =
-  "GitHub bounty eligibility, reward provenance, and claimability preflight for one public issue before coding. Checks open, transferred, or deleted state; whether it is already assigned or claimed; explicit soft locks; trusted bounty-app competition; paid, withdrawn, or unverified rewards; linked pull requests; failed-attempt crowding; and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, newest evidence windows, and explicit truncation.";
+  "GitHub bounty eligibility, reward provenance, and claimability preflight for one public issue. Checks canonical open or deleted state, whether already assigned or claimed, soft locks, trusted bounty-app competition, referenced BountyHub pledge funding, withdrawn or unverified rewards, linked and failed PRs, attempt crowding, and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, newest bounded evidence windows, and explicit truncation.";
 
 export const exampleVerdict = {
   product: "BountyVerdict",
@@ -119,7 +119,7 @@ export const exampleVerdict = {
   limitations: [
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-    "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+    "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
@@ -185,7 +185,7 @@ export const outputSchema = {
       type: "object",
       properties: {
         state: { type: "string", enum: ["LISTED", "PROMISED", "UNVERIFIED", "NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED"] },
-        verification: { type: "string", enum: ["TRUSTED_PLATFORM_APP", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE"] },
+        verification: { type: "string", enum: ["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE"] },
         platform: { type: ["string", "null"] },
         amount: { type: ["number", "null"], minimum: 0 },
         currency: { type: ["string", "null"] },
@@ -297,7 +297,7 @@ const portfolioAssignedVerdict = {
     {
       label: "Reward is unverified",
       impact: -25,
-      detail: "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
+      detail: "The issue advertises a bounty or reward without a trusted platform record or maintainer-authored payment statement.",
       evidence_url: "https://github.com/tenstorrent/tt-metal/issues/50522",
       hard_stop: false,
     },
@@ -361,7 +361,7 @@ const portfolioAssignedVerdict = {
   limitations: [
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-    "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+    "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",

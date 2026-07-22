@@ -1,4 +1,5 @@
 import { analyzeBounty, parseIssueUrl } from "../../analysis.js";
+import { fetchBountyHubEvidence, hasBountyHubReference } from "./bountyhub.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -35,7 +36,7 @@ export interface AgentVerdict {
   };
   reward: {
     state: "LISTED" | "PROMISED" | "UNVERIFIED" | "NOT_FOUND" | "WITHDRAWN" | "PAID_OR_AWARDED";
-    verification: "TRUSTED_PLATFORM_APP" | "MAINTAINER_STATEMENT" | "UNVERIFIED" | "NONE";
+    verification: "TRUSTED_PLATFORM_APP" | "TRUSTED_PLATFORM_API" | "MAINTAINER_STATEMENT" | "UNVERIFIED" | "NONE";
     platform: string | null;
     amount: number | null;
     currency: string | null;
@@ -360,6 +361,9 @@ export async function checkGithubIssue(
   }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
+  const platformEvidence = hasBountyHubReference(issueResponse.data, comments)
+    ? await fetchBountyHubEvidence(owner, repo, number, fetchImpl)
+    : null;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)
@@ -380,6 +384,7 @@ export async function checkGithubIssue(
     repository: repoResponse.data,
     comments,
     timeline,
+    platformEvidence,
     policyDocuments,
     coverage: {
       commentsTruncated,
@@ -451,7 +456,7 @@ export async function checkGithubIssue(
     limitations: [
       "A VIABLE verdict is permission to investigate, not a payout guarantee.",
       "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-      "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+      "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
       "When a mirror or source issue is linked, this check does not fetch that second issue; inspect it separately before coding.",
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",

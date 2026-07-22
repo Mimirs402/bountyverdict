@@ -1,6 +1,8 @@
 export const SELECTION_EXPERIMENT_COUNTER_KEYS = Object.freeze([
   "initialize",
   "tools_list",
+  "protocol_error",
+  "tool_not_found",
   "validation_error",
   "capacity_rejected",
   "payment_required",
@@ -30,11 +32,15 @@ function zeroCounters(): SelectionExperimentCounters {
   return Object.fromEntries(SELECTION_EXPERIMENT_COUNTER_KEYS.map((key) => [key, 0])) as SelectionExperimentCounters;
 }
 
-function counters(value: unknown, label: string, allowLegacyPaidError = false): SelectionExperimentCounters {
+function counters(value: unknown, label: string, legacySchemaVersion: 1 | 2 | null = null): SelectionExperimentCounters {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} counters are missing.`);
   const record = value as Record<string, unknown>;
   return Object.fromEntries(SELECTION_EXPERIMENT_COUNTER_KEYS.map((key) => {
-    const count = allowLegacyPaidError && key === "paid_error" && record[key] === undefined
+    const legacyMissing = record[key] === undefined && (
+      (legacySchemaVersion === 1 && key === "paid_error") ||
+      (legacySchemaVersion !== null && (key === "protocol_error" || key === "tool_not_found"))
+    );
+    const count = legacyMissing
       ? 0
       : Number(record[key]);
     if (!Number.isSafeInteger(count) || count < 0) throw new Error(`${label} ${key} is invalid.`);
@@ -67,7 +73,11 @@ function countersMonotonic(current: SelectionExperimentCounters, previous: Selec
 function validPrevious(value: unknown, id: string): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
-  return record.id === id && (record.accounting_schema_version === 1 || record.accounting_schema_version === 2)
+  return record.id === id && (
+    record.accounting_schema_version === 1 ||
+    record.accounting_schema_version === 2 ||
+    record.accounting_schema_version === 3
+  )
     ? record
     : null;
 }
@@ -90,6 +100,8 @@ function decisionFor(delta: SelectionExperimentCounters, attributableRuntime: Se
   if (delta.payment_required > 0) return "valid_call_interest_observed_without_payment_presentation";
   if (attributableRuntime.validation_error > 0) return "schema_friction_after_attributable_runtime_selection";
   if (delta.validation_error > 0) return "input_friction_observed_without_attributable_runtime";
+  if (delta.tool_not_found > 0) return "unknown_tool_invocation_observed";
+  if (delta.protocol_error > 0) return "mcp_protocol_friction_observed";
   return attributableRuntime.tools_list > 0
     ? "copy_hypothesis_rejected_after_attributable_runtime_reach"
     : "copy_hypothesis_rejected_but_workflow_runtime_reach_unproven";
@@ -108,24 +120,28 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
   const prefix = counters(input.eligiblePrefix, "Selection experiment eligible prefix");
   const raw = counters(input.rawDelta, "Selection experiment raw delta");
   const previous = validPrevious(input.previous, input.id);
-  const legacyPrevious = previous?.accounting_schema_version === 1;
+  const legacySchemaVersion = previous?.accounting_schema_version === 1
+    ? 1
+    : previous?.accounting_schema_version === 2
+      ? 2
+      : null;
   let completed = previous
-    ? counters(previous.clean_completed_delta, "Selection experiment completed clean epochs", legacyPrevious)
+    ? counters(previous.clean_completed_delta, "Selection experiment completed clean epochs", legacySchemaVersion)
     : zeroCounters();
   let activeEpochId = previous?.clean_active_epoch_id === null || previous?.clean_active_epoch_id === undefined
     ? null
     : Number(previous.clean_active_epoch_id);
   let active = previous
-    ? counters(previous.clean_active_epoch_delta, "Selection experiment active clean epoch", legacyPrevious)
+    ? counters(previous.clean_active_epoch_delta, "Selection experiment active clean epoch", legacySchemaVersion)
     : zeroCounters();
   let runtimeCompleted = previous
-    ? previous.accounting_schema_version === 2
-      ? counters(previous.attributable_runtime_completed, "Selection experiment completed attributable runtime")
+    ? previous.accounting_schema_version >= 2
+      ? counters(previous.attributable_runtime_completed, "Selection experiment completed attributable runtime", legacySchemaVersion)
       : legacyRuntimeCounters(previous, "completed")
     : zeroCounters();
   let runtimeActive = previous
-    ? previous.accounting_schema_version === 2
-      ? counters(previous.attributable_runtime_active, "Selection experiment active attributable runtime")
+    ? previous.accounting_schema_version >= 2
+      ? counters(previous.attributable_runtime_active, "Selection experiment active attributable runtime", legacySchemaVersion)
       : legacyRuntimeCounters(previous, "active")
     : zeroCounters();
   if (activeEpochId !== null && (!Number.isSafeInteger(activeEpochId) || activeEpochId < input.resumeEpochId)) {
@@ -198,10 +214,10 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
         : "audit_triggered_activity_excluded_until_clean_epoch_activation";
   const unpairedCapacityRejections = Math.max(0, eligible.capacity_rejected - eligible.payment_present);
   const validCallEvents = eligible.payment_required + eligible.payment_present + unpairedCapacityRejections;
-  const callOpportunities = eligible.validation_error + validCallEvents;
+  const callOpportunities = eligible.tool_not_found + eligible.validation_error + validCallEvents;
 
   return {
-    accounting_schema_version: 2,
+    accounting_schema_version: 3,
     status,
     decision,
     target_tools_list: input.targetToolsList,
@@ -225,7 +241,7 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
         ? Math.round(validCallEvents / eligible.tools_list * 1_000) / 10
         : null,
       invalid_call_share_percent: callOpportunities > 0
-        ? Math.round(eligible.validation_error / callOpportunities * 1_000) / 10
+        ? Math.round((eligible.tool_not_found + eligible.validation_error) / callOpportunities * 1_000) / 10
         : null,
       payment_present_per_valid_call_percent: validCallEvents > 0
         ? Math.round(eligible.payment_present / validCallEvents * 1_000) / 10

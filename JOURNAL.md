@@ -814,3 +814,15 @@ The task-specific production release advanced canonical `main` after the earlier
 This draft adds a separate explicit reconciliation step. It accepts only the private owner-owned exact prior receipt, the Mimir's Lab GitHub identity, a clean canonical `main` equal to authoritative `origin/main`, the exact reviewed ancestry, the fixed successful production deployment, and one successful CI and Pages run for current main. Every file after the fixed reconciliation base must equal the small reviewed repair allowlist, and the AgentMRR product and publisher contract files must be byte-unchanged from the prior verified release. A dry run is read-only. The explicitly enabled path preserves the exact old receipt bytes once in a private history directory, durably replaces the active receipt with an attestation bound to current main, its reviewed source head, and the deployed Worker release, and is safely repeatable after a crash.
 
 A versioned release handoff replaces the obsolete local sequence: only its explicit release flag can first reconcile the attestation and then invoke the existing gated publisher. The publisher still requires the nomination-dependent hardening receipt, live collector lease, clean trusted-funnel rotation, private AgentMRR identity, and exact product contract. The draft itself does not send email, publish AgentMRR, rotate the funnel, or touch wallet state.
+
+## 2026-07-22 — Unknown-tool invocation retained in the selection boundary
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Experiment status at discovery: **15 / 25 eligible tools/list events**
+
+Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call` request for an unknown tool name. The exact name, arguments, request, and caller are intentionally not retained. Because the selection experiment previously omitted `tool_not_found` and `protocol_error`, a terminal report could have incorrectly labeled this real invocation attempt as no invocation and rejected only the copy hypothesis.
+
+Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage. Unknown-tool calls contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
+
+The change affects only the private report classifier. It does not alter the production Worker, product contracts, prices, traffic, or settlement accounting. All **146 / 146** public tests and **426 / 426** Worker and operations tests, TypeScript checking, `git diff --check`, Cloudflare dry deployment, and the zero-vulnerability production dependency audit pass.

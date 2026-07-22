@@ -14,6 +14,7 @@ export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "protocol_error",
   "tool_not_found",
   "validation_error",
+  "selection_preview",
   "capacity_rejected",
   "payment_required",
   "payment_present",
@@ -120,7 +121,7 @@ function counters(value: unknown, label: string): TaskLeadingDescriptionCounters
   }
   const record = value as Record<string, unknown>;
   return Object.fromEntries(TASK_LEADING_DESCRIPTION_COUNTER_KEYS.map((key) => {
-    const count = Number(record[key]);
+    const count = key === "selection_preview" && record[key] === undefined ? 0 : Number(record[key]);
     if (!Number.isSafeInteger(count) || count < 0) throw new Error(`${label} ${key} is invalid.`);
     return [key, count];
   })) as TaskLeadingDescriptionCounters;
@@ -136,7 +137,7 @@ function countersMonotonic(
 function validPrevious(value: unknown, experimentId: DescriptionExperimentId): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
-  return record.id === experimentId && record.accounting_schema_version === 1
+  return record.id === experimentId && (record.accounting_schema_version === 1 || record.accounting_schema_version === 2)
     ? record
     : null;
 }
@@ -181,6 +182,10 @@ function decisionFor(delta: TaskLeadingDescriptionCounters): { decision: string;
     decision: "known_valid_tool_interest_observed_without_task_copy_attribution",
     interpretation: "A known valid tool call reached payment, but aggregate telemetry cannot attribute selection to task-leading descriptions.",
   };
+  if (delta.selection_preview > 0) return {
+    decision: "free_selection_preview_observed_without_task_copy_attribution",
+    interpretation: "The free router was called, proving task selection beyond tools/list; aggregate telemetry cannot attribute that choice to a particular description exposure.",
+  };
   if (delta.validation_error > 0) return {
     decision: "known_tool_input_friction_observed",
     interpretation: "A known tool was selected with invalid input; this does not measure a description-caused selection rate.",
@@ -209,7 +214,7 @@ function inactive(
   const eligible = zeroTaskLeadingDescriptionCounters();
   return {
     id: experimentId,
-    accounting_schema_version: 1,
+    accounting_schema_version: 2,
     status,
     decision,
     activation_required: true,
@@ -330,7 +335,7 @@ export function updateTaskLeadingDescriptionExperiment(
 
   return {
     id: experimentId,
-    accounting_schema_version: 1,
+    accounting_schema_version: 2,
     status,
     decision,
     activation_required: false,
@@ -345,6 +350,9 @@ export function updateTaskLeadingDescriptionExperiment(
     event_ratios: {
       valid_call_per_tools_list_percent: eligible.tools_list > 0
         ? Math.round(validCallEvents / eligible.tools_list * 1_000) / 10
+        : null,
+      free_selection_preview_per_tools_list_percent: eligible.tools_list > 0
+        ? Math.round(eligible.selection_preview / eligible.tools_list * 1_000) / 10
         : null,
       payment_present_per_valid_call_percent: validCallEvents > 0
         ? Math.round(eligible.payment_present / validCallEvents * 1_000) / 10

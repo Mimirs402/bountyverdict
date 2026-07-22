@@ -98,7 +98,7 @@ function emptyMcpCounters(): McpFunnelCounters {
 }
 
 function addMcpCounters(target: McpFunnelCounters, source: McpFunnelCounters): McpFunnelCounters {
-  for (const key of MCP_COUNTER_KEYS) target[key] += source[key];
+  for (const key of MCP_COUNTER_KEYS) target[key] += source[key] ?? 0;
   return target;
 }
 
@@ -134,7 +134,7 @@ function monotonicMcpDelta(current: number, baseline: number, label: string): nu
 function mcpCountersDelta(current: McpFunnelCounters, baseline: McpFunnelCounters, label: string): McpFunnelCounters {
   return Object.fromEntries(MCP_COUNTER_KEYS.map((key) => [
     key,
-    monotonicMcpDelta(current[key], baseline[key], `${label} ${key}`),
+    monotonicMcpDelta(current[key] ?? 0, baseline[key] ?? 0, `${label} ${key}`),
   ])) as McpFunnelCounters;
 }
 
@@ -177,9 +177,14 @@ export function trustedBuyerCandidateDiscoveryDelta(
 function mcpCountersValid(value: unknown): value is McpFunnelCounters {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).length !== MCP_COUNTER_KEYS.length ||
-    !MCP_COUNTER_KEYS.every((key) => Number.isSafeInteger(record[key]) && Number(record[key]) >= 0)) return false;
-  return MCP_FUNNEL_STAGES.reduce((sum, stage) => sum + Number(record[stage]), 0) === Number(record.events);
+  const keys = Object.keys(record);
+  if ((keys.length !== MCP_COUNTER_KEYS.length && !(keys.length === MCP_COUNTER_KEYS.length - 1 && record.selection_preview === undefined)) ||
+    !MCP_COUNTER_KEYS.every((key) => key === "selection_preview" && record[key] === undefined || Number.isSafeInteger(record[key]) && Number(record[key]) >= 0)) return false;
+  return MCP_FUNNEL_STAGES.reduce((sum, stage) => sum + Number(record[stage] ?? 0), 0) === Number(record.events);
+}
+
+function normalizeMcpCounters(value: McpFunnelCounters): McpFunnelCounters {
+  return Object.fromEntries(MCP_COUNTER_KEYS.map((key) => [key, value[key] ?? 0])) as McpFunnelCounters;
 }
 
 function keyedMcpCountersValid(value: unknown, keys: readonly string[]): boolean {
@@ -195,7 +200,7 @@ function migrateMcpChannelCounters(value: unknown): FunnelSnapshot["mcp_by_chann
     !Object.values(record).every(mcpCountersValid)) return null;
   return Object.fromEntries(FUNNEL_CHANNELS.map((channel) => [
     channel,
-    record[channel] ? structuredClone(record[channel]) : emptyMcpCounters(),
+    record[channel] ? normalizeMcpCounters(record[channel] as McpFunnelCounters) : emptyMcpCounters(),
   ])) as FunnelSnapshot["mcp_by_channel"];
 }
 
@@ -226,7 +231,24 @@ function normalizeTrustedMcpBaseline(value: unknown): TrustedMcpBaseline | null 
   const validationKinds = baseline.validation_kinds as Record<string, unknown>;
   if (Object.keys(validationKinds).length !== MCP_VALIDATION_KINDS.length ||
     !MCP_VALIDATION_KINDS.every((kind) => Number.isSafeInteger(validationKinds[kind]) && Number(validationKinds[kind]) >= 0)) return null;
-  return { ...baseline, by_channel: byChannel } as TrustedMcpBaseline;
+  return {
+    ...baseline,
+    external_totals: normalizeMcpCounters(baseline.external_totals),
+    buyer_candidate_totals: normalizeMcpCounters(baseline.buyer_candidate_totals),
+    external_by_product: Object.fromEntries(MCP_PRODUCTS.map((product) => [
+      product,
+      normalizeMcpCounters(baseline.external_by_product![product]),
+    ])) as TrustedMcpBaseline["external_by_product"],
+    by_channel: byChannel,
+    by_client_class: Object.fromEntries(FUNNEL_CLIENT_CLASSES.map((client) => [
+      client,
+      normalizeMcpCounters(baseline.by_client_class![client]),
+    ])) as TrustedMcpBaseline["by_client_class"],
+    by_client_family: Object.fromEntries(MCP_CLIENT_FAMILIES.map((family) => [
+      family,
+      normalizeMcpCounters(baseline.by_client_family![family]),
+    ])) as TrustedMcpBaseline["by_client_family"],
+  } as TrustedMcpBaseline;
 }
 
 export function captureTrustedFunnelBaseline(

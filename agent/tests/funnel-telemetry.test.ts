@@ -756,12 +756,13 @@ test("Smithery tool-selection stages remain buyer-candidate evidence", () => {
     "protocol_error",
     "tool_not_found",
     "validation_error",
+    "selection_preview",
     "payment_required",
   ] as const) {
     recordMcpObservation(snapshot, {
       observed_at: "2026-07-22T15:30:00.000Z",
       stage,
-      product: stage === "validation_error" || stage === "payment_required" ? "single" : null,
+      product: stage === "validation_error" || stage === "selection_preview" || stage === "payment_required" ? "single" : null,
       source: "automated_client",
       client_class: "agent_runtime",
       client_family: "not_applicable",
@@ -771,13 +772,14 @@ test("Smithery tool-selection stages remain buyer-candidate evidence", () => {
   }
 
   const buyerCandidate = mcpBuyerCandidateTotals(snapshot);
-  assert.equal(snapshot.mcp_by_channel.smithery.events, 6);
-  assert.equal(buyerCandidate.events, 3);
+  assert.equal(snapshot.mcp_by_channel.smithery.events, 7);
+  assert.equal(buyerCandidate.events, 4);
   assert.equal(buyerCandidate.initialize, 0);
   assert.equal(buyerCandidate.tools_list, 0);
   assert.equal(buyerCandidate.protocol_error, 0);
   assert.equal(buyerCandidate.tool_not_found, 1);
   assert.equal(buyerCandidate.validation_error, 1);
+  assert.equal(buyerCandidate.selection_preview, 1);
   assert.equal(buyerCandidate.payment_required, 1);
 });
 

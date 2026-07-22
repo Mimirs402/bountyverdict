@@ -156,6 +156,37 @@ const mcpDriftVerdictOutputSchema = z.object({
   service_reuse: z.string().min(1),
 }).passthrough();
 
+export const MCP_FREE_SELECTION_OUTPUT_SCHEMA = z.object({
+  task: z.enum([
+    "one_bounty",
+    "bounty_portfolio",
+    "repository_agent_instructions",
+    "github_actions_root_cause",
+    "github_actions_retry_decision",
+    "mcp_tools_change",
+  ]),
+  product: z.string().min(1),
+  product_key: z.enum(["single", "portfolio", "harness", "run", "flake", "mcpdrift"]),
+  tool_name: z.enum([
+    "check_github_bounty",
+    "rank_github_bounties",
+    "audit_agent_harness",
+    "diagnose_github_actions_run",
+    "classify_github_actions_flake",
+    "check_mcp_tool_drift",
+  ]),
+  price_usdc: z.string().regex(/^\d+\.\d{2}$/),
+  currency: z.literal("USDC"),
+  use_when: z.string().min(1),
+  not_for: z.string().min(1),
+  decision_returned: z.array(z.string().min(1)).min(1),
+  free_sample: z.string().url(),
+  required_input: z.string().min(1),
+  payment_required: z.literal(false),
+  verdict_produced: z.literal(false),
+  next_step: z.string().min(1),
+}).strict();
+
 export const MCP_SUCCESS_OUTPUT_SCHEMAS = Object.freeze({
   check_github_bounty: bountyVerdictOutputSchema,
   rank_github_bounties: bountyPortfolioOutputSchema,

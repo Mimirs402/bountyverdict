@@ -8,6 +8,7 @@ const prefix: SelectionExperimentCounters = {
   protocol_error: 0,
   tool_not_found: 0,
   validation_error: 0,
+  selection_preview: 0,
   capacity_rejected: 0,
   payment_required: 0,
   payment_present: 0,
@@ -20,6 +21,7 @@ const clean = (overrides: Partial<SelectionExperimentCounters> = {}): SelectionE
   protocol_error: 0,
   tool_not_found: 0,
   validation_error: 0,
+  selection_preview: 0,
   capacity_rejected: 0,
   payment_required: 0,
   payment_present: 0,
@@ -227,6 +229,17 @@ test("classifies an unsigned valid call as payment-handoff interest", () => {
   assert.equal(result.decision, "valid_call_interest_observed_without_payment_presentation");
 });
 
+test("classifies a free router call separately from payment interest", () => {
+  const result = update({
+    currentEpochId: 37,
+    measurementEligible: true,
+    cleanEpochDelta: clean({ tools_list: 41, selection_preview: 1 }),
+    rawDelta: clean({ initialize: 110, tools_list: 150, selection_preview: 1 }),
+  });
+  assert.equal((result.boundary as Record<string, unknown>).decision, "free_selection_preview_observed");
+  assert.equal((result.event_ratios as Record<string, unknown>).free_selection_preview_per_tools_list_percent, 0.7);
+});
+
 test("distinguishes attributable schema friction from copy rejection", () => {
   const result = update({
     currentEpochId: 37,
@@ -317,7 +330,7 @@ test("migrates an in-flight schema-one report without losing its active epoch", 
     rawDelta: clean({ initialize: 117, tools_list: 116 }),
     previous: { id: "mcp-selection-preview-parity-v2", ...schemaOne },
   });
-  assert.equal(migrated.accounting_schema_version, 3);
+  assert.equal(migrated.accounting_schema_version, 4);
   assert.equal(migrated.attributable_runtime_tools_list, 2);
   assert.equal((migrated.eligible_delta as SelectionExperimentCounters).tools_list, 112);
 });
@@ -344,7 +357,7 @@ test("migrates an in-flight schema-two report with new failure counters at zero"
     rawDelta: clean({ initialize: 117, tools_list: 116, tool_not_found: 1 }),
     previous: { id: "mcp-selection-preview-parity-v2", ...schemaTwo },
   });
-  assert.equal(migrated.accounting_schema_version, 3);
+  assert.equal(migrated.accounting_schema_version, 4);
   assert.equal((migrated.eligible_delta as SelectionExperimentCounters).tool_not_found, 1);
   assert.equal(migrated.decision, "awaiting_eligible_tools_list_target");
 });

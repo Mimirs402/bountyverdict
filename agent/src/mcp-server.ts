@@ -12,7 +12,8 @@ import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
 import { MCP_DRIFT_MAX_BODY_BYTES, McpDriftError, parseAndAnalyzeMcpDrift } from "./mcp-drift.ts";
 import { mcpDriftInputSchema } from "./mcp-drift-discovery.ts";
-import { MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
+import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME, freeSelectionRoute } from "./free-selection-router.ts";
+import { MCP_FREE_SELECTION_OUTPUT_SCHEMA, MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
 import { declareMcpHttpPaymentHandoff } from "./payment-handoff.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
@@ -91,13 +92,14 @@ const TOOL_PRODUCT = Object.freeze({
 type ToolName = keyof typeof TOOL_PRODUCT;
 
 const TOOL_RECOVERY_TASKS = Object.freeze({
+  [FREE_SELECTION_TOOL_NAME]: "choose the right GitHub decision tool for free",
   check_github_bounty: "assess one public GitHub bounty",
   rank_github_bounties: "rank two to ten public GitHub bounties",
   audit_agent_harness: "audit repository coding-agent instructions",
   diagnose_github_actions_run: "diagnose one failed GitHub Actions run",
   classify_github_actions_flake: "decide retry once versus fix",
   check_mcp_tool_drift: "compare complete MCP tools/list snapshots",
-} as const satisfies Record<ToolName, string>);
+} as const satisfies Record<string, string>);
 
 const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free payment quote, selection summary, and payment handoff. Only an authorized signed retry can settle. Never call with missing, invented, or placeholder arguments.";
 
@@ -320,7 +322,6 @@ function normalizeRunUrl(value: string): string {
 }
 
 async function createMcpServer(env: McpEnvironment, origin: string, request: RequestClassification): Promise<McpServer> {
-  const payment = await getPaymentContext(env);
   const server = new McpServer({
     name: "BountyVerdict",
     title: "BountyVerdict Agent Decision Tools",
@@ -328,10 +329,24 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     description: "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
     websiteUrl: "https://mimirs402.github.io/bountyverdict/",
   }, {
-    instructions: `Choose by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. All six tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
+    instructions: `Unsure which tool fits? Call ${FREE_SELECTION_TOOL_NAME} first; it is free and returns the exact paid tool, price, sample, and required input without producing a verdict. Choose directly by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. The six decision tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful paid call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
   });
   const githubAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const closedWorldAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+  server.registerTool(FREE_SELECTION_TOOL_NAME, {
+    title: "Choose the right GitHub agent decision tool for free",
+    description: "Which tool should I use for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change? Free deterministic router: returns the exact paid tool, price, sample, and required input. It does not inspect a URL, produce a verdict, request payment, or call another service.",
+    inputSchema: z.object({
+      task: z.enum(FREE_SELECTION_TASKS).describe("Choose one exact task category; no URL, repository name, search text, or private data."),
+    }).strict(),
+    outputSchema: MCP_FREE_SELECTION_OUTPUT_SCHEMA,
+    annotations: closedWorldAnnotations,
+  }, async ({ task }) => {
+    const route = freeSelectionRoute(task, origin);
+    emitMcpEvent("selection_preview", route.product_key, request);
+    return jsonResult(route);
+  });
 
   server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {
     let normalized: string;
@@ -339,7 +354,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "single", request, "invalid_issue_url");
       return errorResult("single", "INVALID_ISSUE_URL", error instanceof Error ? error.message : "Invalid GitHub issue URL.");
     }
-    return paidCall(payment, origin, "check_github_bounty", "single", { issue_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "check_github_bounty", "single", { issue_url: normalized }, extra, request, async () => {
       try { return jsonResult(await checkGithubIssue(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof CheckError ? errorResult("single", error.code, error.message) : errorResult("single", "CHECK_FAILED", "The bounty verdict could not be produced."); }
     });
@@ -351,7 +366,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "portfolio", request, "invalid_portfolio");
       return errorResult("portfolio", error instanceof CheckError ? error.code : "INVALID_PORTFOLIO", error instanceof Error ? error.message : "Invalid bounty portfolio.");
     }
-    return paidCall(payment, origin, "rank_github_bounties", "portfolio", { issue_urls: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "rank_github_bounties", "portfolio", { issue_urls: normalized }, extra, request, async () => {
       try { return jsonResult(await checkBountyPortfolio(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof CheckError ? errorResult("portfolio", error.code, error.message) : errorResult("portfolio", "PORTFOLIO_CHECK_FAILED", "The bounty portfolio could not be produced."); }
     });
@@ -363,7 +378,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "harness", request, "invalid_repository_url");
       return errorResult("harness", "INVALID_REPOSITORY_URL", error instanceof Error ? error.message : "Invalid GitHub repository URL.");
     }
-    return paidCall(payment, origin, "audit_agent_harness", "harness", { repo_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "audit_agent_harness", "harness", { repo_url: normalized }, extra, request, async () => {
       try { return jsonResult(await checkGithubHarness(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof HarnessError ? errorResult("harness", error.code, error.message) : errorResult("harness", "HARNESS_CHECK_FAILED", "The agent harness audit could not be produced."); }
     });
@@ -375,7 +390,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "run", request, "invalid_run_or_attempt");
       return errorResult("run", "INVALID_RUN_URL", error instanceof Error ? error.message : "Invalid GitHub Actions run URL.");
     }
-    return paidCall(payment, origin, "diagnose_github_actions_run", "run", { run_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "diagnose_github_actions_run", "run", { run_url: normalized }, extra, request, async () => {
       try { return jsonResult(await diagnoseGithubRun(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof HarnessError ? errorResult("run", error.code, error.message) : errorResult("run", "RUN_DIAGNOSIS_FAILED", "The workflow run could not be diagnosed."); }
     });
@@ -405,7 +420,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("capacity_rejected", "flake", request);
       return errorResult("flake", error instanceof HarnessError ? error.code : "SERVICE_UNAVAILABLE", error instanceof Error ? error.message : "FlakeVerdict is temporarily unavailable.");
     }
-    return paidCall(payment, origin, "classify_github_actions_flake", "flake", { run_url: normalized, ...(normalizedAttempt === undefined ? {} : { attempt: normalizedAttempt }) }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "classify_github_actions_flake", "flake", { run_url: normalized, ...(normalizedAttempt === undefined ? {} : { attempt: normalizedAttempt }) }, extra, request, async () => {
       try { return jsonResult(await diagnoseGithubFlake(normalized, normalizedAttempt, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof FlakeError ? errorResult("flake", error.code, error.message) : errorResult("flake", "FLAKE_CHECK_FAILED", "The workflow flake classification could not be produced."); }
     });
@@ -419,7 +434,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "mcpdrift", request, "invalid_mcp_snapshot");
       return error instanceof McpDriftError ? errorResult("mcpdrift", error.code, error.message) : errorResult("mcpdrift", "INVALID_INPUT", "The MCP snapshots are invalid.");
     }
-    return paidCall(payment, origin, "check_mcp_tool_drift", "mcpdrift", normalized, extra, request, async () => jsonResult(result));
+    return paidCall(await getPaymentContext(env), origin, "check_mcp_tool_drift", "mcpdrift", normalized, extra, request, async () => jsonResult(result));
   });
 
   return server;
@@ -497,7 +512,7 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   const validatedRpc = JSONRPCRequestSchema.safeParse(parsedBody);
   const validatedCall = CallToolRequestSchema.safeParse(parsedBody);
   const requestedTool = validatedCall.success ? validatedCall.data.params.name : null;
-  const knownTool = requestedTool !== null && Object.hasOwn(TOOL_PRODUCT, requestedTool);
+  const knownTool = requestedTool !== null && (Object.hasOwn(TOOL_PRODUCT, requestedTool) || requestedTool === FREE_SELECTION_TOOL_NAME);
   if (validatedRpc.success && validatedCall.success && !knownTool && !unsupportedProtocol) {
     emitMcpEvent("tool_not_found", null, classification);
     return respond(unknownToolError(validatedRpc.data.id));
@@ -513,9 +528,10 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
       if (!validatedRpc.success || !validatedCall.success) {
         emitMcpEvent("protocol_error", null, classification);
       } else {
-        const product = TOOL_PRODUCT[validatedCall.data.params.name as ToolName];
+        const calledTool = validatedCall.data.params.name;
+        const product = TOOL_PRODUCT[calledTool as ToolName];
         emitMcpEvent(
-          product ? "validation_error" : "tool_not_found",
+          product ? "validation_error" : calledTool === FREE_SELECTION_TOOL_NAME ? "protocol_error" : "tool_not_found",
           product || null,
           classification,
           product ? "schema_rejected_before_handler" : "not_applicable",
@@ -529,4 +545,5 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   }
 }
 
-export const MCP_DISTRIBUTED_TOOL_NAMES = Object.freeze(Object.keys(TOOL_PRODUCT) as ToolName[]);
+export const MCP_PAID_TOOL_NAMES = Object.freeze(Object.keys(TOOL_PRODUCT) as ToolName[]);
+export const MCP_DISTRIBUTED_TOOL_NAMES = Object.freeze([FREE_SELECTION_TOOL_NAME, ...MCP_PAID_TOOL_NAMES]);

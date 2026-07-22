@@ -66,6 +66,12 @@ test("fails closed at a frozen zero prefix until reviewed activation coordinates
   assert.equal(result.remaining_eligible_tools_list, 25);
 });
 
+test("records a free router selection without causal description attribution", () => {
+  const result = update({ cleanEpochDelta: clean({ tools_list: 25, selection_preview: 1 }) });
+  assert.equal((result.boundary as Record<string, unknown>).decision, "free_selection_preview_observed_without_task_copy_attribution");
+  assert.equal(result.causal_copy_claim, false);
+});
+
 test("activation parser requires exact release, production, drain, epoch, and N=25 coordinates", () => {
   assert.deepEqual(parseTaskLeadingDescriptionActivation(activation), activation);
   assert.throws(() => parseTaskLeadingDescriptionActivation({ ...activation, release_commit: "pending" }), /commits are invalid/);

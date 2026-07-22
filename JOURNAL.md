@@ -1,5 +1,15 @@
 # BountyVerdict Journey
 
+## 2026-07-23 — Free selection router prepared after zero downstream calls
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Frozen v7 checkpoint: **10 / 25 eligible tools/list events / 0 downstream calls**
+
+Prepared, but did not deploy, a post-v7 treatment for the measured selection gap. The MCP catalog now has one deterministic free router in front of the existing six paid decision tools. An agent chooses one of six bounded task categories and receives the exact paid tool name, USDC price, public sample, required input, and safe next step. The router does not fetch GitHub, inspect user data, issue a payment challenge, settle funds, or claim to produce a verdict. Paid-tool names, prices, schemas, and execution remain unchanged.
+
+Added a distinct `selection_preview` funnel stage instead of misclassifying the free call as `payment_required`. Telemetry retains only the selected product and the fixed stage; it never logs raw task text. Existing funnel snapshots and frozen experiment reports migrate the new counter as zero, while future reports distinguish a free router selection from paid-tool interest and purchase evidence. Focused MCP, telemetry, epoch, and experiment verification passes **112 / 112**. This branch remains isolated until v7 reaches its precommitted N=25 boundary.
+
 ## 2026-07-22 — Canonical ownership migration to Mimir's Lab
 
 - Customer revenue: **$0.00**

@@ -288,6 +288,55 @@ function ambiguousNonCashReward(issue, comments) {
   return sources.find(({ body, trusted }) => trusted && AMBIGUOUS_NON_CASH_REWARD_PATTERN.test(body)) ?? null;
 }
 
+const OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN = /(?:^|\n)\s*(?:[-*]\s+|\d+[.)]\s+)?(?:(?:the\s+)?(?:agent|contributor|worker|solver|claimant|you)\s+(?:(?:must|should|shall|needs?\s+to|is\s+required\s+to)\s+))?(?:send|pay|tip|transfer|purchase)\b[^\r\n]{0,180}(?:\bto\b|wallet|address|merchant|recipient|destination\s+tag|fee|invoice)/im;
+const OUTGOING_PAYMENT_PROOF_PATTERN = /\b(?:comment|post|submit|provide|share)\b[^\r\n]{0,80}\b(?:tx|transaction|payment)\s*(?:hash|id|receipt|proof)\b|\b(?:reward|bounty|eligible|qualif(?:y|ies|ied))\b[\s\S]{0,240}\b(?:tips?|pays?|sends?|transfers?|purchases?)\b/i;
+const PAYMENT_REIMBURSEMENT_PATTERN = /\b(?:cost|fee|expense|payment|amount)s?\b[^\r\n]{0,80}\b(?:will\s+be|are|is)?\s*(?:reimbursed|refunded|covered|repaid)\b|\b(?:reimburse|refund|repay|cover)\b[^\r\n]{0,80}\b(?:the\s+)?(?:contributor|worker|solver|claimant|you)(?:'s)?\b/i;
+
+function markdownSections(value) {
+  const text = String(value ?? "");
+  const headings = [...text.matchAll(/^#{1,6}\s+([^\r\n]+)\s*$/gm)];
+  return headings.map((heading, index) => ({
+    heading: heading[1],
+    body: text.slice((heading.index ?? 0) + heading[0].length, headings[index + 1]?.index ?? text.length),
+  }));
+}
+
+function hasExplicitCashRewardTerms(value) {
+  const text = String(value ?? "");
+  const rewardSections = markdownSections(text)
+    .filter(({ heading }) => /^(?:cash\s+)?(?:bounty|reward|compensation|payout|prize)\b/i.test(heading));
+  const isExplicitPayoutLine = (line, sectionHeading = false) => {
+    if (amountFromText(line).amount === null || OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN.test(line)) return false;
+    if (/\b(?:bounty|reward|compensation|payout|prize)\b/i.test(line) ||
+        /\b(?:will\s+pay|will\s+be\s+paid|receive\s+payment|paid\s+to\s+(?:the\s+)?(?:contributor|worker|solver|claimant))\b/i.test(line)) return true;
+    return sectionHeading && /^\s*(?:USD|USDC|USDT)?\s*[$€£]?\s*\d[\d,.]*(?:\s*(?:USD|USDC|USDT|€|£))?(?:\s+(?:for|after|upon)\b[^\r\n]*)?\s*$/i.test(line);
+  };
+  if (rewardSections.some(({ heading, body }) =>
+    isExplicitPayoutLine(heading) || body.split(/[\r\n]+/).some((line) => isExplicitPayoutLine(line, true)))) return true;
+  return text.split(/[\r\n]+/).some((line) => isExplicitPayoutLine(line));
+}
+
+function contributorPaymentRequirement(issue, comments, rewardVerification) {
+  if (["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API"].includes(rewardVerification)) return null;
+  const sources = [
+    MAINTAINER_ASSOCIATIONS.has(issue?.author_association)
+      ? { body: String(issue?.body ?? ""), rewardText: authoredIssueRewardText(issue), evidenceUrl: issue?.html_url ?? null }
+      : null,
+    ...comments
+      .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment?.author_association))
+      .map((comment) => ({
+        body: String(comment?.body ?? ""),
+        rewardText: String(comment?.body ?? ""),
+        evidenceUrl: comment?.html_url ?? issue?.html_url ?? null,
+      })),
+  ].filter(Boolean);
+  if (sources.some(({ rewardText }) => hasExplicitCashRewardTerms(rewardText)) ||
+      sources.some(({ body }) => PAYMENT_REIMBURSEMENT_PATTERN.test(body))) return null;
+  const paymentSource = sources.find(({ body }) => OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN.test(body));
+  if (!paymentSource || !sources.some(({ body }) => OUTGOING_PAYMENT_PROOF_PATTERN.test(body))) return null;
+  return paymentSource;
+}
+
 function externalBountySource(issue) {
   const body = typeof issue?.body === "string" ? issue.body : "";
   if (!MAINTAINER_ASSOCIATIONS.has(issue?.author_association)) return null;
@@ -911,6 +960,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
   const reward = rewardEvidence(issue, comments, opire, platformEvidence);
   const ambiguousReward = ambiguousNonCashReward(issue, comments);
+  const contributorPayment = contributorPaymentRequirement(issue, comments, reward.verification);
   const platformRejection = relevantOpireRejection(issue, opire, reward);
   const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
@@ -963,6 +1013,14 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.amount = null;
     reward.currency = null;
     reward.evidenceUrl = ambiguousReward.evidenceUrl;
+  }
+  if (contributorPayment && !["WITHDRAWN", "PAID_OR_AWARDED"].includes(reward.state)) {
+    reward.state = "UNVERIFIED";
+    reward.verification = "UNVERIFIED";
+    reward.platform = null;
+    reward.amount = null;
+    reward.currency = null;
+    reward.evidenceUrl = contributorPayment.evidenceUrl;
   }
   const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward, platformEvidence);
   const aiPolicyBlocks = policyDocuments.filter((document) =>
@@ -1148,6 +1206,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       -20,
       "The issue qualifies a nominal USD amount with a non-cash denomination, but an exact trusted platform record exists. Preserve the platform record and reconcile the conflicting public terms before starting work.",
       ambiguousReward.evidenceUrl,
+    ));
+  }
+
+  if (contributorPayment) {
+    score -= 100;
+    signals.push(signal(
+      "Contributor payment required",
+      -100,
+      "The task requires the contributor to send, pay, tip, transfer, or purchase and submit transaction proof, while no explicit cash reward, reimbursement, or trusted platform payout was verified. Treat this as an inverted bounty, not paid work.",
+      contributorPayment.evidenceUrl,
+      true,
     ));
   }
 

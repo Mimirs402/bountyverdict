@@ -622,6 +622,39 @@ test("does not normalize docket-qualified payment language into a USD promise", 
   ));
 });
 
+test("does not report a contributor's required outgoing tip as bounty reward", async () => {
+  const inverted = {
+    ...issue,
+    title: "BOUNTY: first external tip gets public backer credit",
+    body: [
+      "## BOUNTY: first non-factory external tip",
+      "### Pay (60s)",
+      "1. XRPL testnet faucet XRP",
+      "2. Send to `rBiU74q2wCPQ7ri9YD6J6LrQ2Y3jFd8pcN`",
+      "3. Destination Tag 1 ($1 tip) or 2 ($2 briefing)",
+      "4. Comment tx hash here",
+      "### Reward",
+      "Public backer credit + free Tag-2 briefing for first external wallet that tips Tag 1 and comments hash.",
+    ].join("\n"),
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, inverted),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.equal(result.reward.state, "UNVERIFIED");
+  assert.equal(result.reward.verification, "UNVERIFIED");
+  assert.equal(result.reward.amount, null);
+  assert.equal(result.reward.currency, null);
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Contributor payment required" && signal.hard_stop
+  ));
+});
+
 test("returns AVOID when Opire rejected the issue's advertised amount", async () => {
   const rejectedIssue = {
     ...issue,

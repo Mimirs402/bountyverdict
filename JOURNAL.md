@@ -1232,3 +1232,16 @@ Live replay proves the change precisely. The current production-equivalent sourc
 The two proven blind-search misses are now staged on this held branch as question-led resource descriptions. BountyVerdict begins with `Should I work on this GitHub issue?`; SkillVerdict begins with `Is this agent skill safe to install?`. Both remain below CDP's 500-character limit and are asserted in the actual unpaid x402 challenges and OpenAPI contract. They will be released only after v7 freezes its 25-event boundary, together with the quality fixes in one deployment and one excluded drain.
 
 The complete public suite passes **168 / 168**, the Worker and operations suite passes **504 / 504**, TypeScript checking passes, generated public documentation is synchronized, and `git diff --check` passes. No issue was claimed and no production, listing, payment, or funnel mutation occurred.
+
+## 2026-07-23 — Inverted bounties cannot charge the contributor
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v7 checkpoint at discovery: **6 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction remains on the held quality branch**
+
+A fresh search found `theCeramist/rsi-eaf#178`, an owner-authored open issue presented as a bounty. Its instructions require the agent to obtain testnet XRP, send it to the requester's address with a destination tag, and comment the transaction hash. The displayed `$1 tip` and `$2 briefing` are amounts the contributor sends; the stated consideration is public credit and a free briefing. Production-equivalent analysis incorrectly returned **VIABLE 93** and normalized the outgoing `$1` as a promised cash reward.
+
+The held analyzer now fails closed only when a trusted repository authority requires the contributor to send, pay, tip, transfer, or purchase, requires transaction proof or ties eligibility to that payment, and supplies no explicit cash payout, reimbursement, or authenticated platform reward. It clears the claimed amount and currency, returns **AVOID 0**, and emits an evidence-linked `Contributor payment required` hard stop. Untrusted comments cannot fabricate the stop, ordinary payment-flow implementation prose does not trigger it, genuine contributor payouts and reimbursed test expenses remain valid, and trusted Algora application or API evidence stays controlling. An outgoing amount under a generic `Bounty` heading is explicitly covered so it cannot bypass the guard.
+
+The exact live replay now returns **AVOID 0**, an unverified reward with no amount or currency, and the canonical issue URL as evidence. The public analysis suite passes **94 / 94** and the complete Worker and operations suite passes **507 / 507**. No bounty was claimed, no outgoing payment was authorized, and production and the v7 measurement coordinate remain unchanged.

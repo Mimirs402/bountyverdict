@@ -603,6 +603,112 @@ test("exact trusted platform evidence is preserved when issue wording conflicts"
   ));
 });
 
+test("an inverted bounty cannot treat the contributor's outgoing tip as reward", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "BOUNTY: first external tip gets public backer credit",
+      body: [
+        "## BOUNTY: first non-factory external tip",
+        "### Pay (60s)",
+        "1. XRPL testnet faucet XRP",
+        "2. Send to `rBiU74q2wCPQ7ri9YD6J6LrQ2Y3jFd8pcN`",
+        "3. Destination Tag 1 ($1 tip) or 2 ($2 briefing)",
+        "4. Comment tx hash here",
+        "### Reward",
+        "Public backer credit + free Tag-2 briefing for first external wallet that tips Tag 1 and comments hash.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.score, 0);
+  assert.equal(output.reward.state, "UNVERIFIED");
+  assert.equal(output.reward.verification, "UNVERIFIED");
+  assert.equal(output.reward.amount, null);
+  assert.equal(output.reward.currency, null);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Contributor payment required" && item.hardStop
+  ));
+});
+
+test("an outgoing amount under a broad bounty heading is not cash reward evidence", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "First external tip gets public credit",
+      body: [
+        "## Bounty",
+        "Send $1 to the wallet address below.",
+        "Submit the transaction hash in a comment.",
+        "The first contributor receives public backer credit.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.amount, null);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Contributor payment required" && item.hardStop
+  ));
+});
+
+test("a real contributor payout is not mistaken for an inverted bounty", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: [
+        "## Reward",
+        "$100 paid to the contributor after an accepted merge.",
+        "## Acceptance test",
+        "1. Send $1 to the test merchant address.",
+        "2. Submit the transaction hash with the pull request.",
+        "The $1 test expense will be reimbursed.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.amount, 100);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
+test("payment-flow implementation language alone is not contributor payment", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Reward: $100 paid to the contributor after merge. Expected behavior: users can send $1 to a merchant address and the transaction hash appears in the audit log. Implement the flow and add mocked tests.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.amount, 100);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
+test("an untrusted commenter cannot fabricate an inverted-bounty hard stop", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "1. Send $1 to my wallet address. 2. Submit the transaction hash here.",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted-payment",
+    }],
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
 test("a same-repository source link is not treated as a mirror", () => {
   const output = analyzeBounty({
     issue: {
@@ -675,6 +781,29 @@ test("a verified Algora GitHub App comment establishes listing provenance only",
   assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
   assert.equal(output.reward.amount, 250);
   assert.equal(output.verdict, "VIABLE");
+});
+
+test("a trusted platform listing is not overridden by contributor-payment heuristics", () => {
+  const comments = [{
+    body: "## 💎 $250 bounty • acme\nReceive payment 2-5 days post-reward.",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-algora",
+    user: { login: "algora-pbc[bot]" },
+    performed_via_github_app: { slug: "algora-pbc" },
+  }];
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "1. Send $1 to the test merchant address. 2. Submit the transaction hash with the pull request. Complete acceptance criteria and implementation scope follow.",
+    },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(output.reward.amount, 250);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
 });
 
 test("an authenticated Algora listing aggregates concurrent sponsor bounties", () => {

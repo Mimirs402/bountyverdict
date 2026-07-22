@@ -80,30 +80,30 @@ const MCP_INTENT_PAGE = "https://mimirs402.github.io/bountyverdict/mcp-github-ac
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
-  id: "mcp-selection-preview-parity-v2",
-  started_at: "2026-07-21T22:04:03.330Z",
-  release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99",
+  id: "mcp-task-specific-description-v1",
+  started_at: "2026-07-22T09:58:21.408Z",
+  release_commit: "fa4b8a59a5c3c2c4ea692729a8aefaaa49463b6c",
   baseline: Object.freeze({
-    initialize: 257,
-    tools_list: 208,
-    validation_error: 6,
+    initialize: 491,
+    tools_list: 429,
+    validation_error: 12,
     capacity_rejected: 0,
     payment_required: 0,
     payment_present: 0,
     paid_success: 0,
   }),
-  target_tools_list: 150,
-  eligible_prefix_observed_at: "2026-07-22T02:25:24.870Z",
+  target_tools_list: 25,
+  eligible_prefix_observed_at: "2026-07-22T09:58:21.408Z",
   eligible_prefix_before_audited_drain: Object.freeze({
-    initialize: 110,
-    tools_list: 109,
-    validation_error: 6,
+    initialize: 0,
+    tools_list: 0,
+    validation_error: 0,
     capacity_rejected: 0,
     payment_required: 0,
     payment_present: 0,
     paid_success: 0,
   }),
-  resume_epoch_id: 37,
+  resume_epoch_id: 43,
 });
 
 const configuration = loadDistributionMonitorConfiguration(process.env);

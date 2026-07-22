@@ -207,16 +207,17 @@ test("distribution monitoring treats Payan demand state as a funnel and receipts
   assert.match(distribution, /Payan exact-fit demand capture/);
 });
 
-test("distribution monitoring measures the MCP selection-preview rollout from an immutable buyer-event baseline", async () => {
+test("distribution monitoring measures the task-specific MCP description from an immutable buyer-event baseline", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   const directory = await readFile(directoryMonitorUrl, "utf8");
-  assert.match(distribution, /mcp-selection-preview-parity-v2/);
-  assert.match(distribution, /release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99"/);
-  assert.match(distribution, /initialize: 257/);
-  assert.match(distribution, /tools_list: 208/);
-  assert.match(distribution, /target_tools_list: 150/);
-  assert.match(distribution, /eligible_prefix_observed_at: "2026-07-22T02:25:24.870Z"/);
-  assert.match(distribution, /resume_epoch_id: 37/);
+  assert.match(distribution, /mcp-task-specific-description-v1/);
+  assert.match(distribution, /release_commit: "fa4b8a59a5c3c2c4ea692729a8aefaaa49463b6c"/);
+  assert.match(distribution, /initialize: 491/);
+  assert.match(distribution, /tools_list: 429/);
+  assert.match(distribution, /validation_error: 12/);
+  assert.match(distribution, /target_tools_list: 25/);
+  assert.match(distribution, /eligible_prefix_observed_at: "2026-07-22T09:58:21.408Z"/);
+  assert.match(distribution, /resume_epoch_id: 43/);
   assert.match(distribution, /updateSelectionPreviewExperiment/);
   assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment/);
   assert.match(distribution, /valid_call_per_tools_list_percent/);

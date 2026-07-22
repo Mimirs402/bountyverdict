@@ -967,3 +967,16 @@ The upstream suite passes **75 / 75** tests, TypeScript checking, and compilatio
 AgentMRR had accepted RunVerdict as product `13d7287b-deb5-4e52-a501-15f697b18535`, but a process interruption left the private publication receipt in its pre-request `posting` state. The recovery path now verifies the exact live product, submitter identity, product-contract hash, original rotation, and reviewed code-release receipt before atomically replacing that state with a mode-`0600` terminal receipt. It does not require the current source worktree to remain at the historical publication commit, while a genuinely new publication still requires the clean current reviewed release and live funnel gate.
 
 The live reconciliation returned `action: existing`, persisted the exact product ID and completion time, and a second run produced the same receipt hash `4b4e75445f2506f6685cc9d9fde89e94b1b3235e6df0be07dd5cde56c8fc5ffa`. This is publication-state repair, not a new listing, try, purchase, or revenue event.
+
+## 2026-07-22 — Organic MCP selection baseline closed
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean measurement boundary: **25 organic `tools/list` events**
+- Downstream tool calls and payment challenges: **0**
+
+Clean measurement epoch **50** reached its precommitted boundary at `2026-07-22T18:24:48.401Z`. The frozen prefix was all zero, and the exact eligible delta was **26 initialize**, **25 tools/list**, and zero protocol errors, unknown tools, validation errors, capacity rejections, tool-level payment challenges, presented payments, paid successes, or paid errors. Owner probes, directory audits, release checks, and audited drains were excluded. These are aggregate events rather than unique agents.
+
+The formal decision is `catalog_reach_only_without_downstream_call`: agents reached the six-tool catalog but did not select a tool. The evidence does not establish that any description caused an individual decision, because privacy-safe counters deliberately retain no session linkage. It does rule out changing checkout copy as the next experiment: no eligible visitor reached checkout.
+
+The next treatment changes only the live MCP `tools/list` descriptions. It removes prices, x402 mechanics, sample links, and seller-shaped phrases such as "worth pursuing" from selection context and leads with likely agent questions: whether an issue bounty is still claimable or already being worked on, which bounty to work on next, why an Actions run failed, whether it is flaky, whether repository instructions are safe to follow, and whether an MCP upgrade will break the agent. Input schemas, prices, handlers, payment safeguards, and invocation-time handoffs remain unchanged. The treatment passes **466 / 466** Worker tests, **151 / 151** public tests, TypeScript checking, a production dry deploy, and `git diff --check`.

@@ -67,15 +67,21 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
 
 test("MCP tools/list exposes exactly six executable paid tools and excludes SkillVerdict", async () => {
   const body = await rpcBody(2, "tools/list");
+  const taskLeadingDescriptions = {
+    check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
+    rank_github_bounties: /^Which public GitHub bounty should I work on next/,
+    audit_agent_harness: /^Can a coding agent safely work in this public repository/,
+    diagnose_github_actions_run: /^Why did this public GitHub Actions run fail/,
+    classify_github_actions_flake: /^Is this failed GitHub Actions run flaky/,
+    check_mcp_tool_drift: /^Will upgrading to this complete MCP tools\/list break my agent/,
+  } as const;
   assert.deepEqual(body.result.tools.map((tool: any) => tool.name), MCP_DISTRIBUTED_TOOL_NAMES);
   assert.equal(body.result.tools.length, 6);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
   for (const tool of body.result.tools) {
-    assert.doesNotMatch(tool.description, /^(?:A )?first unsigned call/i);
-    assert.match(tool.description, /A first unsigned call with real input cannot charge/);
-    assert.match(tool.description, /free payment quote and selection summary/);
-    assert.match(tool.description, /Only an authorized signed retry costs \$0\.\d+ USDC on Base/);
-    assert.match(tool.description, /never invent/i);
+    assert.match(tool.description, taskLeadingDescriptions[tool.name as keyof typeof taskLeadingDescriptions]);
+    assert.doesNotMatch(tool.description, /\bx402\b|\bUSDC\b|payment quote|authorized signed retry/i);
+    assert.doesNotMatch(tool.description, /https?:\/\//i);
     assert.deepEqual(tool.annotations, {
       readOnlyHint: true,
       destructiveHint: false,
@@ -96,28 +102,28 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.equal(drift.inputSchema.properties.baseline.properties.complete.const, true);
   assert.equal(drift.inputSchema.properties.baseline.properties.tools.maxItems, 128);
   assert.deepEqual(drift.inputSchema.properties.baseline.properties.tools.items.required, ["name", "inputSchema"]);
-  assert.match(drift.description, /never invent or truncate snapshot arguments/i);
+  assert.match(drift.description, /never fetches or invokes tools/i);
   const single = body.result.tools.find((tool: any) => tool.name === "check_github_bounty");
-  assert.match(single.description, /^Assess whether one public GitHub bounty is worth pursuing/);
+  assert.match(single.description, /^Is this public GitHub issue bounty still claimable/);
   assert.match(single.inputSchema.properties.issue_url.pattern, /github/);
   assert.match(single.inputSchema.properties.issue_url.description, /Canonical public GitHub issue URL/);
   const portfolio = body.result.tools.find((tool: any) => tool.name === "rank_github_bounties");
-  assert.match(portfolio.description, /^Rank 2-10 public GitHub bounty issues/);
-  assert.match(portfolio.description, /strongest non-AVOID candidate—or recommend none/);
+  assert.match(portfolio.description, /^Which public GitHub bounty should I work on next/);
+  assert.match(portfolio.description, /strongest non-AVOID candidate or recommends none/);
   assert.equal(portfolio.inputSchema.properties.issue_urls.minItems, 2);
   assert.equal(portfolio.inputSchema.properties.issue_urls.maxItems, 10);
   assert.match(portfolio.inputSchema.properties.issue_urls.description, /distinct/);
   const run = body.result.tools.find((tool: any) => tool.name === "diagnose_github_actions_run");
   const flake = body.result.tools.find((tool: any) => tool.name === "classify_github_actions_flake");
   const harness = body.result.tools.find((tool: any) => tool.name === "audit_agent_harness");
-  assert.match(harness.description, /^Audit a public GitHub repository's AGENTS\.md, CLAUDE\.md/);
-  assert.match(drift.description, /^Detect breaking schema or safety-hint changes in the documented comparison subset/);
-  assert.match(drift.description, /caller-asserted complete baseline and current MCP tools\/list snapshots/);
-  assert.match(run.description, /^Diagnose why one public GitHub Actions run failed/);
-  assert.match(flake.description, /^Decide whether one completed failed GitHub Actions run/);
-  assert.match(run.description, /Diagnose why/);
+  assert.match(harness.description, /^Can a coding agent safely work in this public repository/);
+  assert.match(drift.description, /^Will upgrading to this complete MCP tools\/list break my agent/);
+  assert.match(drift.description, /caller-supplied baseline and current snapshots/);
+  assert.match(run.description, /^Why did this public GitHub Actions run fail/);
+  assert.match(flake.description, /^Is this failed GitHub Actions run flaky/);
+  assert.match(run.description, /what should I fix/);
   assert.match(run.description, /classify_github_actions_flake/);
-  assert.match(flake.description, /retried once or fixed/);
+  assert.match(flake.description, /retry it once or fix the code/);
   assert.match(flake.description, /diagnose_github_actions_run/);
 
   assert.deepEqual(single.outputSchema.properties.verdict.enum, ["AVOID", "CAUTION", "VIABLE"]);

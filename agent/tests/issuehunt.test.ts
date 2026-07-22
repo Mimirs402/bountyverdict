@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   fetchIssueHuntEvidence,
   hasIssueHuntReference,
+  issueHuntReferenceRoutes,
   parseIssueHuntPage,
 } from "../src/issuehunt.ts";
 
@@ -160,4 +161,19 @@ test("uses only exact IssueHunt links or the exact funded label as fetch trigger
   assert.equal(hasIssueHuntReference({ labels: [{ name: "Funded on Issuehunt" }] }, []), true);
   assert.equal(hasIssueHuntReference({ body: "https://oss.issuehunt.io/r/acme/widget/issues/4" }, []), true);
   assert.equal(hasIssueHuntReference({ body: "issuehunt might fund this later" }, []), false);
+});
+
+test("extracts a bounded set of exact same-issue IssueHunt routes", () => {
+  const routes = issueHuntReferenceRoutes({
+    body: [
+      "https://issuehunt.io/r/old-owner/widget/issues/4",
+      "https://oss.issuehunt.io/r/old-owner/widget/issues/4",
+      "https://issuehunt.io/r/acme/other/issues/5",
+    ].join(" "),
+  }, [{ body: "https://issuehunt.io/r/second-owner/widget.js/issues/4" }], 4);
+  assert.deepEqual(routes, [
+    { owner: "old-owner", repo: "widget", number: 4 },
+    { owner: "second-owner", repo: "widget.js", number: 4 },
+  ]);
+  assert.deepEqual(issueHuntReferenceRoutes({ body: "https://issuehunt.io/r/acme/widget/issues/4" }, [], 5), []);
 });

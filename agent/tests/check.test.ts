@@ -1307,3 +1307,131 @@ test("a transferred issue uses only its canonical destination repository", async
   assert.equal(result.issue.repository, "newco/gadget");
   assert.ok(!requested.some((url) => /\/repos\/acme\/widget(?:$|\/contents|\/issues\/4\/(?:comments|timeline))/.test(url)));
 });
+
+function transferredIssueHuntPage(repositoryGithubId: string): string {
+  const nextData = {
+    props: {
+      pageProps: {
+        repository: { ownerName: "acme", name: "widget", githubId: repositoryGithubId },
+        issue: {
+          repositoryOwnerName: "acme",
+          repositoryName: "widget",
+          repositoryGithubId,
+          number: 4,
+          status: "funded",
+          depositAmount: 3000,
+        },
+        deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "3000", cancelled: false }],
+        anonymousDeposits: [],
+        organizationGithubIdBalanceAmountEntries: [],
+        pullRequests: [],
+      },
+      route: {
+        pathname: "/issues/show",
+        query: { repositoryOwnerName: "acme", repositoryName: "widget", issueNumber: "4" },
+        asPath: "/r/acme/widget/issues/4",
+      },
+    },
+    page: "/issues/show",
+    query: { repositoryOwnerName: "acme", repositoryName: "widget", issueNumber: "4" },
+  };
+  return `<script>__NEXT_DATA__ = ${JSON.stringify(nextData)};__NEXT_LOADED_PAGES__ = []</script>`;
+}
+
+function transferredIssueHuntMock(repositoryGithubId: string, requested: string[]): typeof fetch {
+  const transferredIssue = {
+    ...issue,
+    comments: 0,
+    body: "Funded record: https://issuehunt.io/r/acme/widget/issues/4",
+    number: 4,
+    repository_url: "https://api.github.com/repos/newco/gadget",
+    html_url: "https://github.com/newco/gadget/issues/4",
+    title: "$30 bounty moved with its repository",
+  };
+  return (async (input: URL | RequestInfo) => {
+    const url = new URL(String(input));
+    requested.push(url.href);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (url.pathname === "/repos/acme/widget/issues/4" || url.pathname === "/repos/newco/gadget/issues/4") {
+      return Response.json(transferredIssue, { headers });
+    }
+    if (url.pathname === "/repos/newco/gadget") {
+      return Response.json({
+        ...repository,
+        id: 222182830,
+        full_name: "newco/gadget",
+        html_url: "https://github.com/newco/gadget",
+      }, { headers });
+    }
+    if (/^\/repos\/newco\/gadget\/issues\/4\/(?:comments|timeline)/.test(url.pathname)) {
+      return Response.json([], { headers });
+    }
+    if (url.pathname.startsWith("/repos/newco/gadget/contents/")) {
+      return Response.json({ message: "not found" }, { status: 404, headers });
+    }
+    if (url.origin === "https://oss.issuehunt.io" && url.pathname === "/r/newco/gadget/issues/4") {
+      return new Response("not found", { status: 404, headers: { "content-type": "text/html" } });
+    }
+    if (url.origin === "https://oss.issuehunt.io" && url.pathname === "/r/acme/widget/issues/4") {
+      return new Response(transferredIssueHuntPage(repositoryGithubId), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+    throw new Error(`Unexpected transferred IssueHunt request: ${url}`);
+  }) as typeof fetch;
+}
+
+test("a transferred repository can use a legacy IssueHunt route bound to its canonical GitHub ID", async () => {
+  const requested: string[] = [];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    transferredIssueHuntMock("222182830", requested),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.issue.transferred, true);
+  assert.equal(result.reward.platform, "IssueHunt");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.amount, 30);
+  assert.equal(result.reward.evidence_url, "https://oss.issuehunt.io/r/acme/widget/issues/4");
+  assert.ok(requested.indexOf("https://oss.issuehunt.io/r/newco/gadget/issues/4") <
+    requested.indexOf("https://oss.issuehunt.io/r/acme/widget/issues/4"));
+});
+
+test("a transferred repository rejects a legacy IssueHunt record for a different GitHub ID", async () => {
+  const requested: string[] = [];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    transferredIssueHuntMock("999999", requested),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.issue.transferred, true);
+  assert.notEqual(result.reward.platform, "IssueHunt");
+  assert.notEqual(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(requested.filter((url) => url.startsWith("https://oss.issuehunt.io/")).length, 2);
+});
+
+test("a canonical issue URL follows its exact legacy IssueHunt reference after a repository transfer", async () => {
+  const requested: string[] = [];
+  const result = await checkGithubIssue(
+    "https://github.com/newco/gadget/issues/4",
+    {},
+    transferredIssueHuntMock("222182830", requested),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.issue.transferred, false);
+  assert.equal(result.reward.platform, "IssueHunt");
+  assert.equal(result.reward.amount, 30);
+  assert.equal(result.reward.evidence_url, "https://oss.issuehunt.io/r/acme/widget/issues/4");
+  assert.deepEqual(
+    requested.filter((url) => url.startsWith("https://oss.issuehunt.io/")),
+    [
+      "https://oss.issuehunt.io/r/newco/gadget/issues/4",
+      "https://oss.issuehunt.io/r/acme/widget/issues/4",
+    ],
+  );
+});

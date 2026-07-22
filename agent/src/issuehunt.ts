@@ -4,6 +4,8 @@ const ISSUEHUNT_MAX_RECORDS = 20;
 const NEXT_DATA_START = "__NEXT_DATA__ = ";
 const NEXT_DATA_END = ";__NEXT_LOADED_PAGES__";
 const ISSUEHUNT_REFERENCE = /https:\/\/(?:oss\.)?issuehunt\.io\/(?:r\/[^\s/]+\/[^\s/]+\/issues\/\d+|repos\/\d+\/issues\/\d+)(?:\b|\/)/i;
+const ISSUEHUNT_ROUTE_REFERENCE = /https:\/\/(?:oss\.)?issuehunt\.io\/r\/([a-z0-9](?:[a-z0-9-]{0,38}))\/([a-z0-9._-]{1,100})\/issues\/([1-9]\d{0,9})(?:\b|\/)/gi;
+const ISSUEHUNT_MAX_REFERENCE_ROUTES = 3;
 
 type FetchLike = typeof fetch;
 
@@ -70,6 +72,34 @@ export function hasIssueHuntReference(issue: unknown, comments: unknown[]): bool
   return comments.some((comment) =>
     isRecord(comment) && typeof comment.body === "string" && ISSUEHUNT_REFERENCE.test(comment.body)
   );
+}
+
+export function issueHuntReferenceRoutes(
+  issue: unknown,
+  comments: unknown[],
+  issueNumber: number,
+): Array<{ owner: string; repo: string; number: number }> {
+  if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) return [];
+  const texts: string[] = [];
+  if (isRecord(issue) && typeof issue.body === "string") texts.push(issue.body);
+  for (const comment of comments) {
+    if (isRecord(comment) && typeof comment.body === "string") texts.push(comment.body);
+  }
+
+  const routes: Array<{ owner: string; repo: string; number: number }> = [];
+  const seen = new Set<string>();
+  for (const text of texts) {
+    for (const match of text.matchAll(ISSUEHUNT_ROUTE_REFERENCE)) {
+      const number = Number(match[3]);
+      if (number !== issueNumber) continue;
+      const key = `${match[1].toLowerCase()}/${match[2].toLowerCase()}/${number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      routes.push({ owner: match[1], repo: match[2], number });
+      if (routes.length === ISSUEHUNT_MAX_REFERENCE_ROUTES) return routes;
+    }
+  }
+  return routes;
 }
 
 export function parseIssueHuntPage(

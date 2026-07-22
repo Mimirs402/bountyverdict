@@ -1,6 +1,10 @@
 import { analyzeBounty, externalSourceIssue, parseIssueUrl } from "../../analysis.js";
 import { fetchBountyHubEvidence, hasBountyHubReference } from "./bountyhub.ts";
-import { fetchIssueHuntEvidence, hasIssueHuntReference } from "./issuehunt.ts";
+import {
+  fetchIssueHuntEvidence,
+  hasIssueHuntReference,
+  issueHuntReferenceRoutes,
+} from "./issuehunt.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -309,6 +313,45 @@ function summarize(verdict: AgentVerdict["verdict"], hasHardStop: boolean): stri
   return "A public hard stop or severe risk signal makes this issue an unsafe bounty target.";
 }
 
+async function fetchCanonicalIssueHuntEvidence(
+  issue: unknown,
+  comments: unknown[],
+  canonical: { owner: string; repo: string; number: number },
+  submitted: { owner: string; repo: string; number: number },
+  repositoryGithubId: unknown,
+  fetchImpl: FetchLike,
+) {
+  if (!hasIssueHuntReference(issue, comments) ||
+      typeof repositoryGithubId !== "number" || !Number.isSafeInteger(repositoryGithubId) ||
+      repositoryGithubId < 1) return null;
+
+  const candidates = [
+    canonical,
+    submitted,
+    ...issueHuntReferenceRoutes(issue, comments, canonical.number),
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const key = `${candidate.owner.toLowerCase()}/${candidate.repo.toLowerCase()}/${candidate.number}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    // IssueHunt records can retain a pre-transfer route. The submitted GitHub URL
+    // or exact issue-body reference supplies only a route candidate;
+    // parseIssueHuntPage must still bind it to the canonical repository's
+    // immutable GitHub ID and exact issue number before it becomes evidence.
+    const evidence = await fetchIssueHuntEvidence(
+      candidate.owner,
+      candidate.repo,
+      repositoryGithubId,
+      candidate.number,
+      fetchImpl,
+    );
+    if (evidence) return evidence;
+  }
+  return null;
+}
+
 export async function checkGithubIssue(
   issueUrl: string,
   env: CheckEnvironment = {},
@@ -384,10 +427,14 @@ async function checkGithubIssueInternal(
     hasBountyHubReference(issueResponse.data, comments)
       ? fetchBountyHubEvidence(owner, repo, number, fetchImpl)
       : null,
-    hasIssueHuntReference(issueResponse.data, comments) &&
-        Number.isSafeInteger(repoResponse.data?.id) && repoResponse.data.id > 0
-      ? fetchIssueHuntEvidence(owner, repo, repoResponse.data.id, number, fetchImpl)
-      : null,
+    fetchCanonicalIssueHuntEvidence(
+      issueResponse.data,
+      comments,
+      canonical,
+      submitted,
+      repoResponse.data?.id,
+      fetchImpl,
+    ),
   ]);
   const platformEvidence = issueHuntEvidence?.state === "REWARDED" ||
       issueHuntEvidence?.submitted_pull_requests.length

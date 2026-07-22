@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "experiment_id": "mcp-agent-question-descriptions-v4",
+  "experiment_id": "mcp-agent-question-descriptions-v5",
   "release_commit": "REPLACE_WITH_EXACT_40_CHARACTER_RELEASE_COMMIT",
   "production_activation_commit": "REPLACE_WITH_EXACT_40_CHARACTER_PRODUCTION_ACTIVATION_COMMIT",
   "production_activated_at": "REPLACE_WITH_CANONICAL_PRODUCTION_ACTIVATION_TIMESTAMP",

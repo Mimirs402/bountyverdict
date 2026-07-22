@@ -290,7 +290,7 @@ test("distribution monitoring keeps task-leading descriptions in a separate fail
   assert.equal(activationTemplate.target_tools_list, 25);
 });
 
-test("question-shaped MCP selection copy gets an isolated v4 checkpoint after the provider refresh", async () => {
+test("question-shaped MCP selection copy gets an isolated v5 checkpoint after the audited refresh", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   const activationTemplate = JSON.parse(await readFile(new URL(
     "../agent/config/agent-question-description-experiment.activation.template.json",
@@ -298,12 +298,12 @@ test("question-shaped MCP selection copy gets an isolated v4 checkpoint after th
   ), "utf8"));
   assert.match(distribution, /AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID/);
   assert.match(distribution, /AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE/);
-  assert.match(distribution, /experiments\/mcp-agent-question-descriptions-v4\.json/);
+  assert.match(distribution, /experiments\/mcp-agent-question-descriptions-v5\.json/);
   assert.match(distribution, /persistedAgentQuestionDescriptionExperiment \|\|\s+previousReport\.funnel\?\.mcp_agent_question_description_experiment \|\| null/);
   assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+agentQuestionDescriptionExperimentStateFile/s);
   assert.match(distribution, /mcp_agent_question_description_experiment: mcpAgentQuestionDescriptionExperiment/);
-  assert.match(distribution, /the completed v2 baseline and excluded v3 provider-refresh window remain frozen/);
-  assert.equal(activationTemplate.experiment_id, "mcp-agent-question-descriptions-v4");
+  assert.match(distribution, /the completed v2 baseline and excluded v3\/v4 audit windows remain frozen/);
+  assert.equal(activationTemplate.experiment_id, "mcp-agent-question-descriptions-v5");
   assert.equal(activationTemplate.measurement_epoch_id, 0);
   assert.equal(activationTemplate.target_tools_list, 25);
 });

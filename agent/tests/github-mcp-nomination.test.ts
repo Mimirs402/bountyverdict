@@ -13,7 +13,7 @@ import {
 test("GitHub nomination is fixed to the official registry route and business identity", () => {
   assert.equal(GITHUB_MCP_NOMINATION.recipient, "partnerships@github.com");
   assert.equal(GITHUB_MCP_NOMINATION.sender, "admin@mimirslab.com");
-  assert.match(GITHUB_MCP_NOMINATION.body, /io\.github\.Mimirs402\/bountyverdict@1\.1\.9/);
+  assert.match(GITHUB_MCP_NOMINATION.body, /io\.github\.Mimirs402\/bountyverdict@1\.1\.10/);
   assert.match(GITHUB_MCP_NOMINATION.body, /public GitHub MCP Registry only/);
   assert.match(GITHUB_MCP_NOMINATION.body, /not an application to the Technology Partner Program/);
   assert.match(GITHUB_MCP_NOMINATION.body, /explicit per-call x402 Base USDC authorization/);
@@ -52,7 +52,7 @@ test("SMTP configuration permits only the dedicated Proton business sender", () 
 
 test("nomination receipt identity is bound to the fixed content contract", () => {
   assert.match(nominationContractSha256(), /^[a-f0-9]{64}$/);
-  assert.equal(nominationContractSha256(), "953fced3bfd4f2f7998188d097373999d74fa10f1fc7f9c8e3ad9fdce938db1b");
+  assert.equal(nominationContractSha256(), "533b6c92407b6c25147b5c54c107842957552c6efd540c09cbe594f58d493cb7");
 });
 
 test("SMTP secret travels through a credential pipe rather than argv or message", () => {

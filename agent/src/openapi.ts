@@ -60,7 +60,7 @@ export function createOpenApi(
     openapi: "3.1.0",
     info: {
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.9",
+      version: "1.1.10",
       description: "Seven bounded decision APIs for coding agents: evidence-linked GitHub due diligence and diagnostics plus deterministic MCP tool-catalog compatibility and security gates. Payment uses x402 v2 and Base USDC.",
       "x-guidance": "Choose the narrowest operation for the decision at hand, inspect its free sample and unpaid x402 challenge, then pay only when the challenge matches the documented price, Base USDC asset, and operation. Reuse a successful result only according to its service_reuse field.",
       license: { name: "MIT", identifier: "MIT" },

@@ -11,7 +11,7 @@ export const GITHUB_MCP_NOMINATION = Object.freeze({
   smtpPort: 587,
   subject: "Nomination: io.github.Mimirs402/bountyverdict for GitHub MCP Registry",
   body: [
-    "Please consider io.github.Mimirs402/bountyverdict@1.1.9 for inclusion in the public GitHub MCP Registry.",
+    "Please consider io.github.Mimirs402/bountyverdict@1.1.10 for inclusion in the public GitHub MCP Registry.",
     "",
     "OSS Registry: https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Mimirs402%2Fbountyverdict",
     "Source: https://github.com/Mimirs402/bountyverdict",

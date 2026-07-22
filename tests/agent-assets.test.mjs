@@ -70,8 +70,8 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
-  assert.equal(manifest.release_version, "1.1.9");
-  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.9$/);
+  assert.equal(manifest.release_version, "1.1.10");
+  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.10$/);
   assert.ok(["awaiting_production", "active"].includes(manifest.status));
   if (manifest.status === "awaiting_production") assert.equal(manifest.production_api, null);
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
@@ -82,7 +82,7 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
-  assert.equal(manifest.mcp.server_version, "1.1.9");
+  assert.equal(manifest.mcp.server_version, "1.1.10");
   assert.equal(manifest.mcp.machine_readable_output_contracts, true);
   assert.equal(manifest.ard_catalog, "https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json");
   assert.match(manifest.skill, /route-github-agent-checks\/SKILL\.md$/);
@@ -272,8 +272,8 @@ test("agent landing page exposes all seven self-serve products", async () => {
   assert.match(page, /six paid, read-only tools/);
   assert.match(page, /SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP/);
   assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
-  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.9/);
-  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.9/);
+  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.10/);
+  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.10/);
   assert.match(page, /copilot plugin install Mimirs402\/bountyverdict/);
   assert.match(page, /npx awal@2\.12\.0 x402 details/);
   assert.match(page, /npx awal@2\.12\.0 x402 pay/);

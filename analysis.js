@@ -34,6 +34,25 @@ const AI_POLICY_DISCLOSURE_PATTERNS = [
   /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i
 ];
 
+const CLAIM_INTENT_TTL_DAYS = 30;
+const CLAIM_INTENT_PATTERNS = [
+  /\bplease\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
+  /\b(?:can|could|would)\s+you\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
+  /\bassign\s+me\s+(?:to\s+)?(?:this issue|this|it|the issue)\b/i,
+  /\bi(?:['’]m|\s+am)\s+(?:now\s+)?(?:working|starting(?:\s+work)?)\s+on\s+(?:this|it|the issue)\b/i,
+  /\bi\s+(?:claim|am taking|will take|['’]ll take)\s+(?:this|it|the issue|this bounty|the bounty)\b/i,
+  /\b(?:let me|i(?:['’]d|\s+would)\s+like\s+to)\s+(?:fix|handle|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
+  /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\s+(?:for|to fix)\s+(?:this|it|the issue)\b/i,
+  /(?:^|\n)\s*taking\s+(?:this|it|the issue)\b/im,
+];
+const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
+  /\bwithdraw(?:ing)?\s+(?:my\s+)?(?:claim|interest|attempt)\b/i,
+  /\bno longer\s+(?:working|claiming|interested)\b/i,
+  /\b(?:can['’]?t|cannot|won['’]?t|will not)\s+(?:continue\s+)?work(?:ing)?\s+on\s+(?:this|it|the issue)\b/i,
+  /\b(?:please\s+)?unassign\s+me\b/i,
+  /\b(?:dropping|giving up)\s+(?:this|it|the issue|my claim)\b/i,
+];
+
 export function parseIssueUrl(value) {
   let url;
   try {
@@ -217,6 +236,25 @@ function activeSoftLockClaims(issue, comments, now) {
   );
 }
 
+function activeClaimIntent(comments, now) {
+  const states = new Map();
+  const ordered = [...comments].sort((left, right) => commentTime(left) - commentTime(right));
+  for (const comment of ordered) {
+    const login = comment.user?.login;
+    if (!login || TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug)) continue;
+    const body = comment.body ?? "";
+    if (CLAIM_INTENT_WITHDRAWAL_PATTERNS.some((pattern) => pattern.test(body))) {
+      states.delete(login);
+      continue;
+    }
+    if (CLAIM_INTENT_PATTERNS.some((pattern) => pattern.test(body))) states.set(login, comment);
+  }
+  const cutoff = now.getTime() - CLAIM_INTENT_TTL_DAYS * 86_400_000;
+  return [...states.entries()].flatMap(([login, comment]) =>
+    commentTime(comment) >= cutoff ? [{ login, comment }] : []
+  );
+}
+
 export function analyzeBounty({ issue, repository, comments = [], timeline = [], policyDocuments = [], coverage = {}, now = new Date() }) {
   const signals = [];
   const assignees = Array.isArray(issue.assignees)
@@ -228,6 +266,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
   const currentPlatformClaim = platformClaimState(comments, openPulls);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
+  const claimantInterest = activeClaimIntent(comments, now);
   const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
@@ -305,6 +344,18 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       `${activeClaims.length} claimant${activeClaims.length === 1 ? " is" : "s are"} still within the repository's ${latest.ttlDays}-day soft-lock window.`,
       latest.comment.html_url ?? issue.html_url,
       true,
+    ));
+  }
+
+  if (claimantInterest.length) {
+    const impact = -Math.min(30, claimantInterest.length * 10);
+    score += impact;
+    const latest = claimantInterest.sort((left, right) => commentTime(right.comment) - commentTime(left.comment))[0];
+    signals.push(signal(
+      "Unconfirmed claimant interest",
+      impact,
+      `${claimantInterest.length} distinct user${claimantInterest.length === 1 ? " has" : "s have"} explicitly indicated current intent to work on the issue within the last ${CLAIM_INTENT_TTL_DAYS} days; this is competition evidence, not a confirmed assignment.`,
+      latest.comment.html_url ?? issue.html_url,
     ));
   }
 
@@ -442,6 +493,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     aiPolicyRequirements,
     reward,
     activeClaims,
+    claimantInterest,
     signals: signals.sort((left, right) => left.impact - right.impact)
   };
 }

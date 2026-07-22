@@ -123,6 +123,22 @@ test("directory monitoring verifies the anonymous Agent-Skills.md adapter withou
   assert.match(distribution, /anonymous submission and catalog presence are never impressions, installs, tool calls, purchases, or revenue/);
 });
 
+test("directory monitoring tracks the seven canonical askill entries and task retrieval without inventing demand", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /const askillMainSubmittedAt = "2026-07-22T00:19:00\.000Z"/);
+  assert.match(directory, /async function askillMainStatus/);
+  assert.match(directory, /parseAskillMainSearchPayload/);
+  assert.match(directory, /parseAskillMainBuyerQueryPayload/);
+  assert.match(directory, /indexed_skills: 7/);
+  assert.match(directory, /askill_main: askillMain/);
+  assert.match(directory, /exact_seven_skill_catalog_presence_and_fixed_owner_run_ranks_not_search_volume_impressions_installs_tool_calls_purchases_or_revenue/);
+  assert.match(distribution, /Canonical askill skill suite/);
+  assert.match(distribution, /listing and owner-run rank evidence are never impressions, installs, calls, purchases, or revenue/);
+});
+
 test("directory monitoring tracks the exact SkillsMD submission and public install counter without claiming revenue", async () => {
   const [directory, distribution, parser] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),
@@ -445,7 +461,7 @@ test("directory monitoring tracks ToolHive review and exact in-agent remote cont
   assert.match(distribution, /ToolHive in-agent catalog/);
   assert.match(distribution, /exact six-tool remote contract/);
   assert.match(parser, /io\.github\.stacklok\/bountyverdict/);
-  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.5"/);
+  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.6"/);
 });
 
 test("directory monitoring tracks Gemini CLI gallery propagation without claiming demand", async () => {
@@ -531,7 +547,7 @@ test("Gemini CLI extension exposes only the hosted paid MCP without secrets", as
   const manifest = JSON.parse(await readFile(geminiExtensionUrl, "utf8"));
   assert.deepEqual(manifest, {
     name: "bountyverdict",
-    version: "1.1.5",
+    version: "1.1.6",
     description: "Paid GitHub bounty selection, CI diagnosis, flaky-run triage, agent-instruction audits, and MCP compatibility checks for autonomous coding agents.",
     mcpServers: {
       bountyverdict: {

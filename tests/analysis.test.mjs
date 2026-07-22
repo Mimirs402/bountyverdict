@@ -232,6 +232,62 @@ test("Opire slash commands contribute to attempt competition", () => {
   assert.ok(output.signals.some((item) => item.label === "Attempt swarm"));
 });
 
+test("recent natural-language claim intent makes a contested bounty cautionary", () => {
+  const comments = [{
+    body: "Please assign this issue to me.",
+    created_at: "2026-07-18T12:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-alice",
+    user: { login: "alice" },
+  }, {
+    body: "Let me fix this; I will send a tested patch.",
+    created_at: "2026-07-19T12:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-bob",
+    user: { login: "bob" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.verdict, "CAUTION");
+  assert.equal(output.score, 73);
+  assert.deepEqual(output.claimantInterest.map(({ login }) => login).sort(), ["alice", "bob"]);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unconfirmed claimant interest" && item.impact === -20 && !item.hardStop
+  ));
+});
+
+test("a later withdrawal clears only that user's natural-language claim intent", () => {
+  const comments = [{
+    body: "I am working on this issue.",
+    created_at: "2026-07-18T12:00:00Z",
+    user: { login: "alice" },
+  }, {
+    body: "I claim this bounty.",
+    created_at: "2026-07-18T13:00:00Z",
+    user: { login: "bob" },
+  }, {
+    body: "I am no longer working on this issue.",
+    created_at: "2026-07-19T12:00:00Z",
+    user: { login: "alice" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.deepEqual(output.claimantInterest.map(({ login }) => login), ["bob"]);
+  assert.ok(output.signals.some((item) => item.label === "Unconfirmed claimant interest" && item.impact === -10));
+});
+
+test("stale or ambiguous interest does not create a claimant signal", () => {
+  const comments = [{
+    body: "I am working on this issue.",
+    created_at: "2026-05-01T12:00:00Z",
+    user: { login: "stale-solver" },
+  }, {
+    body: "Let me know if I can help with testing.",
+    created_at: "2026-07-19T12:00:00Z",
+    user: { login: "helper" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.verdict, "VIABLE");
+  assert.equal(output.claimantInterest.length, 0);
+  assert.ok(!output.signals.some((item) => item.label === "Unconfirmed claimant interest"));
+});
+
 test("a current heading-style claim honors an explicit repository soft lock", () => {
   const comments = [{
     body: "## Claim\n\nI am taking this implementation.",

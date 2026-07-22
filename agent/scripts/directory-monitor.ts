@@ -21,7 +21,12 @@ import {
   ASKILL_BUYER_QUERIES,
   ASKILL_DEDICATED_IDENTITY,
   ASKILL_LEGACY_IDENTITY,
+  ASKILL_MAIN_OWNER,
+  ASKILL_MAIN_REPO,
+  ASKILL_MAIN_SKILLS,
   parseAskillBuyerQueryPayload,
+  parseAskillMainBuyerQueryPayload,
+  parseAskillMainSearchPayload,
   parseAskillSearchPayload,
   type AskillIdentity,
 } from "../src/askill.ts";
@@ -121,6 +126,7 @@ const askillRefreshRecordedAt = "2026-07-21T16:00:14Z";
 const askillRefreshResult = "existing_skill_skipped_zero_indexed";
 const askillDedicatedSearchUrl = "https://askill.sh/api/v1/skills?q=route-github-agent-decisions&owner=Mimirs402&repo=bountyverdict-mcp-skill&limit=20";
 const askillDedicatedSubmittedAt = "2026-07-21T21:37:35.000Z";
+const askillMainSubmittedAt = "2026-07-22T00:19:00.000Z";
 const askillLegacyMonitor = Object.freeze({
   searchUrl: askillSearchUrl,
   submittedAt: askillSubmittedAt,
@@ -147,7 +153,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-22T00:05:36Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.1.5";
+const githubSkillReleaseTag = "v1.1.6";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
@@ -1474,7 +1480,7 @@ async function geminiCliGalleryStatus(
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
     const contractVerified = Boolean(entry && entry.url === repository && entry.extensionName === "bountyverdict" &&
-      entry.extensionVersion === "1.1.5" && entry.hasMCP === true);
+      entry.extensionVersion === "1.1.6" && entry.hasMCP === true);
     return {
       url: "https://geminicli.com/extensions/",
       catalog_url: geminiCliGalleryUrl,
@@ -2573,6 +2579,101 @@ async function askillStatus(
   }
 }
 
+async function askillMainStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const entries = await Promise.all(ASKILL_MAIN_SKILLS.map(async (name) => {
+      const url = new URL("https://askill.sh/api/v1/skills");
+      url.searchParams.set("q", name);
+      url.searchParams.set("owner", ASKILL_MAIN_OWNER);
+      url.searchParams.set("repo", ASKILL_MAIN_REPO);
+      url.searchParams.set("limit", "20");
+      const response = await fetch(url, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) throw new Error(`askill main-repository ${name} lookup returned HTTP ${response.status}.`);
+      return parseAskillMainSearchPayload(await response.json(), name);
+    }));
+    const listedEntries = entries.filter((entry) => entry.listed === true);
+    const exact = listedEntries.length === ASKILL_MAIN_SKILLS.length &&
+      listedEntries.every((entry) => entry.revision_live === true);
+    let buyerQueryBenchmark: Record<string, unknown>;
+    try {
+      const queryResults = await Promise.all(ASKILL_BUYER_QUERIES.map(async (query) => {
+        const url = new URL("https://askill.sh/api/v1/skills");
+        url.searchParams.set("q", query);
+        url.searchParams.set("limit", "50");
+        const response = await fetch(url, {
+          headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!response.ok) throw new Error(`askill main-repository buyer query returned HTTP ${response.status}.`);
+        return { query, ...parseAskillMainBuyerQueryPayload(await response.json()) };
+      }));
+      const found = queryResults.filter((result) => result.found === true);
+      buyerQueryBenchmark = {
+        available: true,
+        queries: queryResults,
+        query_count: queryResults.length,
+        found_queries: found.length,
+        top_three_queries: found.filter((result) => Number(result.rank) <= 3).length,
+        worst_found_rank: found.length ? Math.max(...found.map((result) => Number(result.rank))) : null,
+        measurement: "fixed_owner_run_unbranded_catalog_queries_not_search_volume_impressions_installs_or_demand",
+      };
+    } catch (error) {
+      buyerQueryBenchmark = {
+        available: false,
+        error: error instanceof Error ? error.message : String(error),
+        measurement: "fixed_owner_run_unbranded_catalog_queries_not_search_volume_impressions_installs_or_demand",
+      };
+    }
+    return {
+      url: listedEntries[0]?.listing_url || "https://askill.sh/",
+      listed: exact,
+      listed_skills: listedEntries.length,
+      expected_skills: ASKILL_MAIN_SKILLS.length,
+      status: exact ? "listed" : listedEntries.length ? "partial_or_stale_index" : "not_indexed",
+      entries,
+      favorites: listedEntries.reduce((sum, entry) => sum + Number(entry.favorites || 0), 0),
+      buyer_query_benchmark: buyerQueryBenchmark,
+      submission: {
+        submitted_at: askillMainSubmittedAt,
+        repository: `${ASKILL_MAIN_OWNER}/${ASKILL_MAIN_REPO}`,
+        indexed_skills: 7,
+        ignored_invalid: 0,
+        entry_ids: [703723, 703724, 703725, 703726, 703727, 703728, 703729],
+        response_message: "Found and indexed 7 skills.",
+      },
+      exposed_at: exact ? previousStatus.exposed_at || askillMainSubmittedAt : null,
+      checked_at: observedAt,
+      measurement: "exact_seven_skill_catalog_presence_and_fixed_owner_run_ranks_not_search_volume_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: "https://askill.sh/",
+      listed: false,
+      listed_skills: 0,
+      expected_skills: ASKILL_MAIN_SKILLS.length,
+      status: "catalog_request_failed",
+      submission: {
+        submitted_at: askillMainSubmittedAt,
+        repository: `${ASKILL_MAIN_OWNER}/${ASKILL_MAIN_REPO}`,
+        indexed_skills: 7,
+        ignored_invalid: 0,
+        entry_ids: [703723, 703724, 703725, 703726, 703727, 703728, 703729],
+        response_message: "Found and indexed 7 skills.",
+      },
+      exposed_at: null,
+      checked_at: observedAt,
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "exact_seven_skill_catalog_presence_and_fixed_owner_run_ranks_not_search_volume_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
 async function agentSkillsMdStatus(
   previousStatus: Record<string, any>,
   observedAt: string,
@@ -2810,6 +2911,7 @@ const [
   skillsMd,
   askill,
   askillDedicated,
+  askillMain,
   agentSkillsMd,
 ] = await Promise.all([
   skillsShStatus(),
@@ -2854,6 +2956,7 @@ const [
   skillsMdStatus(previous.skills_md || {}, new Date().toISOString()),
   askillStatus(previous.askill || {}, new Date().toISOString()),
   askillStatus(previous.askill_dedicated || {}, new Date().toISOString(), askillDedicatedMonitor),
+  askillMainStatus(previous.askill_main || {}, new Date().toISOString()),
   agentSkillsMdStatus(previous.agent_skills_md || {}, new Date().toISOString()),
 ]);
 if (Number(x402scan.listed_resources || 0) > 0) {
@@ -3055,6 +3158,7 @@ const state = {
   skills_md: skillsMd,
   askill,
   askill_dedicated: askillDedicated,
+  askill_main: askillMain,
   agent_skills_md: agentSkillsMd,
   github_skill: githubSkill,
   security_directory_pr: securityDirectoryPr,

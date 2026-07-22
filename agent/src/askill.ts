@@ -13,6 +13,19 @@ export const ASKILL_DEDICATED_OWNER = "Mimirs402";
 export const ASKILL_DEDICATED_INSTALL_REF =
   `gh:${ASKILL_DEDICATED_REPOSITORY}@${ASKILL_SKILL_NAME}`;
 export const ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-21T21:37:35.000Z";
+export const ASKILL_MAIN_OWNER = "Mimirs402";
+export const ASKILL_MAIN_REPO = "bountyverdict";
+export const ASKILL_MAIN_REPOSITORY = `${ASKILL_MAIN_OWNER}/${ASKILL_MAIN_REPO}`;
+export const ASKILL_MAIN_REQUIRED_REVISION_PUSHED_AT = "2026-07-22T00:09:03.000Z";
+export const ASKILL_MAIN_SKILLS = Object.freeze([
+  "audit-agent-harness",
+  "check-mcp-tool-drift",
+  "classify-github-flakes",
+  "diagnose-github-actions",
+  "preflight-agent-skills",
+  "preflight-github-bounties",
+  "route-github-agent-checks",
+] as const);
 export const ASKILL_BUYER_QUERIES = Object.freeze([
   "github actions root cause",
   "should I retry failed github action",
@@ -196,6 +209,115 @@ export function parseAskillBuyerQueryPayload(
   return {
     found: matches.length === 1,
     rank: matches[0] || null,
+    returned_results: payload.data.length,
+  };
+}
+
+function mainSkillContract(entry: Record<string, unknown>, name: string): boolean {
+  const path = `skills/${name}`;
+  return entry.repoOwner === ASKILL_MAIN_OWNER && entry.repoName === ASKILL_MAIN_REPO &&
+    entry.owner === ASKILL_MAIN_OWNER && entry.repo === ASKILL_MAIN_REPO &&
+    entry.name === name && entry.skillName === name &&
+    entry.installRef === `gh:${ASKILL_MAIN_REPOSITORY}@${name}` &&
+    entry.path === path && entry.filePath === `${path}/SKILL.md` &&
+    entry.nameUniqueInRepo === true && entry.source === "submit";
+}
+
+export function parseAskillMainSearchPayload(value: unknown, expectedName: string): Record<string, unknown> {
+  if (!(ASKILL_MAIN_SKILLS as readonly string[]).includes(expectedName)) {
+    throw new Error("askill main-repository expected skill is unknown.");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("askill returned a malformed main-repository payload.");
+  }
+  const payload = value as Record<string, unknown>;
+  if (!Array.isArray(payload.data) || payload.data.length > 100 ||
+    !payload.pagination || typeof payload.pagination !== "object" || Array.isArray(payload.pagination)) {
+    throw new Error("askill returned malformed or unbounded main-repository telemetry.");
+  }
+  const pagination = payload.pagination as Record<string, unknown>;
+  if (counter(pagination.page, "main-repository page") !== 1 ||
+    counter(pagination.limit, "main-repository limit") > 100 ||
+    counter(pagination.total, "main-repository catalog total") < payload.data.length ||
+    typeof pagination.hasMore !== "boolean") {
+    throw new Error("askill main-repository pagination is malformed or unbounded.");
+  }
+  const matches = payload.data.filter((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("askill returned a malformed main-repository entry.");
+    }
+    const entry = value as Record<string, unknown>;
+    return entry.repoOwner === ASKILL_MAIN_OWNER && entry.repoName === ASKILL_MAIN_REPO && entry.name === expectedName;
+  }) as Array<Record<string, unknown>>;
+  if (matches.length > 1) throw new Error("askill duplicated a main-repository skill.");
+  const entry = matches[0];
+  if (!entry) return { listed: false, name: expectedName, status: "not_indexed" };
+  if (!mainSkillContract(entry, expectedName)) {
+    return { listed: false, name: expectedName, status: "contract_drift" };
+  }
+  if (!Array.isArray(entry.tags) || entry.tags.length > 50 ||
+    entry.tags.some((tag) => typeof tag !== "string" || tag.length === 0 || tag.length > 100)) {
+    throw new Error("askill main-repository tags are malformed or unbounded.");
+  }
+  const updatedAt = boundedString(entry.updatedAt, "main-repository updated timestamp", 64);
+  const lastPushed = boundedString(entry.lastPushed, "main-repository last-pushed timestamp", 64);
+  if (!Number.isFinite(Date.parse(updatedAt))) throw new Error("askill main-repository updated timestamp is malformed.");
+  if (!Number.isFinite(Date.parse(lastPushed))) throw new Error("askill main-repository last-pushed timestamp is malformed.");
+  const revisionLive = Date.parse(lastPushed) >= Date.parse(ASKILL_MAIN_REQUIRED_REVISION_PUSHED_AT);
+  const id = counter(entry.id, "main-repository entry ID");
+  return {
+    listed: true,
+    name: expectedName,
+    entry_id: id,
+    listing_url: `https://askill.sh/skills/${id}`,
+    install_source: `gh:${ASKILL_MAIN_REPOSITORY}@${expectedName}`,
+    favorites: counter(entry.favoriteCount, "main-repository favorite count"),
+    repository_stars: counter(entry.stars, "main-repository stars"),
+    ai_score: optionalScore(entry.aiScore, "main-repository AI score"),
+    llm_score: optionalScore(entry.llmScore, "main-repository LLM score"),
+    tags: [...entry.tags] as string[],
+    updated_at: updatedAt,
+    last_pushed: lastPushed,
+    revision_live: revisionLive,
+    status: revisionLive ? "listed" : "listed_pending_content_refresh",
+  };
+}
+
+export function parseAskillMainBuyerQueryPayload(value: unknown): AskillBuyerQueryResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("askill returned a malformed main-repository buyer-query payload.");
+  }
+  const payload = value as Record<string, unknown>;
+  if (!Array.isArray(payload.data) || payload.data.length > 100 ||
+    !payload.pagination || typeof payload.pagination !== "object" || Array.isArray(payload.pagination)) {
+    throw new Error("askill returned malformed or unbounded main-repository buyer-query telemetry.");
+  }
+  const pagination = payload.pagination as Record<string, unknown>;
+  if (counter(pagination.page, "main buyer-query page") !== 1 ||
+    counter(pagination.limit, "main buyer-query limit") > 100 ||
+    counter(pagination.total, "main buyer-query catalog total") < payload.data.length ||
+    typeof pagination.hasMore !== "boolean") {
+    throw new Error("askill main-repository buyer-query pagination is malformed or unbounded.");
+  }
+  const matchedNames = new Set<string>();
+  const matches: number[] = [];
+  payload.data.forEach((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("askill returned a malformed main-repository buyer-query entry.");
+    }
+    const entry = value as Record<string, unknown>;
+    if (entry.repoOwner !== ASKILL_MAIN_OWNER || entry.repoName !== ASKILL_MAIN_REPO) return;
+    const name = String(entry.name || "");
+    if (!(ASKILL_MAIN_SKILLS as readonly string[]).includes(name) || !mainSkillContract(entry, name)) {
+      throw new Error("askill main-repository buyer-query target contract drifted.");
+    }
+    if (matchedNames.has(name)) throw new Error("askill duplicated a main-repository buyer-query target.");
+    matchedNames.add(name);
+    matches.push(index + 1);
+  });
+  return {
+    found: matches.length > 0,
+    rank: matches.length ? Math.min(...matches) : null,
     returned_results: payload.data.length,
   };
 }

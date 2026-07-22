@@ -9,12 +9,18 @@ import {
   ASKILL_FILE_PATH,
   ASKILL_BUYER_QUERIES,
   ASKILL_INSTALL_REF,
+  ASKILL_MAIN_OWNER,
+  ASKILL_MAIN_REPO,
+  ASKILL_MAIN_REQUIRED_REVISION_PUSHED_AT,
+  ASKILL_MAIN_SKILLS,
   ASKILL_OWNER,
   ASKILL_PATH,
   ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT,
   ASKILL_REPO,
   ASKILL_SKILL_NAME,
   parseAskillBuyerQueryPayload,
+  parseAskillMainBuyerQueryPayload,
+  parseAskillMainSearchPayload,
   parseAskillSearchPayload,
 } from "../src/askill.ts";
 
@@ -45,6 +51,38 @@ const exactEntry = {
 const payload = (data: unknown[]) => ({
   data,
   pagination: { page: 1, limit: 20, total: 261140, hasMore: false },
+});
+
+test("tracks all seven canonical main-repository skills as separate exact listings", () => {
+  const mainEntries = ASKILL_MAIN_SKILLS.map((name, index) => ({
+    ...exactEntry,
+    id: 703723 + index,
+    installRef: `gh:${ASKILL_MAIN_OWNER}/${ASKILL_MAIN_REPO}@${name}`,
+    name,
+    skillName: name,
+    owner: ASKILL_MAIN_OWNER,
+    repoOwner: ASKILL_MAIN_OWNER,
+    repo: ASKILL_MAIN_REPO,
+    repoName: ASKILL_MAIN_REPO,
+    path: `skills/${name}`,
+    filePath: `skills/${name}/SKILL.md`,
+    updatedAt: ASKILL_MAIN_REQUIRED_REVISION_PUSHED_AT,
+    lastPushed: ASKILL_MAIN_REQUIRED_REVISION_PUSHED_AT,
+  }));
+  const parsed = parseAskillMainSearchPayload(payload(mainEntries), "preflight-github-bounties");
+  assert.equal(parsed.listed, true);
+  assert.equal(parsed.entry_id, 703728);
+  assert.equal(parsed.revision_live, true);
+  assert.equal(parsed.install_source, "gh:Mimirs402/bountyverdict@preflight-github-bounties");
+  assert.deepEqual(parseAskillMainBuyerQueryPayload(payload([
+    { ...exactEntry, installRef: "gh:other/repo@skill" },
+    mainEntries[5],
+    mainEntries[3],
+  ])), { found: true, rank: 2, returned_results: 3 });
+  assert.equal(parseAskillMainSearchPayload(payload([]), "diagnose-github-actions").status, "not_indexed");
+  assert.equal(parseAskillMainSearchPayload(payload([{ ...mainEntries[3], filePath: "wrong" }]), "diagnose-github-actions").status, "contract_drift");
+  assert.throws(() => parseAskillMainSearchPayload(payload(mainEntries), "unknown"), /unknown/);
+  assert.throws(() => parseAskillMainBuyerQueryPayload(payload([mainEntries[3], mainEntries[3]])), /duplicated/);
 });
 
 test("recognizes only the exact askill adapter listing", () => {

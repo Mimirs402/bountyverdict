@@ -4,6 +4,7 @@ export const SELECTION_EXPERIMENT_COUNTER_KEYS = Object.freeze([
   "protocol_error",
   "tool_not_found",
   "validation_error",
+  "selection_preview",
   "capacity_rejected",
   "payment_required",
   "payment_present",
@@ -36,7 +37,7 @@ function counters(value: unknown, label: string, legacySchemaVersion: 1 | 2 | nu
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} counters are missing.`);
   const record = value as Record<string, unknown>;
   return Object.fromEntries(SELECTION_EXPERIMENT_COUNTER_KEYS.map((key) => {
-    const legacyMissing = record[key] === undefined && (
+    const legacyMissing = record[key] === undefined && (key === "selection_preview" ||
       (legacySchemaVersion === 1 && key === "paid_error") ||
       (legacySchemaVersion !== null && (key === "protocol_error" || key === "tool_not_found"))
     );
@@ -76,7 +77,8 @@ function validPrevious(value: unknown, id: string): Record<string, any> | null {
   return record.id === id && (
     record.accounting_schema_version === 1 ||
     record.accounting_schema_version === 2 ||
-    record.accounting_schema_version === 3
+    record.accounting_schema_version === 3 ||
+    record.accounting_schema_version === 4
   )
     ? record
     : null;
@@ -98,6 +100,7 @@ function decisionFor(delta: SelectionExperimentCounters, attributableRuntime: Se
   if (delta.payment_present > delta.capacity_rejected) return "signed_payment_outcome_unresolved";
   if (delta.capacity_rejected > 0) return "service_capacity_friction_after_valid_call";
   if (delta.payment_required > 0) return "valid_call_interest_observed_without_payment_presentation";
+  if (delta.selection_preview > 0) return "free_selection_preview_observed";
   if (attributableRuntime.validation_error > 0) return "schema_friction_after_attributable_runtime_selection";
   if (delta.validation_error > 0) return "input_friction_observed_without_attributable_runtime";
   if (delta.tool_not_found > 0) return "unknown_tool_invocation_observed";
@@ -122,7 +125,7 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
   const previous = validPrevious(input.previous, input.id);
   const legacySchemaVersion = previous?.accounting_schema_version === 1
     ? 1
-    : previous?.accounting_schema_version === 2
+    : previous?.accounting_schema_version === 2 || previous?.accounting_schema_version === 3
       ? 2
       : null;
   let completed = previous
@@ -217,7 +220,7 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
   const callOpportunities = eligible.tool_not_found + eligible.validation_error + validCallEvents;
 
   return {
-    accounting_schema_version: 3,
+    accounting_schema_version: 4,
     status,
     decision,
     target_tools_list: input.targetToolsList,
@@ -239,6 +242,9 @@ export function updateSelectionPreviewExperiment(input: SelectionExperimentInput
     event_ratios: {
       valid_call_per_tools_list_percent: eligible.tools_list > 0
         ? Math.round(validCallEvents / eligible.tools_list * 1_000) / 10
+        : null,
+      free_selection_preview_per_tools_list_percent: eligible.tools_list > 0
+        ? Math.round(eligible.selection_preview / eligible.tools_list * 1_000) / 10
         : null,
       invalid_call_share_percent: callOpportunities > 0
         ? Math.round((eligible.tool_not_found + eligible.validation_error) / callOpportunities * 1_000) / 10

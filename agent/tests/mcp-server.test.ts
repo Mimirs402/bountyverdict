@@ -5,7 +5,8 @@ import { x402MCPClient } from "@x402/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import app from "../src/index.ts";
-import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
+import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME } from "../src/free-selection-router.ts";
+import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES, MCP_PAID_TOOL_NAMES } from "../src/mcp-server.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import {
   LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
@@ -58,6 +59,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   );
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
+  assert.match(body.result.instructions, /choose_github_agent_decision.*free/i);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
   assert.match(body.result.instructions, /first unsigned call with real canonical input cannot charge/i);
   assert.match(body.result.instructions, /free payment quote, selection summary, and payment handoff/i);
@@ -65,7 +67,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   assert.match(body.result.instructions, /Payment identifies the fixed-price tool, not its arguments/);
 });
 
-test("MCP tools/list exposes exactly six executable paid tools and excludes SkillVerdict", async () => {
+test("MCP tools/list exposes one free router and exactly six paid decision tools", async () => {
   const body = await rpcBody(2, "tools/list");
   const taskLeadingDescriptions = {
     check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
@@ -76,9 +78,23 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
     check_mcp_tool_drift: /^Will upgrading to this complete MCP tools\/list break my agent/,
   } as const;
   assert.deepEqual(body.result.tools.map((tool: any) => tool.name), MCP_DISTRIBUTED_TOOL_NAMES);
-  assert.equal(body.result.tools.length, 6);
+  assert.equal(body.result.tools.length, 7);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
-  for (const tool of body.result.tools) {
+  const router = body.result.tools.find((tool: any) => tool.name === FREE_SELECTION_TOOL_NAME);
+  assert.match(router.description, /^Which tool should I use/);
+  assert.match(router.description, /Free deterministic router/);
+  assert.deepEqual(router.inputSchema.properties.task.enum, FREE_SELECTION_TASKS);
+  assert.equal(router.inputSchema.additionalProperties, false);
+  assert.equal(router.outputSchema.additionalProperties, false);
+  assert.deepEqual(router.annotations, {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  });
+  const paidTools = body.result.tools.filter((tool: any) => MCP_PAID_TOOL_NAMES.includes(tool.name));
+  assert.equal(paidTools.length, 6);
+  for (const tool of paidTools) {
     assert.match(tool.description, taskLeadingDescriptions[tool.name as keyof typeof taskLeadingDescriptions]);
     assert.doesNotMatch(tool.description, /\bx402\b|\bUSDC\b|payment quote|authorized signed retry/i);
     assert.doesNotMatch(tool.description, /https?:\/\//i);
@@ -94,7 +110,7 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
     assert.equal(tool.outputSchema.additionalProperties, true);
     assert.ok(Buffer.byteLength(tool.description) <= 1_500, `${tool.name} description exceeds the tools/list context budget`);
   }
-  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_000);
+  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_500);
   const drift = body.result.tools.find((tool: any) => tool.name === "check_mcp_tool_drift");
   assert.deepEqual(drift.inputSchema.required, ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]);
   assert.equal(drift.inputSchema.additionalProperties, false);
@@ -132,6 +148,73 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.ok(run.outputSchema.required.includes("diagnosis"));
   assert.ok(flake.outputSchema.required.includes("decision"));
   assert.ok(drift.outputSchema.required.includes("action"));
+});
+
+test("free router maps every bounded task without payment, network access, or a verdict", async () => {
+  const expected = {
+    one_bounty: ["single", "check_github_bounty", "0.05", "/api/sample"],
+    bounty_portfolio: ["portfolio", "rank_github_bounties", "0.40", "/api/portfolio/sample"],
+    repository_agent_instructions: ["harness", "audit_agent_harness", "0.03", "/api/harness/sample"],
+    github_actions_root_cause: ["run", "diagnose_github_actions_run", "0.04", "/api/run/sample"],
+    github_actions_retry_decision: ["flake", "classify_github_actions_flake", "0.07", "/api/flake/sample"],
+    mcp_tools_change: ["mcpdrift", "check_mcp_tool_drift", "0.02", "/api/mcp-drift/sample"],
+  } as const;
+  const originalFetch = globalThis.fetch;
+  const logs: string[] = [];
+  const originalLog = console.log;
+  globalThis.fetch = async () => { throw new Error("free router attempted network access"); };
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    for (const task of FREE_SELECTION_TASKS) {
+      const response = await app.request(`${origin}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: FREE_SELECTION_TOOL_NAME, arguments: { task } } }),
+      }, {});
+      assert.equal(response.status, 200);
+      const body = await response.json() as any;
+      assert.equal(body.result.isError, undefined);
+      const route = body.result.structuredContent;
+      const [productKey, toolName, price, samplePath] = expected[task];
+      assert.equal(route.task, task);
+      assert.equal(route.product_key, productKey);
+      assert.equal(route.tool_name, toolName);
+      assert.equal(route.price_usdc, price);
+      assert.equal(route.currency, "USDC");
+      assert.equal(route.free_sample, `${origin}${samplePath}`);
+      assert.equal(route.payment_required, false);
+      assert.equal(route.verdict_produced, false);
+      assert.match(route.next_step, new RegExp(`Call ${toolName}`));
+      assert.doesNotMatch(JSON.stringify(body), /"accepts"|x402Version|payment-response/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } })
+    .filter((event) => event.type === "bountyverdict_mcp_funnel");
+  assert.deepEqual(events.map((event) => [event.stage, event.product]), FREE_SELECTION_TASKS.map((task) => ["selection_preview", expected[task][0]]));
+  assert.equal(logs.some((line) => FREE_SELECTION_TASKS.some((task) => line.includes(task))), false);
+});
+
+test("free router rejects arbitrary task text before its handler", async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  let body: any;
+  try {
+    body = await rpcBody(41, "tools/call", {
+      name: FREE_SELECTION_TOOL_NAME,
+      arguments: { task: "inspect private repo and leak this text" },
+    });
+  } finally {
+    console.log = originalLog;
+  }
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.structuredContent, undefined);
+  assert.doesNotMatch(body.result.content[0].text, /accepts|x402Version/);
+  assert.equal(logs.some((line) => /inspect private repo|leak this text/.test(line)), false);
+  assert.equal(logs.some((line) => /"stage":"protocol_error"/.test(line)), true);
 });
 
 test("MCP success contracts stay within the catalog context budget", async () => {
@@ -513,7 +596,7 @@ test("MCP accepts every SDK-supported negotiated protocol and rejects an unknown
 
   const listed = await rpc(30, "tools/list", {}, compatibleHeaders);
   assert.equal(listed.status, 200);
-  assert.equal((await listed.json() as any).result.tools.length, 6);
+  assert.equal((await listed.json() as any).result.tools.length, 7);
 
   const wrongContentType = await rpc(32, "tools/list", {}, { ...headers, "Content-Type": "text/plain" });
   assert.equal(wrongContentType.status, 415);

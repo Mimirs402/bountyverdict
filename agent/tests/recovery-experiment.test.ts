@@ -43,7 +43,7 @@ test("does not count an audited drain even if the active epoch number is 46", ()
   assert.deepEqual(result.eligible_delta, clean());
 });
 
-test("starts from the exact clean epoch 46 delta and carries every schema-3 counter", () => {
+test("starts from the exact clean epoch 46 delta and carries every privacy-safe counter", () => {
   const eligible = clean({ initialize: 4, tools_list: 3, protocol_error: 1, tool_not_found: 1,
     validation_error: 1, capacity_rejected: 1, payment_required: 1, payment_present: 1,
     paid_success: 1, paid_error: 1 });
@@ -51,6 +51,12 @@ test("starts from the exact clean epoch 46 delta and carries every schema-3 coun
   assert.equal(result.status, "running_clean_epoch");
   assert.deepEqual(result.eligible_delta, eligible);
   assert.deepEqual(Object.keys(result.eligible_delta as object), [...RECOVERY_EXPERIMENT_COUNTER_KEYS]);
+});
+
+test("classifies a free router call without claiming paid-tool interest", () => {
+  const result = update({ currentEpochId: 46, measurementEligible: true, cleanEpochDelta: clean({ tools_list: 25, selection_preview: 1 }) });
+  assert.equal((result.boundary as Record<string, unknown>).decision, "free_selection_preview_observed");
+  assert.equal((result.event_ratios as Record<string, unknown>).free_selection_preview_per_tools_list_percent, 4);
 });
 
 test("same-epoch refresh replaces rather than double counts and rejects regression", () => {

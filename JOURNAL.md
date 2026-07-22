@@ -792,3 +792,13 @@ A normal GitHub bounty search found a task that required contributors to publish
 The queued analyzer now emits the hard stop `Unsafe task instructions` when an issue body or repository maintainer comment requests publication of hidden agent context, credential values, or exact private machine paths. The rule ignores ordinary OS and CPU reproduction details, explicitly redacted or placeholder-only diagnostics, and instructions injected by unrelated commenters.
 
 The exact live issue [`ClankerNation/OpenAgents#101`](https://github.com/ClankerNation/OpenAgents/issues/101) now returns `AVOID` at **0** with the unsafe-task evidence linked directly. The combined candidate passes **146 / 146** public tests, **410 / 410** Worker and operations tests, TypeScript checking, `git diff --check`, and Cloudflare's dry deployment bundle. No claim, comment, payment, or self-generated demand occurred.
+
+## 2026-07-22 — Task-specific distribution treatment deployed
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Production release: [`556b35f`](https://github.com/Mimirs402/bountyverdict/commit/556b35fc200240d89a4f855716232c6484cb1e1d)
+
+The business repository fast-forward, GitHub CI, Pages build, production Worker deployment, real-handler checks, and manifest activation all completed successfully. The live MCP server now leads with the concrete tasks agents actually delegate: diagnose failed GitHub Actions, decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP updates.
+
+Epoch 43 began before deployment and accumulated one eligible `tools/list` event whose treatment exposure could not be proven. That event is excluded rather than credited. A new audited drain now prepares epoch 44, and the 25-event experiment is rebased to the exact cumulative buyer-candidate counters observed after deployment: **500 initialize / 437 tools/list / 12 validation errors / 0 valid calls**. Only clean epoch 44 events can reach the treatment boundary.

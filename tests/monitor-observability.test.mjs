@@ -211,13 +211,13 @@ test("distribution monitoring measures the task-specific MCP description from an
   const distribution = await readFile(distributionUrl, "utf8");
   const directory = await readFile(directoryMonitorUrl, "utf8");
   assert.match(distribution, /mcp-task-specific-description-v1/);
-  assert.match(distribution, /release_commit: "fa4b8a59a5c3c2c4ea692729a8aefaaa49463b6c"/);
-  assert.match(distribution, /initialize: 491/);
-  assert.match(distribution, /tools_list: 429/);
+  assert.match(distribution, /release_commit: "556b35fc200240d89a4f855716232c6484cb1e1d"/);
+  assert.match(distribution, /initialize: 500/);
+  assert.match(distribution, /tools_list: 437/);
   assert.match(distribution, /validation_error: 12/);
   assert.match(distribution, /target_tools_list: 25/);
-  assert.match(distribution, /eligible_prefix_observed_at: "2026-07-22T09:58:21.408Z"/);
-  assert.match(distribution, /resume_epoch_id: 43/);
+  assert.match(distribution, /eligible_prefix_observed_at: "2026-07-22T10:33:17.239Z"/);
+  assert.match(distribution, /resume_epoch_id: 44/);
   assert.match(distribution, /updateSelectionPreviewExperiment/);
   assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment/);
   assert.match(distribution, /valid_call_per_tools_list_percent/);

@@ -81,11 +81,11 @@ const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
   id: "mcp-task-specific-description-v1",
-  started_at: "2026-07-22T09:58:21.408Z",
-  release_commit: "fa4b8a59a5c3c2c4ea692729a8aefaaa49463b6c",
+  started_at: "2026-07-22T10:33:17.239Z",
+  release_commit: "556b35fc200240d89a4f855716232c6484cb1e1d",
   baseline: Object.freeze({
-    initialize: 491,
-    tools_list: 429,
+    initialize: 500,
+    tools_list: 437,
     validation_error: 12,
     capacity_rejected: 0,
     payment_required: 0,
@@ -93,7 +93,7 @@ const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
     paid_success: 0,
   }),
   target_tools_list: 25,
-  eligible_prefix_observed_at: "2026-07-22T09:58:21.408Z",
+  eligible_prefix_observed_at: "2026-07-22T10:33:17.239Z",
   eligible_prefix_before_audited_drain: Object.freeze({
     initialize: 0,
     tools_list: 0,
@@ -103,7 +103,7 @@ const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
     payment_present: 0,
     paid_success: 0,
   }),
-  resume_epoch_id: 43,
+  resume_epoch_id: 44,
 });
 
 const configuration = loadDistributionMonitorConfiguration(process.env);

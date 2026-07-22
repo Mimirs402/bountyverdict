@@ -1,6 +1,11 @@
 import { PRODUCT_CATALOG, PRODUCT_KEYS, productForTransport, type ProductKey } from "./product-catalog.ts";
 
 export const FUNNEL_SCHEMA_VERSION = 2 as const;
+export const FUNNEL_COLLECTOR_CAPABILITIES = Object.freeze([
+  "agentmrr_source_attribution_v1",
+] as const);
+export type FunnelCollectorCapability = typeof FUNNEL_COLLECTOR_CAPABILITIES[number];
+const INVALID_COLLECTOR_CAPABILITY_HEARTBEAT = "1970-01-01T00:00:00.000Z";
 const FUNNEL_PRIVACY = "Aggregate REST, discovery, and MCP funnel counts only; raw URLs, query values, tool arguments, bodies, declared client names and versions, headers, payment payloads, payer addresses, IP addresses, geolocation, visitor IDs, and full user-agent strings are discarded. MCP initialize client names are reduced to an allowlisted family before logging.";
 
 export const FUNNEL_SOURCE_CATEGORIES = Object.freeze([
@@ -40,6 +45,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "vscode_deeplink",
   "openhands_integrations",
   "goose_extensions",
+  "agentmrr",
   "glama",
   "github",
   "web_search",
@@ -225,6 +231,8 @@ export type FunnelSnapshot = {
   enhanced_capture_started_at: string;
   cohort_capture_started_at: string;
   collector_heartbeat_at: string;
+  collector_capabilities: string[];
+  collector_capability_heartbeats: Partial<Record<FunnelCollectorCapability, string>>;
   updated_at: string;
   privacy: string;
   totals: FunnelCounters;
@@ -558,12 +566,17 @@ export function classifyFunnelTailEvent(value: unknown): FunnelObservation | nul
   const timestamp = typeof tail.eventTimestamp === "number" && Number.isFinite(tail.eventTimestamp)
     ? new Date(tail.eventTimestamp).toISOString()
     : new Date().toISOString();
+  const declaredSource = url.searchParams.size === 1 && url.searchParams.getAll("source").length === 1
+    ? url.searchParams.get("source")
+    : null;
   return {
     observed_at: timestamp,
     product,
     source: sourceCategory(client),
     client_class: client,
-    channel: channelCategory(headers, client),
+    channel: client === "owner_automation"
+      ? "owner_automation"
+      : declaredSource === "agentmrr" ? "agentmrr" : channelCategory(headers, client),
     input_profile: inputProfile(product, url, normalizedMethod),
     payment_carrier: payment,
     response_preference: responsePreference(headers.accept || ""),
@@ -701,8 +714,10 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
                   ? "goose_extensions"
                   : declaredSource === "glama-release"
                     ? "glama"
-                    : declaredSource === "mcp-registry"
-                      ? "registry_or_directory"
+                  : declaredSource === "mcp-registry"
+                    ? "registry_or_directory"
+                    : declaredSource === "agentmrr"
+                      ? "agentmrr"
                       : null;
   const observations: McpFunnelObservation[] = [];
   for (const message of mcpLogMessages(tail.logs)) {
@@ -734,6 +749,10 @@ export function createFunnelSnapshot(now = new Date().toISOString()): FunnelSnap
     enhanced_capture_started_at: now,
     cohort_capture_started_at: now,
     collector_heartbeat_at: now,
+    collector_capabilities: [...FUNNEL_COLLECTOR_CAPABILITIES],
+    collector_capability_heartbeats: Object.fromEntries(
+      FUNNEL_COLLECTOR_CAPABILITIES.map((capability) => [capability, INVALID_COLLECTOR_CAPABILITY_HEARTBEAT]),
+    ),
     updated_at: now,
     privacy: FUNNEL_PRIVACY,
     totals: emptyCounters(),
@@ -768,6 +787,20 @@ export function createFunnelSnapshot(now = new Date().toISOString()): FunnelSnap
     mcp_by_day: {},
     mcp_by_hour: {},
   };
+}
+
+export function activateFunnelCollectorCapabilities(snapshot: FunnelSnapshot): void {
+  snapshot.collector_capabilities = [...FUNNEL_COLLECTOR_CAPABILITIES];
+  snapshot.collector_capability_heartbeats = Object.fromEntries(
+    FUNNEL_COLLECTOR_CAPABILITIES.map((capability) => [capability, INVALID_COLLECTOR_CAPABILITY_HEARTBEAT]),
+  );
+}
+
+export function renewFunnelCollectorCapabilityLeases(snapshot: FunnelSnapshot, now = new Date().toISOString()): void {
+  if (!Number.isFinite(Date.parse(now))) throw new Error("Collector capability heartbeat is invalid.");
+  snapshot.collector_capability_heartbeats = Object.fromEntries(
+    FUNNEL_COLLECTOR_CAPABILITIES.map((capability) => [capability, now]),
+  );
 }
 
 function paidCohortKey(observation: FunnelObservation): string {
@@ -958,6 +991,16 @@ export function isFunnelSnapshot(value: unknown): value is FunnelSnapshot {
   if (snapshot.schema_version !== FUNNEL_SCHEMA_VERSION || typeof snapshot.capture_started_at !== "string" ||
     typeof snapshot.enhanced_capture_started_at !== "string" || typeof snapshot.cohort_capture_started_at !== "string" ||
     typeof snapshot.collector_heartbeat_at !== "string" || !Number.isFinite(Date.parse(snapshot.collector_heartbeat_at)) ||
+    !Array.isArray(snapshot.collector_capabilities) ||
+    snapshot.collector_capabilities.some((capability) => typeof capability !== "string" ||
+      !FUNNEL_COLLECTOR_CAPABILITIES.includes(capability as typeof FUNNEL_COLLECTOR_CAPABILITIES[number])) ||
+    new Set(snapshot.collector_capabilities).size !== snapshot.collector_capabilities.length ||
+    !snapshot.collector_capability_heartbeats ||
+    typeof snapshot.collector_capability_heartbeats !== "object" ||
+    Array.isArray(snapshot.collector_capability_heartbeats) ||
+    Object.entries(snapshot.collector_capability_heartbeats).some(([capability, heartbeat]) =>
+      !FUNNEL_COLLECTOR_CAPABILITIES.includes(capability as FunnelCollectorCapability) ||
+      typeof heartbeat !== "string" || !Number.isFinite(Date.parse(heartbeat))) ||
     typeof snapshot.updated_at !== "string" ||
     typeof snapshot.privacy !== "string" || !countersValid(snapshot.totals)) return false;
   if (!keyedCountersValid(snapshot.by_product, PRODUCT_KEYS) ||
@@ -1040,6 +1083,14 @@ export function loadFunnelSnapshot(value: unknown, now = new Date().toISOString(
       collector_heartbeat_at: typeof existing.collector_heartbeat_at === "string"
         ? existing.collector_heartbeat_at
         : existing.updated_at,
+      collector_capabilities: Array.isArray(existing.collector_capabilities)
+        ? existing.collector_capabilities
+        : [],
+      collector_capability_heartbeats: existing.collector_capability_heartbeats &&
+          typeof existing.collector_capability_heartbeats === "object" &&
+          !Array.isArray(existing.collector_capability_heartbeats)
+        ? existing.collector_capability_heartbeats
+        : {},
       by_cohort: existing.by_cohort || {},
       by_discovery_cohort: existing.by_discovery_cohort || {},
       discovery_by_day: existing.discovery_by_day || {},

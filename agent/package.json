@@ -26,6 +26,8 @@
     "payan:register": "node --experimental-strip-types scripts/payan-register.ts",
     "payan:onboard": "node --experimental-strip-types scripts/payan-onboard.ts",
     "payan:demand": "node --experimental-strip-types scripts/payan-demand.ts",
+    "agentmrr:register": "node --experimental-strip-types scripts/agentmrr-register.ts",
+    "agentmrr:publish": "node --experimental-strip-types scripts/agentmrr-publish.ts",
     "demand:watch": "node --experimental-strip-types scripts/demand-watch.ts",
     "taskmarket:aibtc-submit": "node --experimental-strip-types scripts/taskmarket-aibtc-submit.ts",
     "clawlancer:work": "node --experimental-strip-types scripts/clawlancer-work.ts",

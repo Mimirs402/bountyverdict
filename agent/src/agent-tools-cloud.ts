@@ -18,6 +18,8 @@ type ParseOptions = Readonly<{
 
 type McpParseOptions = Readonly<{
   endpointUrl: string;
+  homepageUrl: string;
+  name: string;
   slug: string;
   expectedTools: readonly string[];
 }>;
@@ -111,7 +113,7 @@ export function parseAgentToolsCloudMcpListing(
   detail: Record<string, any>,
   options: McpParseOptions,
 ): Record<string, unknown> {
-  const { endpointUrl, slug, expectedTools } = options;
+  const { endpointUrl, homepageUrl, name, slug, expectedTools } = options;
   if (!Number.isSafeInteger(search.count) || !Number.isSafeInteger(search.total_matched) ||
     !Array.isArray(search.servers) || search.count !== search.servers.length ||
     search.servers.some((server: unknown) => !server || typeof server !== "object" || Array.isArray(server))) {
@@ -119,7 +121,7 @@ export function parseAgentToolsCloudMcpListing(
   }
   const matches = search.servers.filter((server: Record<string, unknown>) => server.slug === slug);
   if (matches.length !== 1 || detail.slug !== slug || detail.endpoint_url !== endpointUrl ||
-    detail.homepage_url !== endpointUrl || detail.name !== "BountyVerdict Agent Decision APIs" ||
+    detail.homepage_url !== homepageUrl || detail.name !== name ||
     detail.transport !== "streamable-http") {
     contractDrift("Agent Tools Cloud MCP identity telemetry drifted.");
   }

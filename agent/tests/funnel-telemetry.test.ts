@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  activateFunnelCollectorCapabilities,
   classifyFunnelTailEvent,
   classifyDiscoveryTailEvent,
   classifyMcpTailEvents,
   createFunnelSnapshot,
   discoveryBuyerCandidateTotals,
+  FUNNEL_COLLECTOR_CAPABILITIES,
   isFunnelSnapshot,
   isBuyerCandidateDiscoveryCohort,
   loadFunnelSnapshot,
@@ -14,6 +16,7 @@ import {
   recordDiscoveryObservation,
   recordFunnelObservation,
   recordMcpObservation,
+  renewFunnelCollectorCapabilityLeases,
 } from "../src/funnel-telemetry.ts";
 
 function event(path: string, status: number, headers: Record<string, string> = {}, method = "GET") {
@@ -529,6 +532,12 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(gooseExtensions.length, 1);
   assert.equal(gooseExtensions[0].channel, "goose_extensions");
 
+  const agentMrr = event("/mcp?source=agentmrr", 200, { "user-agent": "Codex/1.0" }, "POST");
+  Object.assign(agentMrr, { logs: kiro.logs });
+  const agentMrrObservations = classifyMcpTailEvents(agentMrr);
+  assert.equal(agentMrrObservations.length, 1);
+  assert.equal(agentMrrObservations[0].channel, "agentmrr");
+
   const glama = event("/mcp?source=glama-release", 200, { "user-agent": "Glama/1.0" }, "POST");
   Object.assign(glama, { logs: kiro.logs });
   const glamaObservations = classifyMcpTailEvents(glama);
@@ -541,7 +550,7 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(registryObservations.length, 1);
   assert.equal(registryObservations[0].channel, "registry_or_directory");
 
-  const owner = event("/mcp?source=agent-skills-marketplace", 200, { "user-agent": "bountyverdict-owner-audit/1.0" }, "POST");
+  const owner = event("/mcp?source=agentmrr", 200, { "user-agent": "bountyverdict-owner-audit/1.0" }, "POST");
   Object.assign(owner, { logs: [{ message: [JSON.stringify({
     type: "bountyverdict_mcp_funnel",
     schema_version: 2,
@@ -573,6 +582,8 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     "/mcp?source=openhands-integrations&source=openhands-integrations",
     "/mcp?source=goose-extensions&private=discard",
     "/mcp?source=goose-extensions&source=goose-extensions",
+    "/mcp?source=agentmrr&private=discard",
+    "/mcp?source=agentmrr&source=agentmrr",
   ]) {
     const ambiguous = event(path, 200, { "user-agent": "Codex/1.0" }, "POST");
     Object.assign(ambiguous, { logs: kiro.logs });
@@ -596,6 +607,7 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...vscodeDeeplink,
       ...openhandsIntegrations,
       ...gooseExtensions,
+      ...agentMrrObservations,
       ...registryObservations,
       ...ownerMarker,
       ...rejected,
@@ -603,6 +615,44 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     ]),
     /private|discard|kiro-power|cline-marketplace|kilo-marketplace|cursor-deeplink|vscode-deeplink|openhands-integrations|goose-extensions|campaign/i,
   );
+});
+
+test("attributes only the exact AgentMRR marker on paid REST calls", () => {
+  const exact = classifyFunnelTailEvent(event(
+    "/api/github-actions-run-diagnosis?source=agentmrr",
+    402,
+    { "user-agent": "Codex/1.0", accept: "application/json" },
+    "POST",
+  ));
+  assert.ok(exact);
+  assert.equal(exact.product, "run");
+  assert.equal(exact.channel, "agentmrr");
+  assert.equal(exact.input_profile, "body_unobservable");
+  assert.equal(exact.outcome, "challenge_402");
+
+  for (const path of [
+    "/api/github-actions-run-diagnosis?source=agentmrr&private=discard",
+    "/api/github-actions-run-diagnosis?source=agentmrr&source=agentmrr",
+    "/api/github-actions-run-diagnosis?source=unknown",
+  ]) {
+    const ambiguous = classifyFunnelTailEvent(event(
+      path,
+      402,
+      { "user-agent": "Codex/1.0" },
+      "POST",
+    ));
+    assert.ok(ambiguous);
+    assert.equal(ambiguous.channel, "direct_or_hidden");
+  }
+
+  const owner = classifyFunnelTailEvent(event(
+    "/api/github-actions-run-diagnosis?source=agentmrr",
+    402,
+    { "user-agent": "bountyverdict-owner-audit/1.0" },
+    "POST",
+  ));
+  assert.ok(owner);
+  assert.equal(owner.channel, "owner_automation");
 });
 
 test("Glama release probes remain distribution evidence and never enter the buyer-candidate funnel", () => {
@@ -733,8 +783,13 @@ test("schema enrichment preserves previously learned discovery aggregates", () =
   delete snapshot.discovery_by_hour;
   delete snapshot.cohort_capture_started_at;
   delete snapshot.collector_heartbeat_at;
+  delete snapshot.collector_capabilities;
+  delete snapshot.collector_capability_heartbeats;
   delete snapshot.by_cohort;
   delete snapshot.by_discovery_cohort;
+  delete (snapshot.by_channel as Record<string, unknown>).agentmrr;
+  delete (snapshot.by_discovery_channel as Record<string, unknown>).agentmrr;
+  delete (snapshot.mcp_by_channel as Record<string, unknown>).agentmrr;
   delete snapshot.mcp_validation_kinds;
   (snapshot.mcp_totals as Record<string, unknown>).events = 2;
   (snapshot.mcp_totals as Record<string, unknown>).validation_error = 2;
@@ -762,6 +817,20 @@ test("schema enrichment preserves previously learned discovery aggregates", () =
   assert.deepEqual(loaded.discovery_by_hour, {});
   assert.equal(loaded.cohort_capture_started_at, "2026-07-21T00:00:00.000Z");
   assert.equal(loaded.collector_heartbeat_at, snapshot.updated_at);
+  assert.deepEqual(loaded.collector_capabilities, []);
+  assert.deepEqual(loaded.collector_capability_heartbeats, {});
+  assert.equal(loaded.by_channel.agentmrr.requests, 0);
+  assert.equal(loaded.by_discovery_channel.agentmrr.requests, 0);
+  assert.equal(loaded.mcp_by_channel.agentmrr.events, 0);
+  activateFunnelCollectorCapabilities(loaded);
+  assert.deepEqual(loaded.collector_capabilities, [...FUNNEL_COLLECTOR_CAPABILITIES]);
+  assert.deepEqual(loaded.collector_capability_heartbeats, {
+    agentmrr_source_attribution_v1: "1970-01-01T00:00:00.000Z",
+  });
+  renewFunnelCollectorCapabilityLeases(loaded, "2026-07-21T00:00:01.000Z");
+  assert.deepEqual(loaded.collector_capability_heartbeats, {
+    agentmrr_source_attribution_v1: "2026-07-21T00:00:01.000Z",
+  });
   assert.deepEqual(loaded.by_cohort, {});
   assert.deepEqual(loaded.by_discovery_cohort, {});
   assert.equal(loaded.mcp_totals.protocol_error, 0);

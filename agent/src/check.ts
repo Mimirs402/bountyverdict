@@ -253,6 +253,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function rejectNonIssueObject(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new CheckError("GitHub returned an invalid issue object.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  if (!("pull_request" in value)) return;
+  if (!isRecord(value.pull_request)) {
+    throw new CheckError("GitHub returned an invalid issue object.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  throw new CheckError(
+    "That GitHub /issues URL resolves to a pull request, not an issue.",
+    400,
+    "NOT_AN_ISSUE",
+  );
+}
+
 function isCommentEvidencePage(data: unknown): data is Array<Record<string, unknown>> {
   return Array.isArray(data) && data.every((item) =>
     isRecord(item) && typeof item.id === "number" && Number.isSafeInteger(item.id) && item.id > 0 &&
@@ -301,6 +316,7 @@ export async function checkGithubIssue(
   const submitted = parsed;
   const submittedBase = `/repos/${encodeURIComponent(submitted.owner)}/${encodeURIComponent(submitted.repo)}`;
   const issueResponse = await githubJson(`${submittedBase}/issues/${submitted.number}`, env, fetchImpl);
+  rejectNonIssueObject(issueResponse.data);
   const canonical = canonicalIssueCoordinates(issueResponse.data, submitted);
   const { owner, repo, number } = canonical;
   const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;

@@ -76,6 +76,8 @@ const MAX_FILES = 20;
 const MAX_FILE_BYTES = 128 * 1024;
 const LARGE_FILE_BYTES = 32 * 1024;
 const LARGE_TOTAL_BYTES = 64 * 1024;
+const RAW_DOCUMENT_ATTEMPTS = 2;
+const RAW_DOCUMENT_TIMEOUT_MS = 10_000;
 
 export function parseRepositoryUrl(value: string): { owner: string; repo: string } {
   let url: URL;
@@ -371,6 +373,20 @@ async function githubJson(path: string, env: HarnessEnvironment, fetchImpl: Fetc
   return { data: await response.json(), remaining };
 }
 
+async function githubRawDocument(url: string, fetchImpl: FetchLike): Promise<string | null> {
+  for (let attempt = 1; attempt <= RAW_DOCUMENT_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(RAW_DOCUMENT_TIMEOUT_MS) });
+      if (response.ok) return await response.text();
+      if (attempt < RAW_DOCUMENT_ATTEMPTS && (response.status === 429 || response.status >= 500)) continue;
+      return null;
+    } catch {
+      if (attempt < RAW_DOCUMENT_ATTEMPTS) continue;
+    }
+  }
+  throw new HarnessError("GitHub raw content was temporarily unavailable.", 502, "GITHUB_UPSTREAM_ERROR");
+}
+
 export async function checkGithubHarness(
   repositoryUrl: string,
   env: HarnessEnvironment = {},
@@ -396,9 +412,8 @@ export async function checkGithubHarness(
   const rawBase = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${sha}`;
   const documents = (await Promise.all(selection.selected.map(async (entry): Promise<HarnessDocument | null> => {
     const path = entry.path.split("/").map(encodeURIComponent).join("/");
-    const response = await fetchImpl(`${rawBase}/${path}`, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) return null;
-    const body = await response.text();
+    const body = await githubRawDocument(`${rawBase}/${path}`, fetchImpl);
+    if (body === null) return null;
     return {
       path: entry.path,
       body,

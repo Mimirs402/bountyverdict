@@ -130,6 +130,57 @@ test("remote audit pins the result to the fetched commit", async () => {
   assert.equal(audit.surfaces.instruction_files_scanned, 1);
 });
 
+test("remote audit retries one transient raw-document failure", async () => {
+  let rawAttempts = 0;
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4997" };
+    if (url.endsWith("/repos/acme/widget")) {
+      return Response.json({ default_branch: "main", full_name: "acme/widget", html_url: "https://github.com/acme/widget" }, { headers });
+    }
+    if (url.endsWith("/repos/acme/widget/commits/main")) return Response.json({ sha: commit }, { headers });
+    if (url.includes(`/repos/acme/widget/git/trees/${commit}?recursive=1`)) {
+      return Response.json({ truncated: false, tree: [{ path: "AGENTS.md", type: "blob", size: 28 }] }, { headers });
+    }
+    if (url.includes(`raw.githubusercontent.com/acme/widget/${commit}/AGENTS.md`)) {
+      rawAttempts += 1;
+      if (rawAttempts === 1) throw new TypeError("transient connection reset");
+      return new Response("Run tests before finishing.");
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const audit = await checkGithubHarness("https://github.com/acme/widget", {}, mock);
+  assert.equal(rawAttempts, 2);
+  assert.equal(audit.coverage.files_scanned, 1);
+});
+
+test("remote audit reports a bounded upstream error after two raw-document failures", async () => {
+  let rawAttempts = 0;
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4997" };
+    if (url.endsWith("/repos/acme/widget")) {
+      return Response.json({ default_branch: "main", full_name: "acme/widget", html_url: "https://github.com/acme/widget" }, { headers });
+    }
+    if (url.endsWith("/repos/acme/widget/commits/main")) return Response.json({ sha: commit }, { headers });
+    if (url.includes(`/repos/acme/widget/git/trees/${commit}?recursive=1`)) {
+      return Response.json({ truncated: false, tree: [{ path: "AGENTS.md", type: "blob", size: 28 }] }, { headers });
+    }
+    if (url.includes(`raw.githubusercontent.com/acme/widget/${commit}/AGENTS.md`)) {
+      rawAttempts += 1;
+      throw new TypeError("connection reset");
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  await assert.rejects(
+    () => checkGithubHarness("https://github.com/acme/widget", {}, mock),
+    (error: unknown) => error instanceof HarnessError && error.code === "GITHUB_UPSTREAM_ERROR" && error.status === 502,
+  );
+  assert.equal(rawAttempts, 2);
+});
+
 test("does not expose private harness files through a server credential", async () => {
   const mock = (async (input: URL | RequestInfo) => {
     const url = String(input);

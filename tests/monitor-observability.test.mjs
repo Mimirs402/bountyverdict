@@ -540,6 +540,23 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(distribution, /source marker is aggregate attribution, not proof of install, identity, or purchase/);
 });
 
+test("OpenHands runtime-registry monitoring pins the exact PR and no-auth remote contract", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /openHandsIntegrationsPrNumber = 416/);
+  assert.match(directory, /OpenHands\/extensions\/pull\/\$\{openHandsIntegrationsPrNumber\}/);
+  assert.match(directory, /integrations\/catalog\/bountyverdict\.json/);
+  assert.match(directory, /mcp\?source=openhands-integrations/);
+  assert.match(directory, /auth: \{ strategy: "none" \}/);
+  assert.match(directory, /openhands_integrations: openHandsIntegrations/);
+  assert.match(distribution, /state\.openhands_integrations/);
+  assert.match(distribution, /OpenHands integrations registry/);
+  assert.match(distribution, /PR \[#416\]/);
+  assert.match(distribution, /not installs, unique agents, purchases, or revenue/);
+});
+
 test("production reporting keeps the executable MCP payment handoff visible", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /requireJsonObject\("\/\.well-known\/mcp\.json"\)/);

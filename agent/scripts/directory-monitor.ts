@@ -213,6 +213,13 @@ const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
   "https://raw.githubusercontent.com/stacklok/toolhive-catalog/main/registries/toolhive/servers/bountyverdict/server.json";
+const openHandsIntegrationsPrNumber = 416;
+const openHandsIntegrationsPrUrl = `https://github.com/OpenHands/extensions/pull/${openHandsIntegrationsPrNumber}`;
+const openHandsIntegrationsCatalogUrl =
+  "https://raw.githubusercontent.com/OpenHands/extensions/main/integrations/catalog/bountyverdict.json";
+const openHandsIntegrationsEndpoint = `${productionOrigin}/mcp?source=openhands-integrations`;
+const openHandsIntegrationsDescription =
+  "Remote, account-free MCP server for preflight decisions on public GitHub bounties, coding-agent repository instructions, GitHub Actions failures, flaky retries, and MCP tool-catalog changes. Six read-only tools return evidence-linked verdicts. A valid first unsigned call cannot charge and returns a structured selection preview plus the exact x402 USDC quote.";
 const officialMcpServerName = "io.github.Mimirs402/bountyverdict";
 const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
@@ -1456,6 +1463,88 @@ async function toolHiveStatus(
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
       measurement: "submission_and_toolhive_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
+async function openHandsIntegrationsStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [review, catalogResponse] = await Promise.all([
+      githubPrStatus("OpenHands", "extensions", openHandsIntegrationsPrNumber, openHandsIntegrationsPrUrl),
+      fetch(openHandsIntegrationsCatalogUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (![200, 404].includes(catalogResponse.status)) {
+      throw new Error(`OpenHands integration catalog returned HTTP ${catalogResponse.status}.`);
+    }
+    let listed = false;
+    let contractVerified = false;
+    let contractError: string | null = null;
+    if (catalogResponse.status === 200) {
+      listed = true;
+      const body = await catalogResponse.text();
+      if (body.length > 100_000) throw new Error("OpenHands integration entry is unbounded.");
+      try {
+        const entry = JSON.parse(body) as unknown;
+        const expected = {
+          id: "bountyverdict",
+          name: "BountyVerdict Agent Decision Tools",
+          description: openHandsIntegrationsDescription,
+          appUrl: "https://mimirs402.github.io/bountyverdict/",
+          docsUrl: "https://mimirs402.github.io/bountyverdict/agents.html",
+          keywords: ["github", "ci", "agent-safety", "mcp", "x402"],
+          connectionOptions: [{
+            id: "none",
+            provider: "mcp",
+            transport: { kind: "shttp", url: openHandsIntegrationsEndpoint },
+            auth: { strategy: "none" },
+          }],
+        };
+        contractVerified = JSON.stringify(entry) === JSON.stringify(expected);
+        if (!contractVerified) contractError = "OpenHands catalog entry drifted from the exact no-auth remote contract.";
+      } catch (error) {
+        contractError = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const prStatus = String(review.status || "unknown");
+    const status = contractVerified
+      ? "catalog_listed"
+      : listed
+        ? "catalog_contract_drift"
+        : prStatus === "merged"
+          ? "pr_merged_awaiting_catalog"
+          : prStatus === "open"
+            ? "pr_open"
+            : prStatus === "closed"
+              ? "pr_closed_without_catalog"
+              : "pr_status_unknown";
+    return {
+      url: openHandsIntegrationsPrUrl,
+      catalog_url: openHandsIntegrationsCatalogUrl,
+      pr_status: prStatus,
+      ...githubPrFields(review),
+      catalog_http_status: catalogResponse.status,
+      listed,
+      contract_verified: contractVerified,
+      contract_error: contractError,
+      status,
+      first_listed_at: contractVerified ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "submission_and_openhands_runtime_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: openHandsIntegrationsPrUrl,
+      catalog_url: openHandsIntegrationsCatalogUrl,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_openhands_runtime_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   }
 }
@@ -2895,6 +2984,7 @@ const [
   clineMarketplace,
   kiloMarketplace,
   toolHive,
+  openHandsIntegrations,
   geminiCliGallery,
   agentFinderCatalog,
   ardCatalog,
@@ -2940,6 +3030,7 @@ const [
   clineMarketplaceStatus(previous.cline_marketplace || {}, new Date().toISOString()),
   kiloMarketplaceStatus(previous.kilo_marketplace || {}, new Date().toISOString()),
   toolHiveStatus(previous.toolhive || {}, new Date().toISOString()),
+  openHandsIntegrationsStatus(previous.openhands_integrations || {}, new Date().toISOString()),
   geminiCliGalleryStatus(previous.gemini_cli_gallery || {}, new Date().toISOString()),
   agentFinderCatalogStatus(previous.agent_finder_catalog || {}, new Date().toISOString()),
   ardCatalogStatus(previous.ard_catalog || {}, new Date().toISOString()),
@@ -3011,6 +3102,7 @@ const githubPrChecks = [
   ["cline_marketplace", clineMarketplace],
   ["kilo_marketplace", kiloMarketplace],
   ["toolhive", toolHive],
+  ["openhands_integrations", openHandsIntegrations],
   ["agent_finder_catalog", agentFinderCatalog],
 ] as const;
 const prTelemetryValue = (normalized: Record<string, unknown>, field: string): unknown =>
@@ -3179,6 +3271,7 @@ const state = {
   cline_marketplace: clineMarketplace,
   kilo_marketplace: kiloMarketplace,
   toolhive: toolHive,
+  openhands_integrations: openHandsIntegrations,
   gemini_cli_gallery: geminiCliGallery,
   agent_finder_catalog: agentFinderCatalog,
   ard_catalog: ardCatalog,

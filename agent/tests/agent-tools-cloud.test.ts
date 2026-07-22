@@ -106,6 +106,9 @@ const mcpSlug = "bountyverdict-agent-decision-tools-bountyverdict-agent-producti
 const mcpEndpoint = `${productionOrigin}/mcp?source=mcp-registry`;
 const mcpHomepage = "https://mimirs402.github.io/bountyverdict/";
 const mcpName = "BountyVerdict Agent Decision Tools";
+const expectedMcpDescriptionPrefixes = Object.fromEntries(
+  expectedMcpTools.map((name) => [name, `${name} task description`]),
+);
 const mcpSearch = { count: 1, total_matched: 1, servers: [{ slug: mcpSlug }] };
 function mcpPayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -135,6 +138,7 @@ const mcpOptions = {
   name: mcpName,
   slug: mcpSlug,
   expectedTools: expectedMcpTools,
+  expectedDescriptionPrefixes: expectedMcpDescriptionPrefixes,
 };
 
 test("Agent Tools Cloud verifies the refreshed six-tool x402 MCP listing", () => {
@@ -144,6 +148,16 @@ test("Agent Tools Cloud verifies the refreshed six-tool x402 MCP listing", () =>
   assert.equal(parsed.listed_tools, 6);
   assert.equal(parsed.safety_verdict, "clean");
   assert.deepEqual(parsed.tool_names, expectedMcpTools);
+  assert.equal(parsed.current_tool_descriptions, 6);
+  assert.equal(parsed.tool_description_revision, "agent_question_v3");
+});
+
+test("Agent Tools Cloud reports stale cached tool descriptions after a card-only refresh", () => {
+  const parsed = parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({
+    tools: expectedMcpTools.map((name) => ({ name, description: `Old ${name} selection copy` })),
+  }), mcpOptions);
+  assert.equal(parsed.current_tool_descriptions, 0);
+  assert.equal(parsed.tool_description_revision, "stale_pre_agent_question_v3");
 });
 
 test("Agent Tools Cloud MCP parser rejects identity, tool, and payment-support drift", () => {
@@ -160,7 +174,7 @@ test("Agent Tools Cloud retains only bounded owner-run MCP retrieval ranks", () 
     total_matched: 7,
     servers: [{ slug: "other" }, { slug: "bountyverdict-agent-decision-apis-x402" }, { slug: mcpSlug }],
   };
-  assert.deepEqual(parseAgentToolsCloudMcpBuyerQuery(payload, [mcpSlug, "bountyverdict-agent-decision-apis-x402"]), {
+  assert.deepEqual(parseAgentToolsCloudMcpBuyerQuery(payload, [mcpSlug, "bountyverdict-agent-decision-apis-x402", "bountyverdict-agent-decision-tools-x402"]), {
     found: true,
     rank: 2,
     returned_results: 3,

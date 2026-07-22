@@ -22,6 +22,7 @@ type McpParseOptions = Readonly<{
   name: string;
   slug: string;
   expectedTools: readonly string[];
+  expectedDescriptionPrefixes: Readonly<Record<string, string>>;
 }>;
 
 function contractDrift(message: string): never {
@@ -113,7 +114,7 @@ export function parseAgentToolsCloudMcpListing(
   detail: Record<string, any>,
   options: McpParseOptions,
 ): Record<string, unknown> {
-  const { endpointUrl, homepageUrl, name, slug, expectedTools } = options;
+  const { endpointUrl, homepageUrl, name, slug, expectedTools, expectedDescriptionPrefixes } = options;
   if (!Number.isSafeInteger(search.count) || !Number.isSafeInteger(search.total_matched) ||
     !Array.isArray(search.servers) || search.count !== search.servers.length ||
     search.servers.some((server: unknown) => !server || typeof server !== "object" || Array.isArray(server))) {
@@ -139,6 +140,21 @@ export function parseAgentToolsCloudMcpListing(
     contractDrift("Agent Tools Cloud MCP health, safety, payment, or tool telemetry drifted.");
   }
 
+  if (Object.keys(expectedDescriptionPrefixes).length !== expectedTools.length ||
+    expectedTools.some((toolName) => typeof expectedDescriptionPrefixes[toolName] !== "string")) {
+    contractDrift("Agent Tools Cloud expected MCP description revision is incomplete.");
+  }
+  const currentDescriptionCount = detail.tools.filter((tool: Record<string, unknown>) => {
+    const toolName = String(tool.name);
+    return typeof tool.description === "string" &&
+      tool.description.startsWith(expectedDescriptionPrefixes[toolName]);
+  }).length;
+  const toolDescriptionRevision = currentDescriptionCount === expectedTools.length
+    ? "agent_question_v3"
+    : currentDescriptionCount === 0
+      ? "stale_pre_agent_question_v3"
+      : "mixed_agent_question_v3";
+
   return {
     listed: true,
     status: "listed",
@@ -155,6 +171,8 @@ export function parseAgentToolsCloudMcpListing(
     expected_tools: expectedTools.length,
     listed_tools: toolNames.length,
     tool_names: toolNames,
+    current_tool_descriptions: currentDescriptionCount,
+    tool_description_revision: toolDescriptionRevision,
     checked_at_unix: detail.health_checked,
     last_seen_unix: detail.last_seen,
     measurement: "organic_mcp_catalog_health_and_tool_presence_not_impressions_calls_purchases_or_revenue",

@@ -93,7 +93,10 @@ const x402gleHostUrl = "https://x402gle.com/servers/bountyverdict-agent-producti
 const agentToolsCloudApi = "https://agent-tools.cloud/api/v1";
 const agentToolsCloudSlug = "bountyverdict-agent-production-mimirslab-workers-dev-bazaar";
 const agentToolsCloudMcpSlug = "bountyverdict-agent-decision-tools-bountyverdict-agent-production-mimirslab-work";
-const agentToolsCloudMcpX402Slug = "bountyverdict-agent-decision-apis-x402";
+const agentToolsCloudMcpX402Slugs = Object.freeze([
+  "bountyverdict-agent-decision-apis-x402",
+  "bountyverdict-agent-decision-tools-x402",
+]);
 const agentToolsCloudMcpTools = Object.freeze([
   "check_github_bounty",
   "rank_github_bounties",
@@ -102,6 +105,14 @@ const agentToolsCloudMcpTools = Object.freeze([
   "classify_github_actions_flake",
   "check_mcp_tool_drift",
 ]);
+const agentToolsCloudMcpToolDescriptionPrefixes = Object.freeze({
+  check_github_bounty: "Is this public GitHub issue bounty still claimable",
+  rank_github_bounties: "Which public GitHub bounty should I work on next?",
+  audit_agent_harness: "Can a coding agent safely work in this public repository",
+  diagnose_github_actions_run: "Why did this public GitHub Actions run fail",
+  classify_github_actions_flake: "Is this failed GitHub Actions run flaky",
+  check_mcp_tool_drift: "Will upgrading to this complete MCP tools/list break my agent",
+});
 const agentToolsCloudBuyerQueries = Object.freeze([
   "why did this GitHub Actions run fail",
   "should I rerun this failed workflow or fix the code",
@@ -2326,7 +2337,7 @@ async function agentToolsCloudStatus(): Promise<Record<string, unknown>> {
     const buyerQueries = agentToolsCloudBuyerQueries.map((query, index) => {
       const parsed = parseAgentToolsCloudMcpBuyerQuery(
         buyerQueryPayloads[index],
-        [agentToolsCloudMcpSlug, agentToolsCloudMcpX402Slug],
+        [agentToolsCloudMcpSlug, ...agentToolsCloudMcpX402Slugs],
       ) as { found: boolean; rank: number | null; returned_results: number };
       return { query, ...parsed };
     });
@@ -2348,6 +2359,7 @@ async function agentToolsCloudStatus(): Promise<Record<string, unknown>> {
         name: "BountyVerdict Agent Decision Tools",
         slug: agentToolsCloudMcpSlug,
         expectedTools: agentToolsCloudMcpTools,
+        expectedDescriptionPrefixes: agentToolsCloudMcpToolDescriptionPrefixes,
       }),
       buyer_query_benchmark: {
         queries: buyerQueries,

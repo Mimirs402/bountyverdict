@@ -60,6 +60,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
   assert.match(body.result.instructions, /first unsigned call with real canonical input cannot charge/i);
+  assert.match(body.result.instructions, /free payment quote, selection summary, and payment handoff/i);
   assert.match(body.result.instructions, /Never call with missing, invented, or placeholder arguments/);
   assert.match(body.result.instructions, /Payment identifies the fixed-price tool, not its arguments/);
 });
@@ -70,8 +71,9 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.equal(body.result.tools.length, 6);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
   for (const tool of body.result.tools) {
-    assert.match(tool.description, /^First unsigned call with real input cannot charge/);
-    assert.match(tool.description, /free \$0 selection preview and exact quote/);
+    assert.doesNotMatch(tool.description, /^(?:A )?first unsigned call/i);
+    assert.match(tool.description, /A first unsigned call with real input cannot charge/);
+    assert.match(tool.description, /free payment quote and selection summary/);
     assert.match(tool.description, /Only an authorized signed retry costs \$0\.\d+ USDC on Base/);
     assert.match(tool.description, /never invent/i);
     assert.deepEqual(tool.annotations, {
@@ -94,18 +96,26 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.equal(drift.inputSchema.properties.baseline.properties.complete.const, true);
   assert.equal(drift.inputSchema.properties.baseline.properties.tools.maxItems, 128);
   assert.deepEqual(drift.inputSchema.properties.baseline.properties.tools.items.required, ["name", "inputSchema"]);
-  assert.match(drift.description, /complete baseline and current snapshots/);
   assert.match(drift.description, /never invent or truncate snapshot arguments/i);
   const single = body.result.tools.find((tool: any) => tool.name === "check_github_bounty");
+  assert.match(single.description, /^Assess whether one public GitHub bounty is worth pursuing/);
   assert.match(single.inputSchema.properties.issue_url.pattern, /github/);
   assert.match(single.inputSchema.properties.issue_url.description, /Canonical public GitHub issue URL/);
   const portfolio = body.result.tools.find((tool: any) => tool.name === "rank_github_bounties");
+  assert.match(portfolio.description, /^Rank 2-10 public GitHub bounty issues/);
+  assert.match(portfolio.description, /strongest non-AVOID candidate—or recommend none/);
   assert.equal(portfolio.inputSchema.properties.issue_urls.minItems, 2);
   assert.equal(portfolio.inputSchema.properties.issue_urls.maxItems, 10);
   assert.match(portfolio.inputSchema.properties.issue_urls.description, /distinct/);
   const run = body.result.tools.find((tool: any) => tool.name === "diagnose_github_actions_run");
   const flake = body.result.tools.find((tool: any) => tool.name === "classify_github_actions_flake");
-  assert.match(run.description, /find why/);
+  const harness = body.result.tools.find((tool: any) => tool.name === "audit_agent_harness");
+  assert.match(harness.description, /^Audit a public GitHub repository's AGENTS\.md, CLAUDE\.md/);
+  assert.match(drift.description, /^Detect breaking schema or safety-hint changes in the documented comparison subset/);
+  assert.match(drift.description, /caller-asserted complete baseline and current MCP tools\/list snapshots/);
+  assert.match(run.description, /^Diagnose why one public GitHub Actions run failed/);
+  assert.match(flake.description, /^Decide whether one completed failed GitHub Actions run/);
+  assert.match(run.description, /Diagnose why/);
   assert.match(run.description, /classify_github_actions_flake/);
   assert.match(flake.description, /retried once or fixed/);
   assert.match(flake.description, /diagnose_github_actions_run/);

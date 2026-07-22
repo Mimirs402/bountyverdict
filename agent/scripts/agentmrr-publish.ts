@@ -26,6 +26,7 @@ const secretFile = `${configDirectory}/agentmrr.env`;
 const releaseStateFile = `${stateDirectory}/post-boundary-hardening-release.json`;
 const baselineFile = `${stateDirectory}/funnel-trusted-baseline.json`;
 const historyFile = `${stateDirectory}/funnel-trusted-epochs.json`;
+const collectorStateFile = `${stateDirectory}/funnel-telemetry.json`;
 const publicationLockFile = `${stateDirectory}/agentmrr-publication.lock`;
 const funnelLockFile = `${historyFile}.lock`;
 const expectedUid = process.getuid?.() ?? -1;
@@ -121,11 +122,12 @@ if (existing) {
     try {
       await funnelLock.writeFile(`${process.pid}\n`);
       await funnelLock.sync();
-      const [freshRelease, baselineFileState, historyFileState] =
+      const [freshRelease, baselineFileState, historyFileState, collectorFileState] =
         await Promise.all([
           secureReadFile(releaseStateFile, "AgentMRR release receipt"),
           secureReadFile(baselineFile, "Trusted funnel baseline"),
           secureReadFile(historyFile, "Trusted funnel history"),
+          secureReadFile(collectorStateFile, "Funnel collector state"),
         ]);
       const baseline = trustedFunnelBaseline(JSON.parse(baselineFileState.raw));
       if (!baseline) throw new Error("Trusted funnel baseline is malformed; refusing AgentMRR publication.");
@@ -137,6 +139,9 @@ if (existing) {
         baselineOwnerUid: baselineFileState.metadata.uid,
         historyMode: historyFileState.metadata.mode & 0o777,
         historyOwnerUid: historyFileState.metadata.uid,
+        collectorState: JSON.parse(collectorFileState.raw),
+        collectorMode: collectorFileState.metadata.mode & 0o777,
+        collectorOwnerUid: collectorFileState.metadata.uid,
         expectedUid,
         trustedBaseline: baseline,
         baselineEpochId: baseline.epoch_id,

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import { trustedBoundaryFingerprint, trustedFunnelBaseline } from "./funnel-epoch.ts";
+import {
+  FUNNEL_COLLECTOR_CAPABILITIES,
+  isFunnelSnapshot,
+} from "./funnel-telemetry.ts";
 
 export const AGENTMRR_BASE_URL = "https://agentmrr.ai";
 export const AGENTMRR_REQUIRED_RELEASE_COMMIT = "eaa4c2481ac0ccc15a931790f490b950e623e291";
@@ -9,6 +13,10 @@ export const AGENTMRR_ROTATION_REASON =
   "AgentMRR publication can trigger unattributed downstream origin crawls; exclude the publication and drain until external aggregates are stable.";
 export const AGENTMRR_AGENT_DESCRIPTION =
   "Runs evidence-linked, read-only GitHub bounty, repository-agent, Actions, flake, and MCP drift checks.";
+export const AGENTMRR_RUN_ENDPOINT =
+  "https://bountyverdict-agent-production.mimirslab.workers.dev/api/github-actions-run-diagnosis?source=agentmrr";
+export const AGENTMRR_MCP_ENDPOINT =
+  "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=agentmrr";
 
 export const AGENTMRR_PRODUCT = Object.freeze({
   name: "RunVerdict",
@@ -16,7 +24,7 @@ export const AGENTMRR_PRODUCT = Object.freeze({
   type: "api",
   category: "developer-tools",
   description:
-    "Send {\"run_url\":\"https://github.com/OWNER/REPO/actions/runs/ID\"} to POST https://bountyverdict-agent-production.mimirslab.workers.dev/api/github-actions-run-diagnosis. RunVerdict reads bounded failed-job logs without executing or rerunning code, redacts secret-like excerpts, cites job and log evidence, classifies likely root-cause families, and returns probabilistic retryability with concrete next actions. A valid unsigned request first discloses the exact $0.04 Base USDC x402 requirement. The same RunVerdict product is the diagnose_github_actions_run tool at https://bountyverdict-agent-production.mimirslab.workers.dev/mcp; tool discovery is free.",
+    `Send {"run_url":"https://github.com/OWNER/REPO/actions/runs/ID"} to POST ${AGENTMRR_RUN_ENDPOINT}. RunVerdict reads bounded failed-job logs without executing or rerunning code, redacts secret-like excerpts, cites job and log evidence, classifies likely root-cause families, and returns probabilistic retryability with concrete next actions. A valid unsigned request first discloses the exact $0.04 Base USDC x402 requirement. The same RunVerdict product is the diagnose_github_actions_run tool at ${AGENTMRR_MCP_ENDPOINT}; tool discovery is free.`,
   github_url: "https://github.com/Mimirs402/bountyverdict",
   docs_url: "https://mimirs402.github.io/bountyverdict/agents.html",
   pricing_model: "paid",
@@ -48,6 +56,9 @@ export interface AgentMrrPublicationGateInput {
   baselineOwnerUid: number;
   historyMode: number;
   historyOwnerUid: number;
+  collectorState: unknown;
+  collectorMode: number;
+  collectorOwnerUid: number;
   expectedUid: number;
   trustedBaseline: unknown;
   baselineEpochId: number;
@@ -235,6 +246,7 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
   validateAgentMrrReleaseState(release, input.releaseMode, input.releaseOwnerUid, input.expectedUid);
   if (input.baselineMode !== 0o600 || input.baselineOwnerUid !== input.expectedUid ||
       input.historyMode !== 0o600 || input.historyOwnerUid !== input.expectedUid ||
+      input.collectorMode !== 0o600 || input.collectorOwnerUid !== input.expectedUid ||
       input.expectedUid < 0) {
     throw new Error("AgentMRR publication requires the exact completed reviewed release.");
   }
@@ -254,6 +266,13 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
   const requestedAt = typeof rotation.requested_at === "string" ? Date.parse(rotation.requested_at) : NaN;
   const observedAt = typeof rotation.last_observed_at === "string" ? Date.parse(rotation.last_observed_at) : NaN;
   const ageMs = input.now.getTime() - requestedAt;
+  const collector = isFunnelSnapshot(input.collectorState) ? input.collectorState : null;
+  const collectorHeartbeat = collector ? Date.parse(collector.collector_heartbeat_at) : NaN;
+  const collectorAgeMs = input.now.getTime() - collectorHeartbeat;
+  const capabilityHeartbeats = collector
+    ? FUNNEL_COLLECTOR_CAPABILITIES.map((capability) =>
+      Date.parse(collector.collector_capability_heartbeats[capability] || ""))
+    : [];
   if (!Number.isSafeInteger(input.baselineEpochId) || input.baselineEpochId < 1 ||
       ledger.schema_version !== 2 || ledger.active_epoch_id !== input.baselineEpochId ||
       rotation.status !== "draining" || rotation.id !== input.expectedRotationId ||
@@ -265,7 +284,14 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
       !baseline || baseline.epoch_id !== input.baselineEpochId ||
       !activeBaseline || activeBaseline.epoch_id !== input.baselineEpochId ||
       trustedBoundaryFingerprint(activeBaseline) !== trustedBoundaryFingerprint(baseline) ||
-      !candidate || candidate.epoch_id !== input.baselineEpochId + 1) {
+      !candidate || candidate.epoch_id !== input.baselineEpochId + 1 ||
+      !collector ||
+      !FUNNEL_COLLECTOR_CAPABILITIES.every((capability) =>
+        collector.collector_capabilities.includes(capability)) ||
+      !Number.isFinite(collectorHeartbeat) || collectorAgeMs < -5_000 || collectorAgeMs > 60_000 ||
+      capabilityHeartbeats.length !== FUNNEL_COLLECTOR_CAPABILITIES.length ||
+      capabilityHeartbeats.some((heartbeat) => !Number.isFinite(heartbeat) ||
+        input.now.getTime() - heartbeat < -5_000 || input.now.getTime() - heartbeat > 60_000)) {
     throw new Error("AgentMRR publication requires an active trusted-funnel draining rotation.");
   }
 }

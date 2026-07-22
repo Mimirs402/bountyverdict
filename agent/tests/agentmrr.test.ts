@@ -6,6 +6,8 @@ import {
   AGENTMRR_PRODUCT,
   AGENTMRR_REQUIRED_RELEASE_COMMIT,
   AGENTMRR_ROTATION_REASON,
+  AGENTMRR_RUN_ENDPOINT,
+  AGENTMRR_MCP_ENDPOINT,
   isAgentMrrUuid,
   parseAgentMrrCatalog,
   parseAgentMrrChallenge,
@@ -16,6 +18,10 @@ import {
   solveAgentMrrChallenge,
   validateAgentMrrPublicationGate,
 } from "../src/agentmrr.ts";
+import {
+  createFunnelSnapshot,
+  renewFunnelCollectorCapabilityLeases,
+} from "../src/funnel-telemetry.ts";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const ownerId = "33333333-3333-4333-8333-333333333333";
@@ -80,6 +86,8 @@ test("AgentMRR product contract exposes the existing RunVerdict task without inv
   assert.match(AGENTMRR_PRODUCT.description, /\/api\/github-actions-run-diagnosis/);
   assert.match(AGENTMRR_PRODUCT.description, /\$0\.04 Base USDC/);
   assert.match(AGENTMRR_PRODUCT.description, /diagnose_github_actions_run/);
+  assert.match(AGENTMRR_PRODUCT.description, new RegExp(AGENTMRR_RUN_ENDPOINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(AGENTMRR_PRODUCT.description, new RegExp(AGENTMRR_MCP_ENDPOINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(AGENTMRR_PRODUCT.description, /secret-like excerpts/);
   assert.doesNotMatch(`${AGENTMRR_PRODUCT.tagline} ${AGENTMRR_PRODUCT.description}`, /safe|recommends one retry/);
   assert.deepEqual(AGENTMRR_PRODUCT.tags, ["github-actions", "ci-cd", "debugging", "coding-agents", "x402", "mcp"]);
@@ -133,6 +141,8 @@ test("AgentMRR publication response must echo the exact reviewed product", () =>
 test("AgentMRR publication waits for the reviewed release and a draining funnel epoch", () => {
   const now = new Date("2026-07-22T07:00:30.000Z");
   const rotationId = "agentmrr-publish-mdfh1234-0123456789abcdef";
+  const collectorState = createFunnelSnapshot(now.toISOString());
+  renewFunnelCollectorCapabilityLeases(collectorState, now.toISOString());
   const valid = {
     releaseState: { schema_version: 1, status: "complete", release_commit: AGENTMRR_REQUIRED_RELEASE_COMMIT },
     releaseMode: 0o600,
@@ -141,6 +151,9 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
     baselineOwnerUid: 1000,
     historyMode: 0o600,
     historyOwnerUid: 1000,
+    collectorState,
+    collectorMode: 0o600,
+    collectorOwnerUid: 1000,
     expectedUid: 1000,
     trustedBaseline: funnelBaseline(40),
     baselineEpochId: 40,
@@ -218,6 +231,22 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
     now: new Date("2026-07-22T07:06:00.000Z"),
   }), /draining rotation/);
   assert.throws(() => validateAgentMrrPublicationGate({ ...valid, historyMode: 0o644 }), /reviewed release/);
+  assert.throws(() => validateAgentMrrPublicationGate({
+    ...valid,
+    collectorState: { ...valid.collectorState, collector_capabilities: [] },
+  }), /draining rotation/);
+  assert.throws(() => validateAgentMrrPublicationGate({
+    ...valid,
+    collectorState: { ...valid.collectorState, collector_heartbeat_at: "2026-07-22T06:58:00.000Z" },
+  }), /draining rotation/);
+  assert.throws(() => validateAgentMrrPublicationGate({
+    ...valid,
+    collectorState: {
+      ...valid.collectorState,
+      collector_capability_heartbeats: { agentmrr_source_attribution_v1: "2026-07-22T06:58:00.000Z" },
+      collector_heartbeat_at: now.toISOString(),
+    },
+  }), /draining rotation/);
 });
 
 test("AgentMRR response parsing rejects oversized and malformed JSON bodies", async () => {

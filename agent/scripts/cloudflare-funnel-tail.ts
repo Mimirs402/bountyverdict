@@ -6,11 +6,13 @@ import {
   classifyFunnelTailEvent,
   classifyDiscoveryTailEvent,
   classifyMcpTailEvents,
+  activateFunnelCollectorCapabilities,
   createFunnelSnapshot,
   loadFunnelSnapshot,
   recordDiscoveryObservation,
   recordFunnelObservation,
   recordMcpObservation,
+  renewFunnelCollectorCapabilityLeases,
   type FunnelSnapshot,
 } from "../src/funnel-telemetry.ts";
 
@@ -30,6 +32,7 @@ try {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   snapshot = createFunnelSnapshot();
 }
+activateFunnelCollectorCapabilities(snapshot);
 // A process starting is not evidence that Wrangler has connected to the
 // Cloudflare tail. Keep the lease invalid until an owner readiness request is
 // observed coming back through the tail itself.
@@ -135,7 +138,9 @@ child.stdout.on("data", (chunk: string) => {
     const mcp = !observation && !discovery ? classifyMcpTailEvents(value) : [];
     if (!observation && !discovery && mcp.length === 0) continue;
     if (discovery?.surface === "sample_single" && discovery.source === "owner_automation") {
-      snapshot.collector_heartbeat_at = new Date().toISOString();
+      const heartbeat = new Date().toISOString();
+      snapshot.collector_heartbeat_at = heartbeat;
+      renewFunnelCollectorCapabilityLeases(snapshot, heartbeat);
     }
     if (observation) recordFunnelObservation(snapshot, observation);
     else if (discovery) recordDiscoveryObservation(snapshot, discovery);
@@ -159,6 +164,7 @@ child.on("close", async (code, signal) => {
   shuttingDown = true;
   clearInterval(readinessProbe);
   snapshot.collector_heartbeat_at = invalidCollectorHeartbeat;
+  activateFunnelCollectorCapabilities(snapshot);
   try {
     await flush();
   } catch (error) {

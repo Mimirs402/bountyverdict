@@ -103,6 +103,21 @@ test("returns AVOID when GitHub already lists an assignee", async () => {
   assert.ok(result.signals.some((signal) => signal.label === "Issue is already assigned" && signal.hard_stop));
 });
 
+test("returns AVOID for an unconfirmed bounty posted by a non-maintainer", async () => {
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, { ...issue, author_association: "NONE" }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "UNVERIFIED");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Bounty issuer lacks repository authority" && signal.hard_stop
+  ));
+});
+
 test("rejects a non-issue URL before making an upstream request", async () => {
   let fetched = false;
   const mock = (async () => {

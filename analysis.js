@@ -385,6 +385,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
       reward.evidenceUrl,
     ));
+    if (!MAINTAINER_ASSOCIATIONS.has(issue.author_association)) {
+      score -= 70;
+      signals.push(signal(
+        "Bounty issuer lacks repository authority",
+        -70,
+        "The advertised reward was posted by an issue author who is not a repository owner, member, or collaborator, and no trusted platform or maintainer confirms it.",
+        reward.evidenceUrl,
+        true,
+      ));
+    }
   } else if (reward.state === "NOT_FOUND") {
     score -= 25;
     signals.push(signal(

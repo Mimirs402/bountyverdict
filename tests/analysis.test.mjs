@@ -93,15 +93,33 @@ test("only explicit affirmative rewarded status labels hard-stop the bounty", ()
   }
 });
 
-test("a non-maintainer bounty claim cannot establish reward provenance", () => {
+test("an unconfirmed non-maintainer bounty is a hard stop", () => {
   const output = analyzeBounty({
     issue: { ...healthyIssue, author_association: "NONE", title: "$5,000 bounty", body: "Payable somehow after this issue is solved." },
     repository: healthyRepo,
     now,
   });
   assert.equal(output.reward.state, "UNVERIFIED");
-  assert.equal(output.verdict, "CAUTION");
+  assert.equal(output.verdict, "AVOID");
   assert.ok(output.signals.some((item) => item.label === "Reward is unverified"));
+  assert.ok(output.signals.some((item) => item.label === "Bounty issuer lacks repository authority" && item.hardStop));
+});
+
+test("a maintainer confirmation clears the untrusted-issuer hard stop", () => {
+  const comments = [{
+    body: "I confirm this is a $5,000 bounty and we will pay the accepted contributor.",
+    author_association: "MEMBER",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-confirmation",
+    user: { login: "maintainer" },
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, author_association: "NONE", title: "$5,000 bounty", body: "Payable after this issue is solved." },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+  assert.equal(output.reward.state, "PROMISED");
+  assert.ok(!output.signals.some((item) => item.label === "Bounty issuer lacks repository authority"));
 });
 
 test("parses abbreviated thousands in bounty titles", () => {

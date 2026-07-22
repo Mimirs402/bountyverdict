@@ -160,7 +160,7 @@ test("cancelled, duplicate, malformed, and over-capacity anonymous deposits fail
       anonymousDeposits: [cancelled],
     }),
     payload({ anonymousDeposits: [{
-      _id: "5d82dd50a64b4b0068bae8f4",
+      _id: "5D82DD50A64B4B0068BAE8F4",
       amount: "1000",
       cancelled: false,
     }] }),

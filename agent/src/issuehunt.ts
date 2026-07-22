@@ -153,8 +153,8 @@ export function parseIssueHuntPage(
   let activeDepositCents = 0n;
   for (const deposit of [...page.deposits, ...page.anonymousDeposits]) {
     if (!isRecord(deposit) || typeof deposit._id !== "string" || !/^[0-9a-f]{24}$/i.test(deposit._id) ||
-        seenDeposits.has(deposit._id) || typeof deposit.cancelled !== "boolean") return null;
-    seenDeposits.add(deposit._id);
+        seenDeposits.has(deposit._id.toLowerCase()) || typeof deposit.cancelled !== "boolean") return null;
+    seenDeposits.add(deposit._id.toLowerCase());
     const cents = exactPositiveCents(deposit.amount);
     if (cents === null) return null;
     if (!deposit.cancelled) activeDepositCents += cents;

@@ -77,8 +77,8 @@ import {
   parseAgentMrrProductTelemetry,
 } from "../src/agentmrr.ts";
 import {
-  X402_ARENA_AGENT_ID,
   X402_ARENA_BASE_URL,
+  X402_ARENA_LISTINGS,
   parseX402ArenaTelemetry,
 } from "../src/x402arena.ts";
 
@@ -422,20 +422,30 @@ async function agentMrrStatus(): Promise<Record<string, unknown>> {
 async function x402ArenaStatus(): Promise<Record<string, unknown>> {
   const response = await monitoredFetch(`${X402_ARENA_BASE_URL}/operator/agents`);
   if (!response.ok) throw new Error(`x402 Arena returned HTTP ${response.status}.`);
-  const telemetry = parseX402ArenaTelemetry(await response.json());
+  const payload = await response.json();
+  const listings = Object.entries(X402_ARENA_LISTINGS).map(([agentId, price]) =>
+    parseX402ArenaTelemetry(payload, agentId, price));
   return {
     listed: true,
     checked_at: new Date().toISOString(),
-    agent_id: telemetry.agentId,
+    listing_count: listings.length,
     listing_api_url: `${X402_ARENA_BASE_URL}/operator/agents`,
-    status: telemetry.status,
-    price_usdc: telemetry.priceUsdc,
-    total_revenue_usdc_reported: telemetry.totalRevenue,
-    organic_revenue_usdc_reported: telemetry.organicRevenue,
-    house_revenue_usdc_reported: telemetry.houseRevenue,
-    query_count_reported: telemetry.queryCount,
-    unique_buyers_reported: telemetry.uniqueBuyers,
-    last_event_at: telemetry.lastEventAt,
+    listings: listings.map((telemetry) => ({
+      agent_id: telemetry.agentId,
+      status: telemetry.status,
+      price_usdc: telemetry.priceUsdc,
+      total_revenue_usdc_reported: telemetry.totalRevenue,
+      organic_revenue_usdc_reported: telemetry.organicRevenue,
+      house_revenue_usdc_reported: telemetry.houseRevenue,
+      query_count_reported: telemetry.queryCount,
+      unique_buyers_reported: telemetry.uniqueBuyers,
+      last_event_at: telemetry.lastEventAt,
+    })),
+    total_revenue_usdc_reported: listings.reduce((sum, item) => sum + item.totalRevenue, 0),
+    organic_revenue_usdc_reported: listings.reduce((sum, item) => sum + item.organicRevenue, 0),
+    house_revenue_usdc_reported: listings.reduce((sum, item) => sum + item.houseRevenue, 0),
+    query_count_reported: listings.reduce((sum, item) => sum + item.queryCount, 0),
+    unique_buyers_reported_sum: listings.reduce((sum, item) => sum + item.uniqueBuyers, 0),
     accounting_note: "Arena counters are self-reported marketplace telemetry only; purchases and revenue require independent onchain settlement recognition.",
   };
 }
@@ -2385,7 +2395,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Tollbooth compatibility probe:** submitted_unverified; its verifier parsed the exact $0.05 x402 v2 Base-USDC challenge and payee but the paid replay stayed at HTTP 402 with no settlement proof. The listing has zero calls and zero revenue; do not retry or weaken the production protocol until Tollbooth demonstrates compatible v2 payment replay.
 - **Smithery marketplace:** ${smitherySummary} at [mimirs402/bountyverdict](https://smithery.ai/servers/mimirs402/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
 - **AgentMRR marketplace:** ${agentMrr.listed ? `RunVerdict active; ${Number(agentMrr.try_count || 0)} tries, ${Number(agentMrr.upvotes || 0)} upvotes, score ${Number(agentMrr.score || 0)}; marketplace display ${String(agentMrr.display_price || "unavailable")}; ${String(agentMrr.price_disclosure_state || "price state unavailable")}` : `unavailable (${agentMrr.error || "not checked"})`} at [product API](${agentMrr.listing_api_url || `https://agentmrr.ai/api/products/${AGENTMRR_PRODUCT_ID}`}) (public engagement counters are acquisition telemetry only, never purchases or revenue; the exact $0.04 Base-USDC price remains disclosed in the product description)
-- **x402 Arena:** ${x402Arena.listed ? `RunVerdict active at $${Number(x402Arena.price_usdc || 0).toFixed(2)} USDC; ${Number(x402Arena.query_count_reported || 0)} reported queries, ${Number(x402Arena.unique_buyers_reported || 0)} reported buyers, and $${Number(x402Arena.organic_revenue_usdc_reported || 0).toFixed(2)} reported organic revenue` : `unavailable (${x402Arena.error || "not checked"})`} at [operator API](${x402Arena.listing_api_url || `${X402_ARENA_BASE_URL}/operator/agents`}) (Arena counters are self-reported acquisition telemetry; only independently recognized onchain settlements count as purchases or revenue)
+- **x402 Arena:** ${x402Arena.listed ? `${Number(x402Arena.listing_count || 0)} products active; ${Number(x402Arena.query_count_reported || 0)} reported queries, ${Number(x402Arena.unique_buyers_reported_sum || 0)} summed per-product reported buyers, and $${Number(x402Arena.organic_revenue_usdc_reported || 0).toFixed(2)} reported organic revenue` : `unavailable (${x402Arena.error || "not checked"})`} at [operator API](${x402Arena.listing_api_url || `${X402_ARENA_BASE_URL}/operator/agents`}) (Arena counters are self-reported acquisition telemetry; only independently recognized onchain settlements count as purchases or revenue)
 - **ToolHive in-agent catalog:** ${report.acquisition?.toolhive?.status || "pr_open_pending_directory_refresh"}; issue [#1384](https://github.com/stacklok/toolhive-catalog/issues/1384) and PR [#1388](${report.acquisition?.toolhive?.url || "https://github.com/stacklok/toolhive-catalog/pull/1388"}); PR ${report.acquisition?.toolhive?.pr_status || "open"}, review ${report.acquisition?.toolhive?.pr_review_decision || "REVIEW_REQUIRED"}, merge state ${report.acquisition?.toolhive?.pr_merge_state_status || "BLOCKED"}; exact secret-free six-tool catalog contract ${report.acquisition?.toolhive?.contract_verified ? "verified live" : "pending merge"}. Full catalog validation and Go tests passed before submission. Placement and review state are not impressions, installs, purchases, or revenue.
 - **Clawlancer funded-work canary:** ${clawlancer.available ? `${String(clawlancer.status || "unknown").toUpperCase()}; ${clawlancer.transaction?.fundingTxHash ? "funding transaction reported" : "no funding transaction"}; ${clawlancer.onchain_evidence?.verified ? "release verified on Base and recognized" : "no onchain-verified release, not revenue"}; next action ${clawlancer.action || "unknown"}` : `unavailable (${clawlancer.error || "state not captured"})`} (the pinned deliverable auto-submits only after FUNDED)
 - **Neutral buyer-query retrieval:** ${buyerBenchmarkSummary}

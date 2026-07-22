@@ -458,6 +458,50 @@ test("rejects a non-issue URL before making an upstream request", async () => {
   assert.equal(fetched, false);
 });
 
+test("rejects an issues URL that GitHub resolves to a pull request", async () => {
+  const requested: string[] = [];
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    requested.push(url);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) {
+      return Response.json({
+        ...issue,
+        html_url: "https://github.com/acme/widget/pull/4",
+        pull_request: {
+          url: "https://api.github.com/repos/acme/widget/pulls/4",
+          html_url: "https://github.com/acme/widget/pull/4",
+        },
+      }, { headers });
+    }
+    throw new Error(`Unexpected pull-request follow-up request: ${url}`);
+  }) as typeof fetch;
+
+  await assert.rejects(
+    () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, mock),
+    (error: unknown) => {
+      assert.ok(error instanceof CheckError);
+      assert.equal(error.code, "NOT_AN_ISSUE");
+      assert.equal(error.status, 400);
+      assert.match(error.message, /pull request, not an issue/i);
+      return true;
+    },
+  );
+  assert.deepEqual(requested, ["https://api.github.com/repos/acme/widget/issues/4"]);
+});
+
+test("fails closed when GitHub returns malformed pull-request identity metadata", async () => {
+  const mock = (async () => Response.json({ ...issue, pull_request: null }, {
+    headers: { "x-ratelimit-remaining": "4990" },
+  })) as typeof fetch;
+
+  await assert.rejects(
+    () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, mock),
+    (error: unknown) => error instanceof CheckError &&
+      error.code === "GITHUB_RESPONSE_INVALID" && error.status === 502,
+  );
+});
+
 test("does not expose private issues through a server credential", async () => {
   const mock = (async (input: URL | RequestInfo) => {
     const url = String(input);

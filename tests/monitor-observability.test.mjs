@@ -24,6 +24,7 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(distribution, /!reportOnly && process\.env\.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "distribution"/);
   assert.match(distribution, /if \(reportOnly\) \{[\s\S]+merchantDiscoveryStatus\(previousReport\.discovery \|\| \{\}, checkedAt\)[\s\S]+\} else \{\s+try \{\s+discovery = await discoveryStatus/);
   assert.match(distribution, /marketplace_search: previousReport\.acquisition\?\.marketplace_search/);
+  assert.match(distribution, /mcp_registry: previousReport\.acquisition\?\.mcp_registry/);
   assert.match(distribution, /if \(reportOnly\) \{[\s\S]+mcp_downstreams: previousReport\.acquisition\?\.mcp_downstreams[\s\S]+\} else \{\s+try \{\s+acquisition = \{[\s\S]+mcp_downstreams: await mcpDownstreamStatus/);
   assert.match(distribution, /agenticMarket = previousReport\.marketplaces\?\.agentic_market/);
   assert.match(distribution, /Security action required:[^\n]+x402\.jobs API key/);

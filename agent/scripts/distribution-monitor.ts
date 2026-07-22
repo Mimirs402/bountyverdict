@@ -2726,15 +2726,26 @@ if (reportOnly) {
   }
 }
 
-try {
+if (reportOnly) {
   acquisition = {
     ...acquisition,
-    mcp_registry: await mcpRegistryStatus(),
+    mcp_registry: previousReport.acquisition?.mcp_registry || {
+      listed: false,
+      checked_at: null,
+      status: "awaiting_full_audited_retrieval",
+    },
   };
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
-  errors.push(`MCP Registry: ${message}`);
+} else {
+  try {
+    acquisition = {
+      ...acquisition,
+      mcp_registry: await mcpRegistryStatus(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
+    errors.push(`MCP Registry: ${message}`);
+  }
 }
 
 try {
@@ -3011,7 +3022,7 @@ funnel = await funnelStatus(
 
 const currentRecoveryExperiment = funnel.mcp_unknown_tool_recovery_experiment;
 if (!currentRecoveryExperiment || typeof currentRecoveryExperiment !== "object" || Array.isArray(currentRecoveryExperiment)) {
-  throw new Error("Recovery experiment state is missing from the funnel report.");
+  throw new Error(`Recovery experiment state is missing from the funnel report: ${String(funnel.error || "unknown funnel error")}`);
 }
 await writeMeasurementExperimentCheckpoint(
   recoveryExperimentStateFile,

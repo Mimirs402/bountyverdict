@@ -532,3 +532,16 @@ The new owner-excluded rollout starts conservatively from the first post-deploy 
 Refreshing that work scan exposed a fail-closed accounting drift in Taskmarket's completed multi-award pool: the API replaced the original 19-USDC escrow fields with its 1.135136-USDC terminal award aggregate, and all 11 award rows shared one settlement transaction. The tracker now preserves and bounds the original escrow contract, accepts only the exact pinned terminal gross/net pair after completion, deduplicates the shared receipt fetch, and still records our submission as `not_awarded` with zero revenue. Unknown mutations continue to fail closed.
 
 Audited the three open in-agent marketplace submissions after the GitHub account migration and found that every prior head branch still belonged to the personal fork. Recreated and locally validated all placements under `Mimirs402`: Cline routing skill [#15](https://github.com/cline/marketplace/pull/15), Cline MCP [#16](https://github.com/cline/marketplace/pull/16), Kilo MCP [#194](https://github.com/Kilo-Org/kilo-marketplace/pull/194), and ToolHive remote server [#1388](https://github.com/stacklok/toolhive-catalog/pull/1388). The old personal-fork PRs received only a supersession note; no personal credential, push, or repository mutation was used. All replacements await the normal first-contributor workflow approval and remain placement evidence, not demand or revenue.
+
+## 2026-07-22 — Gemini Gallery eligibility and canonical plugin metadata
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Tracked acquisition costs: **$1.011**
+- Current recognized-USDC profit before historic gas conversion: **-$1.011**
+
+Opened a quiet-drained attribution boundary, then added the one missing `gemini-cli-extension` GitHub topic to the canonical public repository. The existing root `gemini-extension.json` already matches release `v1.1.9` and loads the secret-free six-tool remote MCP at Gemini CLI startup. Google's official release contract says its gallery crawls eligible tagged public repositories daily, so no self-install, synthetic gallery search, customer interaction, price change, or product change was used. The external crawler must now create the evidence.
+
+Corrected stale marketplace metadata that still advertised `1.0.3` despite the live `1.1.9` release. Both Codex and Copilot plugin manifests, the public `gh skill` pin, and production OpenAPI metadata now agree on `1.1.9`; a regression test binds the plugin version to `package.json`. Commit `add1506` passed the Codex plugin validator, the full **100 / 100** public suite, **352 / 352** Worker tests, type checking, synchronized public contracts, dry deployment, CI, Pages, production deployment, all seven real-handler gates, and live metadata checks.
+
+Submitted the canonical business-owned plugin as Awesome Copilot [#2385](https://github.com/github/awesome-copilot/issues/2385), superseding the retired personal-repository submission. Upstream automated intake passed Vally lint, an isolated Copilot install smoke test, and the `1.1.9` manifest-version gate; the issue is `ready-for-review`. Monitoring now follows the exact `Mimirs402/bountyverdict` catalog identity. Submission and review are placement evidence only, not an impression, install, purchase, or revenue event.

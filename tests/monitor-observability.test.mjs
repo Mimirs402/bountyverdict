@@ -239,7 +239,8 @@ test("directory monitoring separates Awesome Copilot review and catalog presence
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(directory, /async function awesomeCopilotStatus/);
   assert.match(directory, /submission_review_and_default_catalog_presence_not_impressions_installs_or_purchases/);
-  assert.match(directory, /issues\/2369/);
+  assert.match(directory, /issues\/2385/);
+  assert.match(directory, /Mimirs402\/bountyverdict/);
   assert.match(distribution, /Awesome Copilot default marketplace/);
   assert.match(distribution, /default-marketplace presence is not an impression, install, or purchase/);
 });

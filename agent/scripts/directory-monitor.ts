@@ -76,7 +76,7 @@ const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-ski
 const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
 const agentPluginsCatalogUrl = "https://cdn.jsdelivr.net/gh/dmgrok/agent-plugins@main/catalog.json";
-const awesomeCopilotIssueUrl = "https://github.com/github/awesome-copilot/issues/2369";
+const awesomeCopilotIssueUrl = "https://github.com/github/awesome-copilot/issues/2385";
 const awesomeCopilotCatalogUrl = "https://raw.githubusercontent.com/github/awesome-copilot/main/plugins/external.json";
 const x402ScoutUrl = "https://x402scout.com/catalog";
 const agent402Api = "https://agent402.tools/api";
@@ -556,7 +556,7 @@ async function awesomeCopilotStatus(
 ): Promise<Record<string, unknown>> {
   const [{ stdout: issueOutput }, catalogResponse] = await Promise.all([
     execFileAsync("gh", [
-      "issue", "view", "2369",
+      "issue", "view", "2385",
       "--repo", "github/awesome-copilot",
       "--json", "number,title,state,labels,createdAt,updatedAt,closedAt,url",
     ], { timeout: timeoutMs, maxBuffer: 1_000_000, encoding: "utf8" }),
@@ -568,14 +568,14 @@ async function awesomeCopilotStatus(
   if (!catalogResponse.ok) throw new Error(`Awesome Copilot catalog returned HTTP ${catalogResponse.status}.`);
   const issue = JSON.parse(issueOutput) as Record<string, any>;
   const catalog = await catalogResponse.json() as unknown;
-  if (issue.number !== 2369 || issue.url !== awesomeCopilotIssueUrl || !Array.isArray(issue.labels) ||
+  if (issue.number !== 2385 || issue.url !== awesomeCopilotIssueUrl || !Array.isArray(issue.labels) ||
     !Array.isArray(catalog)) {
     throw new Error("Awesome Copilot returned malformed review or catalog telemetry.");
   }
   const labels = issue.labels.map((label: Record<string, unknown>) => String(label.name || "")).filter(Boolean).sort();
   const matching = (catalog as Array<Record<string, any>>).filter((entry) =>
     entry.name === "bountyverdict" && entry.source?.source === "github" &&
-    entry.source?.repo === "cristianmoroaica/bountyverdict"
+    entry.source?.repo === "Mimirs402/bountyverdict"
   );
   if (matching.length > 1) throw new Error("Awesome Copilot catalog duplicated BountyVerdict.");
   const listed = matching.length === 1;

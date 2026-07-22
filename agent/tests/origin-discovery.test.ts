@@ -118,10 +118,13 @@ test("ARD catalog publishes one semantic MCP entry without inventing an agent ru
   assert.equal(entry.url, `${origin}/.well-known/mcp.json`);
   assert.equal(entry.representativeQueries.length, 6);
   assert.ok(entry.representativeQueries.every((query) => query === query.toLowerCase() && !/bountyverdict/i.test(query)));
-  assert.ok(entry.representativeQueries.some((query) => /why did.*actions.*fail/.test(query)));
-  assert.ok(entry.representativeQueries.some((query) => /retry.*once or fix/.test(query)));
+  assert.ok(entry.representativeQueries.some((query) => /still claimable or already being worked on/.test(query)));
+  assert.ok(entry.representativeQueries.some((query) => /why did.*actions.*fail.*what should i fix/.test(query)));
+  assert.ok(entry.representativeQueries.some((query) => /flaky.*retry once or fix the code/.test(query)));
+  assert.ok(entry.representativeQueries.some((query) => /tools list upgrade break my agent/.test(query)));
+  assert.match(entry.description, /^Answer six questions before an agent codes/);
   assert.match(entry.description, /no-account/i);
-  assert.match(entry.description, /free, non-settling x402 challenge/i);
+  assert.doesNotMatch(entry.description, /\bx402\b|\bUSDC\b|payment|price/i);
   assert.deepEqual(entry.capabilities, [
     "check_github_bounty",
     "rank_github_bounties",

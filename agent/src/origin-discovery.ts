@@ -19,17 +19,17 @@ const MCP_TOOL_BY_PRODUCT = Object.freeze({
   flake: "classify_github_actions_flake",
   mcpdrift: "check_mcp_tool_drift",
 } as const satisfies Record<typeof DISTRIBUTED_PRODUCTS[number], string>);
-const AI_CATALOG_UPDATED_AT = "2026-07-21T18:29:19Z";
+const AI_CATALOG_UPDATED_AT = "2026-07-22T18:33:54Z";
 const AI_CATALOG_QUERIES = Object.freeze([
-  "check whether a github bounty issue is still open claimed or worth coding",
-  "compare github bounty issues and choose the best candidate",
-  "audit repository coding agent instructions before autonomous work",
-  "why did this github actions workflow run fail",
-  "should i retry this failed github actions run once or fix it",
-  "check whether an mcp tools list schema change will break an agent",
+  "is this github issue bounty still claimable or already being worked on",
+  "which github bounty should i work on next",
+  "can a coding agent safely work in this repository without missing instructions",
+  "why did this github actions run fail and what should i fix",
+  "is this github actions failure flaky should i retry once or fix the code",
+  "will this mcp tools list upgrade break my agent",
 ] as const);
 
-const AGENT_DECISION_DESCRIPTION = "Six no-account, read-only checks tell agents whether to pursue a GitHub bounty, choose among 2-10 bounties, audit coding-agent repository instructions, diagnose a failed Actions run, retry once or fix, and accept or block an MCP tools/list change. $0.02-$0.40 Base USDC; a valid unsigned call returns a free, non-settling x402 challenge before any authorized payment retry.";
+const AGENT_DECISION_DESCRIPTION = "Answer six questions before an agent codes, retries CI, trusts repository instructions, or accepts an MCP upgrade: is a bounty still claimable, which bounty should I choose, why did this run fail, is it flaky, can I trust these instructions, and will this tools/list break my agent? Read-only; no-account use.";
 
 const PRODUCT_GUIDANCE = Object.freeze({
   single: Object.freeze({
@@ -236,7 +236,7 @@ export function createMcpServerCard(originInput: string, network: string) {
       required: false,
       schemes: [],
     },
-    instructions: "Call tools/list to inspect the six read-only tools and their exact x402 prices. Validate complete input before authorizing a Base USDC payment.",
+    instructions: "Choose the tool whose opening question matches the task, then inspect its schema and price before calling. Validate complete input before authorizing any Base USDC payment.",
     tools: ["dynamic"],
     _meta: {
       payment: {

@@ -1,12 +1,13 @@
 # Privacy and data handling
 
-Last updated: 2026-07-20
+Last updated: 2026-07-22
 
 BountyVerdict is designed for public engineering evidence and machine-to-machine payments. Do not submit personal, private, proprietary, credential-bearing, or secret-bearing material.
 
 ## Data the service processes
 
 - Public GitHub issue, repository, skill, workflow, job, and bounded log data requested by the caller.
+- For a GitHub issue that already references a specific BountyHub listing, the public repository name and issue number plus bounded public BountyHub listing, pledge, claim, and assignment state.
 - For MCPDriftVerdict, the complete baseline and current `tools/list` JSON snapshots supplied in the POST body.
 - Standard HTTP metadata required to serve and protect the API.
 - x402 payment data, including the public payer and recipient addresses, amount, network, and transaction evidence.
@@ -25,6 +26,7 @@ Operational monitoring stores aggregate health, public discovery rank, and recog
 
 - **Cloudflare** hosts the Worker and static Pages site and processes HTTP traffic.
 - **GitHub** supplies the public repository and Actions evidence requested by GitHub-facing products.
+- **BountyHub** supplies public issue-specific bounty and pledge state only when the checked GitHub issue already contains a specific BountyHub listing URL. Payment-provider identifiers returned by its API are not copied into results, logs, or durable state.
 - **Coinbase Developer Platform** facilitates x402 verification and settlement.
 - **Base** records successful USDC settlements on a public blockchain.
 

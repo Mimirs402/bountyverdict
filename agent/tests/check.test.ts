@@ -62,6 +62,53 @@ function githubMock(
   };
 }
 
+function withBountyHub(base: typeof fetch, record: Record<string, unknown>): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (url.origin === "https://api.bountyhub.dev") {
+      return url.pathname === "/api/bounties"
+        ? Response.json({ data: [record], hasNextPage: false })
+        : Response.json(record);
+    }
+    return base(input, init);
+  };
+}
+
+const bountyHubComment = {
+  body: "A public listing exists at https://www.bountyhub.dev/en/bounty/view/5bd7b660-5c46-4686-bead-39a53699e98d",
+  author_association: "NONE",
+  html_url: "https://github.com/acme/widget/issues/4#issuecomment-bountyhub",
+  user: { login: "untrusted-trigger" },
+};
+
+function bountyHubRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "5bd7b660-5c46-4686-bead-39a53699e98d",
+    htmlURL: "https://github.com/acme/widget/issues/4",
+    repositoryFullName: "acme/widget",
+    issueNumber: 4,
+    claimed: false,
+    retracted: false,
+    solved: false,
+    totalAmount: "100.00",
+    paymentStatus: "PAID",
+    isFrozen: false,
+    deletedAt: null,
+    assignmentType: "open",
+    assignee: null,
+    pledges: [{
+      id: "e6f823a6-da48-4896-82e0-8622fc018bb4",
+      retracted: false,
+      amount: "100.00",
+      paymentStatus: "PAID",
+      isPaid: false,
+      deletedAt: null,
+    }],
+    claims: [],
+    ...overrides,
+  };
+}
+
 test("returns structured evidence for a viable issue", async () => {
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
@@ -76,6 +123,79 @@ test("returns structured evidence for a viable issue", async () => {
   assert.equal(result.coverage.policy_documents_scanned, 0);
   assert.equal(result.coverage.github_rate_limit_remaining, 4990);
   assert.ok(result.signals.some((signal) => signal.label === "No linked open PR found"));
+});
+
+test("verifies an exact BountyHub platform listing instead of trusting the triggering comment", async () => {
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withBountyHub(githubMock([bountyHubComment]), bountyHubRecord()),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.platform, "BountyHub");
+  assert.equal(result.reward.amount, 100);
+  assert.match(result.reward.evidence_url || "", /^https:\/\/www\.bountyhub\.dev\/en\/bounty\/view\//);
+  assert.ok(result.signals.some((signal) => signal.label === "Trusted platform listing found"));
+});
+
+test("does not trust an ordinary BountyHub comment when platform verification fails", async () => {
+  const base = githubMock([bountyHubComment]);
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    async (input, init) => {
+      const url = new URL(String(input));
+      if (url.origin === "https://api.bountyhub.dev") {
+        return Response.json({ message: "unavailable" }, { status: 503 });
+      }
+      return base(input, init);
+    },
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.notEqual(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.notEqual(result.reward.platform, "BountyHub");
+  assert.ok(!result.signals.some((signal) => signal.label === "Trusted platform listing found"));
+});
+
+test("keeps a BountyHub pay-when-solved pledge promised rather than funded", async () => {
+  const promisedPledge = {
+    ...((bountyHubRecord().pledges as Array<Record<string, unknown>>)[0]),
+    paymentStatus: "PROMISED",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withBountyHub(githubMock([bountyHubComment]), bountyHubRecord({ pledges: [promisedPledge] })),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PROMISED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Platform pay-when-solved promise found" && /no platform-held\/prepaid amount/.test(signal.detail)
+  ));
+});
+
+test("BountyHub claim and terminal states fail closed", async () => {
+  for (const [overrides, expectedLabel] of [
+    [{ claimed: true }, "Bounty platform reports active competition"],
+    [{ retracted: true }, "Bounty platform reports reward withdrawn"],
+    [{ solved: true }, "Bounty platform reports reward awarded"],
+    [{ isFrozen: true }, "Bounty platform reports reward frozen"],
+  ] as const) {
+    const result = await checkGithubIssue(
+      "https://github.com/acme/widget/issues/4",
+      {},
+      withBountyHub(githubMock([bountyHubComment]), bountyHubRecord(overrides)),
+      new Date("2026-07-20T12:00:00Z"),
+    );
+    assert.equal(result.verdict, "AVOID", expectedLabel);
+    assert.ok(result.signals.some((signal) => signal.label === expectedLabel && signal.hard_stop), expectedLabel);
+  }
 });
 
 test("paid check reads repository policy and blocks prohibited AI work", async () => {

@@ -56,7 +56,7 @@
         {
           "label": "Reward is unverified",
           "impact": -25,
-          "detail": "The issue advertises a bounty or reward without a trusted platform-app record or maintainer-authored payment statement.",
+          "detail": "The issue advertises a bounty or reward without a trusted platform record or maintainer-authored payment statement.",
           "evidence_url": "https://github.com/tenstorrent/tt-metal/issues/50522",
           "hard_stop": false
         },
@@ -120,7 +120,7 @@
       "limitations": [
         "A VIABLE verdict is permission to investigate, not a payout guarantee.",
         "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-        "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+        "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
         "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
         "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
         "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere."
@@ -245,7 +245,7 @@
       "limitations": [
         "A VIABLE verdict is permission to investigate, not a payout guarantee.",
         "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
-        "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+        "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
         "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
         "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
         "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere."

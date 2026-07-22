@@ -1101,6 +1101,22 @@ The first epoch-54 quiet window reset at `2026-07-22T20:46:38.438Z` when convers
 
 All **159 / 159** public tests and **485 / 485** Worker and operations tests pass, along with TypeScript checking and `git diff --check`. No bid, claim, comment, pull request, client contact, payment, listing resubmission, or customer metric was fabricated during this audit.
 
+## 2026-07-23 — Clean v6 selection measurement activated
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Active experiment: **mcp-agent-question-descriptions-v6 on epoch 54**
+- Clean starting checkpoint: **0 / 25 eligible tools/list; zero downstream calls**
+- Distribution action: **TensorBlock business-identity correction surfaced for review**
+
+The first replacement quiet window reset honestly at `2026-07-22T20:46:38.438Z` after two additional direct/hidden unknown-client MCP sessions each reached `initialize` and `tools/list`. They produced no protocol error, unknown-tool call, validation error, capacity rejection, payment challenge, presented payment, or paid result. That traffic is useful evidence that the catalog is being reached but selection still stops before invocation; because it arrived during the excluded release drain, it is not attributed to v6.
+
+The replacement boundary then remained unchanged for **921 seconds** across five observations. Rotation `field-test-release-epoch-54` activated epoch 54 at `2026-07-22T21:01:59.663Z`. The guarded reconciler wrote the private activation with mode `0600`, bound it to release `151fca29d89d9825e881c81fe0252e21b916c466`, production activation `ba4242e43cd710e4bad82106c85009af0c5ea546`, and the exact fresh epoch timestamp, and the report-only monitor verified `running_clean_epoch` with a frozen all-zero prefix and 25 eligible tools/list events remaining.
+
+One restrained distribution follow-up was posted on [TensorBlock PR #1346](https://github.com/TensorBlock/awesome-mcp-servers/pull/1346#issuecomment-5051215763). It explains that the mergeable PR only corrects the already-listed product from the retired personal GitHub identity to the active `Mimirs402` business identity; product name, MCP URL, and category are unchanged. The PR remains review-required, so no merge or exposure is claimed.
+
+The apparent 5 USDC insect-wing Taskmarket opportunity was rejected before submission because its brief explicitly requires reading `INSECTS-MAKER-GUIDE.md`, while the task exposes no attachment or metadata link and the guide remains unavailable. No speculative image, fee, or incomplete delivery was submitted. The latest settlement reconciliation remains **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs; owner canaries and unrelated transfers remain excluded.
+
 ## 2026-07-23 — Security-language false positive corrected without disturbing distribution
 
 - Genuine external purchases: **0 / 10**

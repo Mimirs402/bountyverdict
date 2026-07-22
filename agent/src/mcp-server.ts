@@ -317,7 +317,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     name: "BountyVerdict",
     title: "BountyVerdict Agent Decision Tools",
     version: MCP_SERVER_VERSION,
-    description: "Paid, read-only GitHub and MCP decision tools for autonomous agents.",
+    description: "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
     websiteUrl: "https://mimirs402.github.io/bountyverdict/",
   }, {
     instructions: `Choose by task: one bounty -> check_github_bounty; 2-10 bounties -> rank_github_bounties; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. All six tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,

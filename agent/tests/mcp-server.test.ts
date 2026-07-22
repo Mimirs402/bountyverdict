@@ -52,6 +52,10 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
   assert.equal(body.result.serverInfo.version, "1.1.9");
+  assert.equal(
+    body.result.serverInfo.description,
+    "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
+  );
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);

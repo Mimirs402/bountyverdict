@@ -251,3 +251,11 @@ export function githubPrFields(review: GitHubPrStatus): Record<string, unknown> 
     pr_error: review.error || null,
   };
 }
+
+export function githubPrSnapshot(review: GitHubPrStatus): Record<string, unknown> {
+  return {
+    pr_url: review.url,
+    pr_status: review.status,
+    ...githubPrFields(review),
+  };
+}

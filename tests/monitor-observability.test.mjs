@@ -441,8 +441,14 @@ test("directory monitoring tracks Cline review and exact in-agent install contra
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
-  assert.match(directory, /const clineMarketplacePrNumber = 16/);
-  assert.match(distribution, /routing skill https:\/\/github\.com\/cline\/marketplace\/pull\/15/);
+  assert.match(directory, /const clineMarketplaceSkillPrNumber = 15/);
+  assert.match(directory, /const clineMarketplaceMcpPrNumber = 16/);
+  assert.match(directory, /githubPrStatus\("cline", "marketplace", clineMarketplaceSkillPrNumber, clineMarketplaceSkillPrUrl\)/);
+  assert.match(directory, /githubPrStatus\("cline", "marketplace", clineMarketplaceMcpPrNumber, clineMarketplaceMcpPrUrl\)/);
+  assert.match(directory, /mcp_pr: githubPrSnapshot\(mcpReview\)/);
+  assert.match(directory, /skill_pr: githubPrSnapshot\(skillReview\)/);
+  assert.match(directory, /\["cline_marketplace_mcp", clineMarketplace\.mcp_pr \|\| clineMarketplace\]/);
+  assert.match(directory, /\["cline_marketplace_skill", clineMarketplace\.skill_pr \|\| \{\}\]/);
   assert.match(directory, /async function clineMarketplaceStatus/);
   assert.match(directory, /parseClineMarketplaceCatalog/);
   assert.match(directory, /cline_marketplace: clineMarketplace/);
@@ -453,6 +459,32 @@ test("directory monitoring tracks Cline review and exact in-agent install contra
   assert.match(distribution, /Cline marketplace source capture/);
   assert.match(distribution, /mcpClineMarketplace\.paid_success/);
   assert.match(distribution, /aggregate events, not installs, unique agents, purchases, or revenue/);
+});
+
+test("directory monitoring excludes superseded personal-account pull requests from active GitHub totals", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  for (const legacy of [
+    "https://github.com/xpaysh/awesome-x402/pull/934",
+    "https://github.com/cline/marketplace/pull/13",
+    "https://github.com/Kilo-Org/kilo-marketplace/pull/192",
+    "https://github.com/stacklok/toolhive-catalog/pull/1385",
+  ]) {
+    assert.match(directory, new RegExp(legacy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(directory, /superseded_by: x402DirectoryPrUrl/);
+  assert.match(directory, /superseded_by: clineMarketplaceMcpPrUrl/);
+  assert.match(directory, /superseded_by: kiloMarketplacePrUrl/);
+  assert.match(directory, /superseded_by: toolHivePrUrl/);
+  const activeChecks = directory.slice(directory.indexOf("const githubPrChecks"), directory.indexOf("const prTelemetryValue"));
+  assert.doesNotMatch(activeChecks, /pull\/(?:934|13|192|1385)/);
+  assert.match(directory, /excluded_superseded_personal_prs: supersededPersonalAccountPrs/);
+  assert.match(distribution, /Superseded personal-account PRs/);
+  assert.match(distribution, /explicitly excluded from active health and workflow totals/);
+  assert.match(distribution, /superseded personal MCP PR #13 is excluded/);
+  assert.match(distribution, /superseded personal PR #934 excluded/);
 });
 
 test("x402scan monitoring follows the seven canonical paid transports", async () => {

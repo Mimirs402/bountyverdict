@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { githubPrFields, readGitHubPrStatus, type GitHubCliRunner } from "../src/github-pr-telemetry.ts";
+import { githubPrFields, githubPrSnapshot, readGitHubPrStatus, type GitHubCliRunner } from "../src/github-pr-telemetry.ts";
 
 const url = "https://github.com/example/catalog/pull/42";
 const headRefName = "add-example";
@@ -136,6 +136,26 @@ test("authenticated GitHub PR telemetry validates identity and separates every g
     pr_action_required_workflow_names: ["Fork approval"],
     pr_error: null,
   });
+  assert.deepEqual(githubPrSnapshot(result), {
+    pr_url: url,
+    pr_status: "open",
+    ...githubPrFields(result),
+  });
+});
+
+test("canonical Cline skill and MCP pull requests remain distinct snapshots", () => {
+  const skillUrl = "https://github.com/cline/marketplace/pull/15";
+  const mcpUrl = "https://github.com/cline/marketplace/pull/16";
+  const base = {
+    status: "open" as const,
+    checks_total: 0,
+    workflow_runs_total: 0,
+  };
+  const skill = githubPrSnapshot({ ...base, url: skillUrl });
+  const mcp = githubPrSnapshot({ ...base, url: mcpUrl });
+  assert.equal(skill.pr_url, skillUrl);
+  assert.equal(mcp.pr_url, mcpUrl);
+  assert.notDeepEqual(skill, mcp);
 });
 
 test("GitHub PR telemetry fails closed on malformed identities, enums, and workflow runs", async () => {

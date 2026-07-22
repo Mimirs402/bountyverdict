@@ -47,7 +47,7 @@ import {
   parseTensorBlockProfile,
   parseTensorBlockSearch,
 } from "../src/mcp-downstreams.ts";
-import { githubPrFields, readGitHubPrStatus, type GitHubPrStatus } from "../src/github-pr-telemetry.ts";
+import { githubPrFields, githubPrSnapshot, readGitHubPrStatus, type GitHubPrStatus } from "../src/github-pr-telemetry.ts";
 import { parseToolHiveCatalogEntry } from "../src/toolhive.ts";
 import {
   parseSkillsShSearchPayload,
@@ -200,8 +200,10 @@ const toolsForAgentsSubmittedAt = "2026-07-21T15:34:00Z";
 const toolsForAgentsListingUrl = "https://www.toolsforagents.dev/tools/cristianmoroaica/bountyverdict";
 const mcpServerSpotSubmittedAt = "2026-07-21T15:36:00Z";
 const mcpServerSpotListingUrl = "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools";
-const clineMarketplacePrNumber = 16;
-const clineMarketplacePrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplacePrNumber}`;
+const clineMarketplaceSkillPrNumber = 15;
+const clineMarketplaceSkillPrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplaceSkillPrNumber}`;
+const clineMarketplaceMcpPrNumber = 16;
+const clineMarketplaceMcpPrUrl = `https://github.com/cline/marketplace/pull/${clineMarketplaceMcpPrNumber}`;
 const clineMarketplaceCatalogUrl = "https://cline.github.io/marketplace/catalog.json";
 const clineMarketplaceEndpoint = `${productionOrigin}/mcp?source=cline-marketplace`;
 const kiloMarketplacePrNumber = 194;
@@ -220,6 +222,28 @@ const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
   "https://raw.githubusercontent.com/stacklok/toolhive-catalog/main/registries/toolhive/servers/bountyverdict/server.json";
+const supersededPersonalAccountPrs = Object.freeze([
+  Object.freeze({
+    surface: "x402_directory",
+    url: "https://github.com/xpaysh/awesome-x402/pull/934",
+    superseded_by: x402DirectoryPrUrl,
+  }),
+  Object.freeze({
+    surface: "cline_marketplace_mcp",
+    url: "https://github.com/cline/marketplace/pull/13",
+    superseded_by: clineMarketplaceMcpPrUrl,
+  }),
+  Object.freeze({
+    surface: "kilo_marketplace",
+    url: "https://github.com/Kilo-Org/kilo-marketplace/pull/192",
+    superseded_by: kiloMarketplacePrUrl,
+  }),
+  Object.freeze({
+    surface: "toolhive",
+    url: "https://github.com/stacklok/toolhive-catalog/pull/1385",
+    superseded_by: toolHivePrUrl,
+  }),
+]);
 const openHandsIntegrationsPrNumber = 416;
 const openHandsIntegrationsPrUrl = `https://github.com/OpenHands/extensions/pull/${openHandsIntegrationsPrNumber}`;
 const openHandsIntegrationsCatalogUrl =
@@ -1362,8 +1386,9 @@ async function clineMarketplaceStatus(
   observedAt: string,
 ): Promise<Record<string, unknown>> {
   try {
-    const [review, catalogResponse] = await Promise.all([
-      githubPrStatus("cline", "marketplace", clineMarketplacePrNumber, clineMarketplacePrUrl),
+    const [mcpReview, skillReview, catalogResponse] = await Promise.all([
+      githubPrStatus("cline", "marketplace", clineMarketplaceMcpPrNumber, clineMarketplaceMcpPrUrl),
+      githubPrStatus("cline", "marketplace", clineMarketplaceSkillPrNumber, clineMarketplaceSkillPrUrl),
       fetch(clineMarketplaceCatalogUrl, {
         headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
         signal: AbortSignal.timeout(timeoutMs),
@@ -1373,7 +1398,7 @@ async function clineMarketplaceStatus(
     const body = await catalogResponse.text();
     if (body.length > 2_000_000) throw new Error("Cline Marketplace catalog response is unbounded.");
     const parsed = parseClineMarketplaceCatalog(JSON.parse(body), repository, clineMarketplaceEndpoint);
-    const prStatus = String(review.status || "unknown");
+    const prStatus = String(mcpReview.status || "unknown");
     const status = parsed.contract_verified
       ? "catalog_listed"
       : parsed.listed
@@ -1386,10 +1411,12 @@ async function clineMarketplaceStatus(
               ? "pr_closed_without_catalog"
               : "pr_status_unknown";
     return {
-      url: clineMarketplacePrUrl,
+      url: clineMarketplaceMcpPrUrl,
+      mcp_pr: githubPrSnapshot(mcpReview),
+      skill_pr: githubPrSnapshot(skillReview),
       catalog_url: clineMarketplaceCatalogUrl,
       pr_status: prStatus,
-      ...githubPrFields(review),
+      ...githubPrFields(mcpReview),
       catalog_http_status: catalogResponse.status,
       ...parsed,
       status,
@@ -1398,7 +1425,15 @@ async function clineMarketplaceStatus(
     };
   } catch (error) {
     return {
-      url: clineMarketplacePrUrl,
+      url: clineMarketplaceMcpPrUrl,
+      mcp_pr: {
+        pr_url: clineMarketplaceMcpPrUrl,
+        pr_status: "request_failed",
+      },
+      skill_pr: {
+        pr_url: clineMarketplaceSkillPrUrl,
+        pr_status: "request_failed",
+      },
       catalog_url: clineMarketplaceCatalogUrl,
       listed: false,
       contract_verified: false,
@@ -3383,7 +3418,8 @@ const githubPrChecks = [
   ["awesome_mcp_servers", awesomeMcpServers],
   ["tensorblock_mcp_index", tensorBlockMcpIndex],
   ["docker_mcp_registry", dockerMcpRegistry],
-  ["cline_marketplace", clineMarketplace],
+  ["cline_marketplace_mcp", clineMarketplace.mcp_pr || clineMarketplace],
+  ["cline_marketplace_skill", clineMarketplace.skill_pr || {}],
   ["kilo_marketplace", kiloMarketplace],
   ["toolhive", toolHive],
   ["openhands_integrations", openHandsIntegrations],
@@ -3516,6 +3552,8 @@ const githubPrMonitoring = {
   requires_maintainer_action: githubPrActionRequired.length > 0,
   action_required: githubPrActionRequired,
   failures: githubPrFailures,
+  excluded_superseded_personal_prs: supersededPersonalAccountPrs,
+  excluded_superseded_personal_pr_count: supersededPersonalAccountPrs.length,
   measurement: "authenticated_pr_and_workflow_state_only_not_catalog_exposure_impressions_installs_or_purchases",
 };
 const state = {

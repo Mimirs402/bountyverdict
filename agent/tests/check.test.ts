@@ -258,6 +258,31 @@ test("keeps a BountyHub pay-when-solved pledge promised rather than funded", asy
   ));
 });
 
+test("discovers an exact BountyHub listing without requiring a reciprocal GitHub backlink", async () => {
+  const promisedPledge = {
+    ...((bountyHubRecord().pledges as Array<Record<string, unknown>>)[0]),
+    paymentStatus: "PROMISED",
+  };
+  const untrustedIssue = {
+    ...issue,
+    author_association: "NONE",
+    body: "This $100 bounty has a reproducible specification, but contains no marketplace backlink.",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withBountyHub(githubMock([], null, untrustedIssue), bountyHubRecord({ pledges: [promisedPledge] })),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PROMISED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.platform, "BountyHub");
+  assert.equal(result.reward.amount, 100);
+  assert.ok(!result.signals.some((signal) => signal.label === "Bounty issuer lacks repository authority"));
+  assert.ok(result.signals.some((signal) => signal.label === "Platform pay-when-solved promise found"));
+});
+
 test("BountyHub claim and terminal states fail closed", async () => {
   for (const [overrides, expectedLabel] of [
     [{ claimed: true }, "Bounty platform reports active competition"],

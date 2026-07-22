@@ -1,5 +1,5 @@
 import { analyzeBounty, externalSourceIssue, parseIssueUrl } from "../../analysis.js";
-import { fetchBountyHubEvidence, hasBountyHubReference } from "./bountyhub.ts";
+import { fetchBountyHubEvidence } from "./bountyhub.ts";
 import {
   fetchIssueHuntEvidence,
   hasIssueHuntReference,
@@ -352,6 +352,36 @@ async function fetchCanonicalIssueHuntEvidence(
   return null;
 }
 
+async function fetchCanonicalBountyHubEvidence(
+  canonical: { owner: string; repo: string; number: number },
+  submitted: { owner: string; repo: string; number: number },
+  fetchImpl: FetchLike,
+) {
+  const canonicalEvidence = await fetchBountyHubEvidence(
+    canonical.owner,
+    canonical.repo,
+    canonical.number,
+    fetchImpl,
+  );
+  if (canonicalEvidence) return canonicalEvidence;
+
+  const transferred = canonical.owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+    canonical.repo.toLowerCase() !== submitted.repo.toLowerCase() ||
+    canonical.number !== submitted.number;
+  if (!transferred) return null;
+
+  // The submitted GitHub URL has already resolved to the canonical issue. That
+  // redirect proof permits one exact pre-transfer BountyHub lookup, while the
+  // platform parser still requires the old repository and issue coordinates to
+  // match every collection and detail record.
+  return fetchBountyHubEvidence(
+    submitted.owner,
+    submitted.repo,
+    submitted.number,
+    fetchImpl,
+  );
+}
+
 export async function checkGithubIssue(
   issueUrl: string,
   env: CheckEnvironment = {},
@@ -424,9 +454,7 @@ async function checkGithubIssueInternal(
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
   const [bountyHubEvidence, issueHuntEvidence] = await Promise.all([
-    hasBountyHubReference(issueResponse.data, comments)
-      ? fetchBountyHubEvidence(owner, repo, number, fetchImpl)
-      : null,
+    fetchCanonicalBountyHubEvidence(canonical, submitted, fetchImpl),
     fetchCanonicalIssueHuntEvidence(
       issueResponse.data,
       comments,

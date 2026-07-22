@@ -1290,3 +1290,18 @@ The strict parser now validates named and anonymous deposit records through the 
 Live replay from both the former and current GitHub URLs now verifies the same trusted-platform **$150** record and preserves its legacy IssueHunt evidence URL. The verdict remains **AVOID** because the issue closed in 2024 and has three linked pull requests. This repairs funding provenance without making stale work actionable.
 
 The bounded sweep found no executable alternative: three other verified IssueHunt records were closed, one open issue was assigned and offered unverified non-USD XTR, and one listing's GitHub issue no longer exists. The complete public suite passes **174 / 174** and the Worker and operations suite passes **511 / 511**; typechecking, synchronized llms contracts, dry Worker deployment, Glama verification, dependency audit, and diff checking all pass. No claim, bid, payment, contact, deployment, or marketplace mutation occurred.
+
+## 2026-07-23 — Marketplace-originated BountyHub records no longer need GitHub backlinks
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Best fresh listing: **$100 promised, $0 prepaid, already implemented**
+- Production treatment: **unchanged; correction remains in held v1.1.10**
+
+A bounded BountyHub cohort exposed an acquisition-path false negative. `SPLURT-Station/S.P.L.U.R.T-tg#109` has an exact public BountyHub record promising **$100** when solved, but the GitHub issue and comments do not link back to the marketplace. Direct strict parsing verified the platform record; the normal product skipped the lookup and incorrectly reported no trusted platform or authorized issuer. Agents arriving from BountyHub therefore lost the very provenance they had discovered.
+
+BountyVerdict now performs the existing bounded, repository-filtered, fail-soft BountyHub lookup for every canonical issue instead of using an untrusted GitHub backlink as the network trigger. Collection and detail records must still match exact repository coordinates, issue number, canonical GitHub issue URL, UUID identities, pledge states, claims, and bounded pagination. If a submitted GitHub URL proves a repository transfer by resolving to different canonical coordinates, one exact pre-transfer lookup is permitted; otherwise no alias is trusted. A missing or unavailable BountyHub record remains a soft null and cannot fabricate funding.
+
+Live replay now returns `PROMISED`, trusted platform `BountyHub`, **$100 total / $0 prepaid**, preserves the exact listing URL, and removes the false issuer-authority hard stop. It still returns **AVOID 0** because `SPLURT-Station/S.P.L.U.R.T-tg#114` already merged the requested implementation. Four other cohort records were closed, claimed, assigned, or already implemented, so none was executable.
+
+The complete public suite passes **176 / 176** and the Worker and operations suite passes **512 / 512**. Typechecking, synchronized public contracts, dry Worker deployment, Glama release verification, zero-vulnerability dependency audit, and diff checking pass. No claim, bid, contact, payment, production deployment, or marketplace mutation occurred.

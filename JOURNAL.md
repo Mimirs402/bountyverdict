@@ -802,3 +802,15 @@ The exact live issue [`ClankerNation/OpenAgents#101`](https://github.com/Clanker
 The business repository fast-forward, GitHub CI, Pages build, production Worker deployment, real-handler checks, and manifest activation all completed successfully. The live MCP server now leads with the concrete tasks agents actually delegate: diagnose failed GitHub Actions, decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP updates.
 
 Epoch 43 began before deployment and accumulated one eligible `tools/list` event whose treatment exposure could not be proven. That event is excluded rather than credited. A new audited drain now prepares epoch 44, and the 25-event experiment is rebased to the exact cumulative buyer-candidate counters observed after deployment: **500 initialize / 437 tools/list / 12 validation errors / 0 valid calls**. Only clean epoch 44 events can reach the treatment boundary.
+
+## 2026-07-22 — AgentMRR release-attestation reconciliation (draft)
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- External state: **no AgentMRR publication, nomination email, payment, or funnel mutation**
+
+The task-specific production release advanced canonical `main` after the earlier AgentMRR code-release receipt was completed. The existing publication gate correctly refuses that stale receipt, so SMTP completion alone cannot accidentally publish a listing bound to superseded main.
+
+This draft adds a separate explicit reconciliation step. It accepts only the private owner-owned exact prior receipt, the Mimir's Lab GitHub identity, a clean canonical `main` equal to authoritative `origin/main`, the exact reviewed ancestry, the fixed successful production deployment, and one successful CI and Pages run for current main. Every file after the fixed reconciliation base must equal the small reviewed repair allowlist, and the AgentMRR product and publisher contract files must be byte-unchanged from the prior verified release. A dry run is read-only. The explicitly enabled path preserves the exact old receipt bytes once in a private history directory, durably replaces the active receipt with an attestation bound to current main, its reviewed source head, and the deployed Worker release, and is safely repeatable after a crash.
+
+A versioned release handoff replaces the obsolete local sequence: only its explicit release flag can first reconcile the attestation and then invoke the existing gated publisher. The publisher still requires the nomination-dependent hardening receipt, live collector lease, clean trusted-funnel rotation, private AgentMRR identity, and exact product contract. The draft itself does not send email, publish AgentMRR, rotate the funnel, or touch wallet state.

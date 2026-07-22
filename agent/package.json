@@ -28,6 +28,8 @@
     "payan:demand": "node --experimental-strip-types scripts/payan-demand.ts",
     "agentmrr:register": "node --experimental-strip-types scripts/agentmrr-register.ts",
     "agentmrr:publish": "node --experimental-strip-types scripts/agentmrr-publish.ts",
+    "agentmrr:reconcile-release": "node --experimental-strip-types scripts/reconcile-agentmrr-code-release.ts",
+    "agentmrr:release-current": "node --experimental-strip-types scripts/release-agentmrr-current.ts",
     "demand:watch": "node --experimental-strip-types scripts/demand-watch.ts",
     "taskmarket:aibtc-submit": "node --experimental-strip-types scripts/taskmarket-aibtc-submit.ts",
     "clawlancer:work": "node --experimental-strip-types scripts/clawlancer-work.ts",

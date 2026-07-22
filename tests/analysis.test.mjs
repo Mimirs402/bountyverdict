@@ -122,6 +122,135 @@ test("a maintainer confirmation clears the untrusted-issuer hard stop", () => {
   assert.ok(!output.signals.some((item) => item.label === "Bounty issuer lacks repository authority"));
 });
 
+test("a maintainer denial cannot masquerade as reward confirmation", () => {
+  const comments = [{
+    body: "This bounty will not be paid.",
+    author_association: "MEMBER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-denial",
+    user: { login: "maintainer" },
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, author_association: "NONE", title: "$5,000 bounty", body: "Payable after this issue is solved." },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+  assert.ok(!output.signals.some((item) => item.label === "Maintainer reward promise found"));
+});
+
+test("a maintainer-authored issue denial is a withdrawn reward hard stop", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}\n\nThis bounty will not be paid.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.reward.verification, "MAINTAINER_STATEMENT");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+});
+
+test("issue updated_at is never used as a body-edit timestamp", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}\n\nThis bounty will not be paid.`,
+    updated_at: "2026-07-18T10:00:00Z",
+  };
+  const comments = [{
+    body: "We restored this $100 bounty and will pay it after merge.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-restored",
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.verdict, "AVOID");
+  assert.match(output.signals.find((item) => item.label === "Reward withdrawal signal")?.detail ?? "", /cannot establish when that text was edited/i);
+});
+
+test("a later maintainer confirmation supersedes an earlier withdrawal", () => {
+  const comments = [{
+    body: "We cancelled the bounty.",
+    author_association: "MEMBER",
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-withdrawn",
+    user: { login: "maintainer" },
+  }, {
+    body: "We restored this $100 bounty and will pay the accepted contributor.",
+    author_association: "MEMBER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-restored",
+    user: { login: "maintainer" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "VIABLE");
+  assert.equal(output.withdrawals.length, 0);
+});
+
+test("same-comment restoration supersedes its historical cancellation clause", () => {
+  const comments = [{
+    body: "We cancelled the bounty yesterday, but restored it today. This $100 reward will be paid after acceptance.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-restored",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) => item.label === "Reward withdrawal signal"));
+});
+
+test("same-comment cancellation supersedes an earlier restoration clause", () => {
+  const comments = [{
+    body: "We restored the $100 bounty yesterday, but cancelled the bounty today.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-cancelled",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+});
+
+test("negated or hypothetical restoration language cannot bypass denial", () => {
+  const denials = [
+    "We will not restore this $100 bounty. It will not be paid.",
+    "We cannot restore this $100 bounty.",
+    "Do not restore this $100 bounty; it remains cancelled.",
+    "We discussed restoring the $100 bounty but decided not to.",
+    "The $100 bounty has not been restored and will not be paid.",
+    "We restored the $100 bounty yesterday, then withdrew it today.",
+    "We restored the $100 bounty and it will be paid after merge, but later cancelled it.",
+    "We restored the $100 bounty and it will be paid after merge, but then removed it.",
+    "We restored the $100 bounty and it will be paid after merge, but decided to cancel it.",
+    "We restored the $100 bounty and it will be paid after merge, but it is no longer available.",
+  ];
+  for (const body of denials) {
+    const comments = [{
+      body,
+      author_association: "OWNER",
+      created_at: "2026-07-20T10:00:00Z",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-denial",
+    }];
+    const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+    assert.equal(output.reward.state, "WITHDRAWN", body);
+    assert.equal(output.verdict, "AVOID", body);
+    assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop), body);
+  }
+});
+
 test("a mirrored bounty requires checking its external source issue", () => {
   const output = analyzeBounty({
     issue: {
@@ -151,6 +280,20 @@ test("a same-repository source link is not treated as a mirror", () => {
   });
 
   assert.ok(!output.signals.some((item) => item.label === "External source issue requires separate verification"));
+});
+
+test("common source-issue and mirror labels are recognized", () => {
+  for (const prefix of ["Source issue:", "Mirror of", "Mirrored from"]) {
+    const output = analyzeBounty({
+      issue: {
+        ...healthyIssue,
+        body: `${prefix} https://github.com/upstream/project/issues/77\n\n$500 bounty with complete acceptance criteria and a reproducible implementation scope.`,
+      },
+      repository: healthyRepo,
+      now,
+    });
+    assert.ok(output.signals.some((item) => item.label === "External source issue requires separate verification"), prefix);
+  }
 });
 
 test("parses abbreviated thousands in bounty titles", () => {
@@ -453,16 +596,36 @@ test("truncated evidence can never establish a viable verdict", () => {
 test("withdrawn bounty is detected even when issue remains open", () => {
   const comments = [{
     body: "I have removed the $1000 bounty because the issue attracted duplicate PRs.",
-    author_association: "NONE",
+    author_association: "MEMBER",
     html_url: "https://github.com/acme/widget/issues/4#issuecomment-2",
-    user: { login: "sponsor" }
+    user: { login: "maintainer" }
   }];
   const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
   assert.equal(output.verdict, "AVOID");
   assert.equal(output.withdrawals.length, 1);
 });
 
-test("an authenticated platform reward-creation failure is a hard stop", () => {
+test("an untrusted commenter cannot forge a generic reward withdrawal", () => {
+  const comments = [{
+    body: "I cancelled this bounty.",
+    author_association: "NONE",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-forged-withdrawal",
+    user: { login: "random-user" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "VIABLE");
+  assert.equal(output.withdrawals.length, 0);
+});
+
+test("an authenticated platform rejection of the advertised amount is a hard stop", () => {
+  const rejectedIssue = {
+    ...healthyIssue,
+    title: "Fix slice precedence",
+    body: `${"A complete reproducible implementation specification and acceptance criteria. ".repeat(2)}\n<details><summary>This repo is using Opire - what does it mean?</summary>Everyone can add rewards commenting /reward 100.</details>`,
+    labels: [{ name: "bounty" }, { name: "opire" }, { name: "$10" }],
+  };
   const comments = [{
     body: "You cannot create a reward of $10. It needs to be at least $20.",
     author_association: "NONE",
@@ -470,13 +633,215 @@ test("an authenticated platform reward-creation failure is a hard stop", () => {
     html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
     user: { login: "opirebot[bot]" },
   }];
-  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  const output = analyzeBounty({ issue: rejectedIssue, repository: healthyRepo, comments, now });
 
   assert.equal(output.reward.state, "WITHDRAWN");
   assert.equal(output.verdict, "AVOID");
   assert.ok(output.signals.some((item) =>
     item.label === "Reward platform rejected listing" && item.hardStop
   ));
+});
+
+test("a failed Opire add-on cannot cancel an unrelated Algora listing", () => {
+  const comments = [{
+    body: "## 💎 $100 bounty • acme\nReceive payment after the accepted fix.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "algora-pbc" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-algora",
+    user: { login: "algora-pbc[bot]" },
+  }, {
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+    user: { login: "opirebot[bot]" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.platform, "Algora");
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) => item.label === "Reward platform rejected listing"));
+});
+
+test("a later authenticated Opire listing supersedes an earlier failed attempt", () => {
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+    user: { login: "opirebot[bot]" },
+  }, {
+    body: "@sponsor created a $20.00 reward using [Opire](https://opire.dev)",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-listed",
+    user: { login: "opirebot[bot]" },
+  }];
+  const output = analyzeBounty({ issue: { ...healthyIssue, author_association: "NONE" }, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.platform, "Opire");
+  assert.equal(output.reward.amount, 20);
+  assert.ok(!output.signals.some((item) => item.label === "Bounty issuer lacks repository authority"));
+  assert.ok(!output.signals.some((item) => item.label === "Reward platform rejected listing"));
+});
+
+test("authenticated Opire claim state makes an already-claimed reward unavailable", () => {
+  const comments = [{
+    body: "@sponsor created a $20.00 reward using [Opire](https://opire.dev)",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-listed",
+    user: { login: "opirebot[bot]" },
+  }, {
+    body: "The user @solver has claimed all rewards for this issue.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-claimed",
+    user: { login: "opirebot[bot]" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "PAID_OR_AWARDED");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Bounty platform reports reward claimed" && item.hardStop));
+});
+
+test("an Opire claim cannot cancel an independent Algora listing", () => {
+  const comments = [{
+    body: "The user @solver has claimed all rewards for this issue.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-claimed",
+  }, {
+    body: "## 💎 $250 bounty\nThe bounty is now up for grabs.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "algora-pbc" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-algora-listed",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.platform, "Algora");
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) => item.label === "Bounty platform reports reward claimed"));
+});
+
+test("authenticated Opire empty state blocks an Opire-bound maintainer promise", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}\n<details><summary>This repo is using Opire - what does it mean?</summary></details>`,
+  };
+  const comments = [{
+    body: "This issue does not have any reward yet!",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-empty",
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "NOT_FOUND");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(output.reward.platform, "Opire");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward platform reports no current reward" && item.hardStop));
+});
+
+test("a maintainer cannot confirm a bounty by disclaiming ownership or authorization", () => {
+  const comments = [{
+    body: "A user mentioned a $100 bounty, but that bounty is not ours and we do not authorize it.",
+    author_association: "MEMBER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-disclaimer",
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, author_association: "NONE" },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+});
+
+test("a maintainer-authored issue disclaimer is terminal denial authority", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}\n\nA user mentioned a $100 bounty, but that bounty is not ours and we do not authorize it.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.reward.verification, "MAINTAINER_STATEMENT");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+});
+
+test("Opire rejection binding considers every advertised dollar amount", () => {
+  const issue = {
+    ...healthyIssue,
+    title: "Fix $100 invoice bug",
+    body: `${"A complete reproducible implementation specification and acceptance criteria. ".repeat(2)}\n<details><summary>This repo is using Opire - what does it mean?</summary></details>`,
+    labels: ["opire", "$10"],
+  };
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.reward.amount, 10);
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Reward platform rejected listing" && item.hardStop));
+});
+
+test("authenticated Opire rejection overrides an Opire-bound maintainer promise", () => {
+  const issue = {
+    ...healthyIssue,
+    title: "[Opire bounty $10] Fix widget",
+    labels: ["opire", "$10"],
+  };
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(output.verdict, "AVOID");
+});
+
+test("Opire installation boilerplate alone is not a reward promise", () => {
+  const issue = {
+    ...healthyIssue,
+    title: "Make MCP timeouts cancellation-safe",
+    body: `${"A complete reproducible implementation specification and acceptance criteria. ".repeat(2)}\n<details><summary>This repo is using Opire - what does it mean?</summary>Everyone can add rewards commenting /reward 100.</details>`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.equal(output.reward.state, "NOT_FOUND");
+  assert.equal(output.verdict, "CAUTION");
+  assert.ok(!output.signals.some((item) => item.label === "Maintainer reward promise found"));
 });
 
 test("an untrusted commenter cannot forge a platform reward rejection", () => {

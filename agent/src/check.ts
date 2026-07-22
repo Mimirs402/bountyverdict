@@ -402,6 +402,7 @@ export async function checkGithubIssue(
       "A VIABLE verdict is permission to investigate, not a payout guarantee.",
       "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
       "A trusted platform listing proves listing provenance, not escrow, acceptance, merge, or payout.",
+      "When a mirror or source issue is linked, this check does not fetch that second issue; inspect it separately before coding.",
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
       "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",

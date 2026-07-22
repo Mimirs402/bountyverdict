@@ -1,6 +1,6 @@
 const MAINTAINER_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 const TRUSTED_BOUNTY_APPS = new Set(["algora-pbc"]);
-const TRUSTED_REWARD_FAILURE_APPS = new Set(["opirebot"]);
+const TRUSTED_OPIRE_APP = "opirebot";
 
 const NEGATIVE_MAINTAINER_PATTERNS = [
   /ai[ -]slop/i,
@@ -21,7 +21,19 @@ const WITHDRAWAL_PATTERNS = [
   /withdraw(?:n|ing)?.{0,40}(?:reward|bounty)/i,
   /(?:reward|bounty).{0,40}withdraw(?:n|ing)?/i,
   /no longer.{0,40}(?:reward|bounty)/i,
-  /cancel(?:led|ing)?.{0,40}(?:reward|bounty)/i
+  /cancel(?:led|ing)?.{0,40}(?:reward|bounty)/i,
+  /(?:reward|bounty).{0,40}(?:will not|won['’]?t|cannot|can['’]?t) be paid/i,
+  /(?:will not|won['’]?t|cannot|can['’]?t) pay.{0,40}(?:reward|bounty)/i,
+  /(?:reward|bounty).{0,40}(?:is not|isn['’]?t) (?:valid|funded|available)/i,
+  /(?:reward|bounty).{0,60}(?:is not|isn['’]?t|not) (?:our|ours|authorized|approved)/i,
+  /(?:reward|bounty).{0,80}(?:do not|don['’]?t|cannot|can['’]?t) (?:authorize|approve)/i,
+  /(?:do not|don['’]?t|cannot|can['’]?t) (?:authorize|approve).{0,80}(?:reward|bounty)/i,
+  /(?:will not|won['’]?t|cannot|can['’]?t|do not|don['’]?t) (?:restore|reinstate|reactivate).{0,60}(?:reward|bounty)/i,
+  /(?:discussed|considered).{0,40}(?:restoring|reinstating|reactivating).{0,60}(?:reward|bounty).{0,50}(?:decided not|declined|not approved)/i,
+  /(?:reward|bounty).{0,60}(?:has|is|was) not (?:been )?(?:restored|reinstated|reactivated)/i,
+  /(?:reward|bounty).{0,80}(?:withdrew|withdraws?).{0,30}\bit\b/i,
+  /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}(?:(?:cancelled|canceled|removed|withdrew)\s+it|decided to (?:cancel|remove|withdraw)\s+it)/i,
+  /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}\bit\s+(?:is|was|remains?)\s+no longer\s+(?:available|funded|payable)/i,
 ];
 
 const REWARD_PLATFORM_REJECTION_PATTERNS = [
@@ -29,6 +41,18 @@ const REWARD_PLATFORM_REJECTION_PATTERNS = [
   /could not create (?:a )?reward/i,
   /unable to create (?:a )?reward/i,
   /reward.{0,40}(?:must|needs?) to be at least/i,
+];
+
+const REWARD_DENIAL_PATTERNS = [
+  ...WITHDRAWAL_PATTERNS,
+  /(?:reward|bounty).{0,40}(?:not|never) (?:real|payable|available)/i,
+  /(?:not|never) (?:a )?(?:real )?(?:reward|bounty)/i,
+];
+
+const REWARD_RESTORATION_PATTERNS = [
+  /\b(?:we|maintainers?|the team)\s+(?:have\s+)?(?:now\s+)?(?:restored|reinstated|reactivated)\s+(?:the|this|our|it)\b/i,
+  /\b(?:but|and)\s+(?:we\s+)?(?:have\s+)?(?:now\s+)?(?:restored|reinstated|reactivated)\s+(?:the|this|our|it)\b/i,
+  /\b(?:the\s+)?(?:reward|bounty)\s+(?:has been|is|was)\s+(?:now\s+)?(?:restored|reinstated|reactivated)\b/i,
 ];
 
 const AI_POLICY_BLOCK_PATTERNS = [
@@ -64,7 +88,7 @@ const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
   /\b(?:dropping|giving up)\s+(?:this|it|the issue|my claim)\b/i,
 ];
 
-const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+url|original\s+(?:issue|link)|upstream\s+issue|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
+const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
 
 function externalSourceIssue(issue, repository) {
   const body = typeof issue?.body === "string" ? issue.body : "";
@@ -141,7 +165,86 @@ function commentTime(comment) {
   return Number.isFinite(time) ? time : 0;
 }
 
-function platformClaimState(comments, openPulls) {
+function authoredIssueRewardText(issue) {
+  const title = String(issue?.title ?? "");
+  let body = String(issue?.body ?? "");
+  const opireBoilerplate = body.search(/This repo is using Opire\s*-\s*what does it mean\?/i);
+  if (opireBoilerplate >= 0) body = body.slice(0, opireBoilerplate);
+  body = body.replace(/\[!\[Opire Bounty\][^\n\r]*(?:\r?\n)?/gi, "");
+  return `${title}\n${body}`;
+}
+
+function lastPatternMatchIndex(value, patterns) {
+  const text = String(value ?? "");
+  let latest = -1;
+  for (const pattern of patterns) {
+    const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+    for (const match of text.matchAll(new RegExp(pattern.source, flags))) {
+      latest = Math.max(latest, match.index ?? -1);
+    }
+  }
+  return latest;
+}
+
+function hasCurrentRewardRestoration(value) {
+  const text = String(value ?? "");
+  const restorationIndex = lastPatternMatchIndex(value, REWARD_RESTORATION_PATTERNS);
+  if (restorationIndex < 0 || restorationIndex <= lastPatternMatchIndex(value, WITHDRAWAL_PATTERNS)) return false;
+  return /(?:\bwill pay\b|\bwill be paid\b|\bpaid after\b|\bpayment (?:will|shall) be\b|\breceive payment\b)/i
+    .test(text.slice(restorationIndex));
+}
+
+function isPositiveMaintainerRewardText(value) {
+  const text = String(value ?? "");
+  const affirmativePayment = amountFromText(text).amount !== null ||
+    /(?:\bwill pay\b|\bwill be paid\b|\bpaid after\b|\bpayment (?:will|shall) be\b|\breceive payment\b)/i.test(text);
+  const explicitlyRestored = hasCurrentRewardRestoration(text);
+  return /(?:bounty|reward)/i.test(text) &&
+    affirmativePayment &&
+    (explicitlyRestored || !REWARD_DENIAL_PATTERNS.some((pattern) => pattern.test(text)));
+}
+
+function isPositiveRewardRestorationText(value) {
+  const text = String(value ?? "");
+  return hasCurrentRewardRestoration(text) && isPositiveMaintainerRewardText(text);
+}
+
+function opireRewardState(comments) {
+  const ordered = comments
+    .filter((comment) => comment.performed_via_github_app?.slug === TRUSTED_OPIRE_APP)
+    .sort((left, right) => commentTime(left) - commentTime(right));
+  let listing = null;
+  let claimed = null;
+  let empty = null;
+  const rejections = [];
+  for (const comment of ordered) {
+    const body = String(comment.body ?? "");
+    if (/@[^\s]+ created a \$[\d,.]+ reward using \[Opire\]/i.test(body)) {
+      listing = comment;
+      claimed = null;
+      empty = null;
+      continue;
+    }
+    if (/claimed all rewards for this issue/i.test(body)) {
+      listing = null;
+      claimed = comment;
+      empty = null;
+      continue;
+    }
+    if (/this issue does not have any reward yet/i.test(body)) {
+      listing = null;
+      claimed = null;
+      empty = comment;
+      continue;
+    }
+    if (REWARD_PLATFORM_REJECTION_PATTERNS.some((pattern) => pattern.test(body))) {
+      rejections.push(comment);
+    }
+  }
+  return { listing, claimed, empty, rejections };
+}
+
+function platformClaimState(comments, openPulls, opire, reward) {
   const official = comments.filter((comment) => TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug));
   const stateComments = official
     .filter((comment) => /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(comment.body ?? "") || /bounty is (?:now )?up for grabs/i.test(comment.body ?? ""))
@@ -149,6 +252,7 @@ function platformClaimState(comments, openPulls) {
   const current = stateComments[0];
   if (current && !/bounty is (?:now )?up for grabs/i.test(current.body ?? "") && /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(current.body ?? "")) {
     return {
+      label: "Bounty platform reports active competition",
       detail: "The current Algora status table lists at least one active attempt or submitted solution.",
       evidenceUrl: current.html_url ?? null,
     };
@@ -160,10 +264,18 @@ function platformClaimState(comments, openPulls) {
     );
     if (claim) {
       return {
+        label: "Bounty platform reports active competition",
         detail: "Algora links an existing open pull request that claims this bounty.",
         evidenceUrl: claim.html_url ?? pull.url,
       };
     }
+  }
+  if (opire.claimed && reward.state === "PAID_OR_AWARDED" && reward.platform === "Opire") {
+    return {
+      label: "Bounty platform reports reward claimed",
+      detail: "Opire reports that all rewards for this issue have already been claimed.",
+      evidenceUrl: opire.claimed.html_url ?? null,
+    };
   }
   return null;
 }
@@ -190,27 +302,44 @@ function isAffirmativeRewardedLabel(value) {
   return /^(?:(?:bounty|reward)\s*[:=/_-]?\s*)?rewarded$/i.test(normalized);
 }
 
-function rewardEvidence(issue, comments) {
-  const officialAlgora = comments.find((comment) =>
+function rewardEvidence(issue, comments, opire) {
+  const officialAlgora = comments
+    .filter((comment) =>
     TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug) &&
     /##\s*💎\s*\$[\d,.]+\s+bounty\b/i.test(comment.body ?? "")
-  );
-  if (officialAlgora) {
+    )
+    .sort((left, right) => commentTime(right) - commentTime(left))[0];
+  const trustedListings = [
+    officialAlgora ? { comment: officialAlgora, platform: "Algora" } : null,
+    opire.listing ? { comment: opire.listing, platform: "Opire" } : null,
+  ].filter(Boolean).sort((left, right) => commentTime(right.comment) - commentTime(left.comment));
+  const trustedListing = trustedListings[0];
+  if (trustedListing) {
     return {
       state: "LISTED",
       verification: "TRUSTED_PLATFORM_APP",
-      platform: "Algora",
-      ...amountFromText(officialAlgora.body),
-      evidenceUrl: officialAlgora.html_url ?? issue.html_url,
+      platform: trustedListing.platform,
+      ...amountFromText(trustedListing.comment.body),
+      evidenceUrl: trustedListing.comment.html_url ?? issue.html_url,
     };
   }
 
-  const issueText = `${issue.title ?? ""}\n${issue.body ?? ""}`;
-  const maintainerIssue = MAINTAINER_ASSOCIATIONS.has(issue.author_association) && /(?:bounty|reward)/i.test(issueText);
-  const maintainerComment = comments.find((comment) =>
-    MAINTAINER_ASSOCIATIONS.has(comment.author_association) && /(?:bounty|reward)/i.test(comment.body ?? "") &&
-    /(?:\$\s*[\d]|\bpaid?\b|\breceive\b)/i.test(comment.body ?? "")
-  );
+  if (opire.claimed) {
+    return {
+      state: "PAID_OR_AWARDED",
+      verification: "TRUSTED_PLATFORM_APP",
+      platform: "Opire",
+      amount: null,
+      currency: null,
+      evidenceUrl: opire.claimed.html_url ?? issue.html_url,
+    };
+  }
+
+  const issueText = authoredIssueRewardText(issue);
+  const maintainerIssue = MAINTAINER_ASSOCIATIONS.has(issue.author_association) && isPositiveMaintainerRewardText(issueText);
+  const maintainerComment = comments
+    .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association) && isPositiveMaintainerRewardText(comment.body))
+    .sort((left, right) => commentTime(right) - commentTime(left))[0];
   if (maintainerIssue || maintainerComment) {
     const source = maintainerComment?.body ?? issueText;
     return {
@@ -240,6 +369,56 @@ function rewardEvidence(issue, comments) {
     currency: null,
     evidenceUrl: issue.html_url,
   };
+}
+
+function currentMaintainerWithdrawals(issue, comments) {
+  const issueWithdrawal = MAINTAINER_ASSOCIATIONS.has(issue.author_association) &&
+    WITHDRAWAL_PATTERNS.some((pattern) => pattern.test(authoredIssueRewardText(issue))) &&
+    !isPositiveRewardRestorationText(authoredIssueRewardText(issue))
+    ? [{
+        body: authoredIssueRewardText(issue),
+        author_association: issue.author_association,
+        source: "issue_body",
+        html_url: issue.html_url,
+      }]
+    : [];
+  if (issueWithdrawal.length) return issueWithdrawal;
+  const withdrawals = matchingComments(comments, WITHDRAWAL_PATTERNS, true)
+    .filter((comment) => !isPositiveRewardRestorationText(comment.body))
+    .sort((left, right) => commentTime(right) - commentTime(left));
+  const confirmations = comments
+    .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association) && isPositiveMaintainerRewardText(comment.body))
+    .sort((left, right) => commentTime(right) - commentTime(left));
+  if (!withdrawals.length) return [];
+  if (confirmations.length && commentTime(confirmations[0]) > commentTime(withdrawals[0])) return [];
+  return [withdrawals[0]];
+}
+
+function relevantOpireRejection(issue, opire, reward) {
+  if (reward.state === "LISTED" || reward.state === "PAID_OR_AWARDED") return null;
+  const labels = issueLabelNames(issue);
+  const opireBound = /(?:This repo is using Opire|Opire Bounty)/i.test(issue.body ?? "") ||
+    labels.some((label) => /^opire$/i.test(String(label)));
+  if (!opireBound) return null;
+  const advertisedAmounts = [...`${authoredIssueRewardText(issue)}\n${labels.join("\n")}`.matchAll(
+    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(?:USDC|USD))?/g,
+  )].map((match) => Number(match[1].replaceAll(",", "")) * (match[2] ? 1_000 : 1))
+    .filter(Number.isFinite);
+  if (!advertisedAmounts.length) return null;
+  return [...opire.rejections]
+    .sort((left, right) => commentTime(right) - commentTime(left))
+    .find((comment) => {
+      const rejected = amountFromText(comment.body).amount;
+      return rejected !== null && advertisedAmounts.includes(rejected);
+    }) ?? null;
+}
+
+function relevantOpireEmpty(issue, opire, reward) {
+  if (!opire.empty || reward.state === "LISTED" || reward.state === "PAID_OR_AWARDED") return null;
+  const labels = issueLabelNames(issue);
+  const opireBound = /(?:This repo is using Opire|Opire Bounty)/i.test(issue.body ?? "") ||
+    labels.some((label) => /^opire$/i.test(String(label)));
+  return opireBound ? opire.empty : null;
 }
 
 function activeSoftLockClaims(issue, comments, now) {
@@ -294,29 +473,40 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
-  const currentPlatformClaim = platformClaimState(comments, openPulls);
+  const opire = opireRewardState(comments);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
   const claimantInterest = activeClaimIntent(comments, now);
   const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
-  const withdrawals = matchingComments(comments, WITHDRAWAL_PATTERNS, false);
-  const platformRejections = comments.filter((comment) =>
-    TRUSTED_REWARD_FAILURE_APPS.has(comment.performed_via_github_app?.slug) &&
-    REWARD_PLATFORM_REJECTION_PATTERNS.some((pattern) => pattern.test(comment.body ?? ""))
-  );
-  const reward = rewardEvidence(issue, comments);
+  const withdrawals = currentMaintainerWithdrawals(issue, comments);
+  const reward = rewardEvidence(issue, comments, opire);
+  const platformRejection = relevantOpireRejection(issue, opire, reward);
+  const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
   if (rewardedLabels.length) {
     reward.state = "PAID_OR_AWARDED";
     reward.evidenceUrl = issue.html_url;
-  } else if (platformRejections.length) {
+  } else if (platformRejection) {
     reward.state = "WITHDRAWN";
-    reward.evidenceUrl = platformRejections.at(-1)?.html_url ?? issue.html_url;
+    reward.verification = "TRUSTED_PLATFORM_APP";
+    reward.platform = "Opire";
+    ({ amount: reward.amount, currency: reward.currency } = amountFromText(platformRejection.body));
+    reward.evidenceUrl = platformRejection.html_url ?? issue.html_url;
   } else if (withdrawals.length) {
     reward.state = "WITHDRAWN";
+    reward.verification = "MAINTAINER_STATEMENT";
+    reward.platform = null;
     reward.evidenceUrl = withdrawals.at(-1)?.html_url ?? issue.html_url;
+  } else if (platformEmpty) {
+    reward.state = "NOT_FOUND";
+    reward.verification = "TRUSTED_PLATFORM_APP";
+    reward.platform = "Opire";
+    reward.amount = null;
+    reward.currency = null;
+    reward.evidenceUrl = platformEmpty.html_url ?? issue.html_url;
   }
+  const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward);
   const aiPolicyBlocks = policyDocuments.filter((document) =>
     AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );
@@ -365,7 +555,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   if (currentPlatformClaim) {
     score -= 70;
     signals.push(signal(
-      "Bounty platform reports active competition",
+      currentPlatformClaim.label,
       -70,
       currentPlatformClaim.detail,
       currentPlatformClaim.evidenceUrl,
@@ -498,20 +688,36 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Maintainer rejection signal", -60, "A maintainer comment contains an explicit rejection, spam, or low-quality-contribution warning.", comment.html_url, true));
   }
 
-  if (platformRejections.length) {
+  if (platformRejection) {
     score -= 70;
-    const comment = platformRejections.at(-1);
     signals.push(signal(
       "Reward platform rejected listing",
       -70,
-      "An authenticated bounty-platform application reports that the advertised reward was not created.",
-      comment.html_url,
+      "An authenticated Opire application reports that the issue's advertised reward amount was not created.",
+      platformRejection.html_url,
+      true,
+    ));
+  } else if (platformEmpty) {
+    score -= 70;
+    signals.push(signal(
+      "Reward platform reports no current reward",
+      -70,
+      "The authenticated Opire application reports that this Opire-bound issue currently has no reward.",
+      platformEmpty.html_url,
       true,
     ));
   } else if (withdrawals.length) {
     score -= 70;
     const comment = withdrawals.at(-1);
-    signals.push(signal("Reward withdrawal signal", -70, "The discussion contains language indicating that a bounty or reward was removed, withdrawn, or cancelled.", comment.html_url, true));
+    signals.push(signal(
+      "Reward withdrawal signal",
+      -70,
+      comment.source === "issue_body"
+        ? "The current maintainer-authored issue text says that the bounty or reward will not be paid; comment chronology cannot establish when that text was edited."
+        : "A current maintainer comment indicates that a bounty or reward was removed, withdrawn, or cancelled.",
+      comment.html_url,
+      true,
+    ));
   }
 
   if (aiPolicyBlocks.length) {

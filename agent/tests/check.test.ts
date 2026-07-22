@@ -138,7 +138,13 @@ test("returns CAUTION when a maintainer-owned listing mirrors an external source
   ));
 });
 
-test("returns AVOID when an authenticated platform app rejected reward creation", async () => {
+test("returns AVOID when Opire rejected the issue's advertised amount", async () => {
+  const rejectedIssue = {
+    ...issue,
+    title: "Fix slice precedence",
+    body: `${"A complete reproducible implementation specification and acceptance criteria. ".repeat(2)}\n<details><summary>This repo is using Opire - what does it mean?</summary>Everyone can add rewards commenting /reward 100.</details>`,
+    labels: [{ name: "bounty" }, { name: "opire" }, { name: "$10" }],
+  };
   const comments = [{
     body: "You cannot create a reward of $10. It needs to be at least $20.",
     author_association: "NONE",
@@ -149,15 +155,238 @@ test("returns AVOID when an authenticated platform app rejected reward creation"
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
     {},
-    githubMock(comments),
+    githubMock(comments, null, rejectedIssue),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "WITHDRAWN");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(result.reward.platform, "Opire");
+  assert.equal(result.reward.amount, 10);
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Reward platform rejected listing" && signal.hard_stop
+  ));
+});
+
+test("Opire boilerplate alone cannot fabricate a paid opportunity", async () => {
+  const boilerplateOnly = {
+    ...issue,
+    title: "Make MCP timeouts cancellation-safe",
+    body: `${"A complete reproducible implementation specification and acceptance criteria. ".repeat(2)}\n<details><summary>This repo is using Opire - what does it mean?</summary>Everyone can add rewards commenting /reward 100.</details>`,
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, boilerplateOnly),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "NOT_FOUND");
+  assert.equal(result.verdict, "CAUTION");
+});
+
+test("authenticated Opire creation is trusted and a later rejection does not cancel it", async () => {
+  const comments = [{
+    body: "@sponsor created a $20.00 reward using [Opire](https://opire.dev)",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-listed",
+    user: { login: "opirebot[bot]" },
+  }, {
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+    user: { login: "opirebot[bot]" },
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, { ...issue, author_association: "NONE" }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.platform, "Opire");
+  assert.equal(result.reward.amount, 20);
+  assert.ok(!result.signals.some((signal) => signal.label === "Reward platform rejected listing"));
+});
+
+test("maintainer reward denial cannot clear an untrusted issuer", async () => {
+  const comments = [{
+    body: "This bounty will not be paid.",
+    author_association: "MEMBER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-denial",
+    user: { login: "maintainer" },
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, { ...issue, author_association: "NONE" }),
     new Date("2026-07-20T12:00:00Z"),
   );
 
   assert.equal(result.reward.state, "WITHDRAWN");
   assert.equal(result.verdict, "AVOID");
-  assert.ok(result.signals.some((signal) =>
-    signal.label === "Reward platform rejected listing" && signal.hard_stop
-  ));
+  assert.ok(result.signals.some((signal) => signal.label === "Reward withdrawal signal" && signal.hard_stop));
+});
+
+test("maintainer-authored issue denial is terminal", async () => {
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, { ...issue, body: `${issue.body}\n\nThis bounty will not be paid.` }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "WITHDRAWN");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) => signal.label === "Reward withdrawal signal" && signal.hard_stop));
+});
+
+test("same-comment restoration clears its historical cancellation clause", async () => {
+  const comments = [{
+    body: "We cancelled the bounty yesterday, but restored it today. This $100 reward will be paid after acceptance.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-restored",
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PROMISED");
+  assert.equal(result.verdict, "VIABLE");
+  assert.ok(!result.signals.some((signal) => signal.label === "Reward withdrawal signal"));
+});
+
+test("negated or hypothetical restoration is terminal in the paid check", async () => {
+  const denials = [
+    "We will not restore this $100 bounty. It will not be paid.",
+    "We cannot restore this $100 bounty.",
+    "Do not restore this $100 bounty; it remains cancelled.",
+    "We discussed restoring the $100 bounty but decided not to.",
+    "The $100 bounty has not been restored and will not be paid.",
+    "We restored the $100 bounty yesterday, then withdrew it today.",
+    "We restored the $100 bounty and it will be paid after merge, but later cancelled it.",
+    "We restored the $100 bounty and it will be paid after merge, but then removed it.",
+    "We restored the $100 bounty and it will be paid after merge, but decided to cancel it.",
+    "We restored the $100 bounty and it will be paid after merge, but it is no longer available.",
+  ];
+  for (const body of denials) {
+    const comments = [{
+      body,
+      author_association: "OWNER",
+      created_at: "2026-07-20T10:00:00Z",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-denial",
+    }];
+    const result = await checkGithubIssue(
+      "https://github.com/acme/widget/issues/4",
+      {},
+      githubMock(comments),
+      new Date("2026-07-20T12:00:00Z"),
+    );
+    assert.equal(result.reward.state, "WITHDRAWN", body);
+    assert.equal(result.verdict, "AVOID", body);
+    assert.ok(result.signals.some((signal) => signal.label === "Reward withdrawal signal" && signal.hard_stop), body);
+  }
+});
+
+test("an older Opire claim cannot cancel a newer Algora listing", async () => {
+  const comments = [{
+    body: "The user @solver has claimed all rewards for this issue.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-19T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-claimed",
+  }, {
+    body: "## 💎 $250 bounty\nThe bounty is now up for grabs.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "algora-pbc" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-algora-listed",
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.platform, "Algora");
+  assert.equal(result.verdict, "VIABLE");
+});
+
+test("authenticated Opire empty state blocks an Opire-bound promise", async () => {
+  const opireBound = {
+    ...issue,
+    body: `${issue.body}\n<details><summary>This repo is using Opire - what does it mean?</summary></details>`,
+  };
+  const comments = [{
+    body: "This issue does not have any reward yet!",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-empty",
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, opireBound),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "NOT_FOUND");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(result.verdict, "AVOID");
+});
+
+test("maintainer non-authorization cannot confirm an untrusted bounty", async () => {
+  const comments = [{
+    body: "A user mentioned a $100 bounty, but that bounty is not ours and we do not authorize it.",
+    author_association: "MEMBER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-disclaimer",
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, { ...issue, author_association: "NONE" }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "WITHDRAWN");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) => signal.label === "Reward withdrawal signal" && signal.hard_stop));
+});
+
+test("authenticated Opire rejection overrides its maintainer-authored promise", async () => {
+  const promised = { ...issue, title: "[Opire bounty $10] Fix widget", labels: ["opire", "$10"] };
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, promised),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "WITHDRAWN");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(result.verdict, "AVOID");
 });
 
 test("rejects a non-issue URL before making an upstream request", async () => {

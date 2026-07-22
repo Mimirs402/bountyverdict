@@ -6,7 +6,7 @@ import {
 } from "./task-leading-description-experiment.ts";
 
 export const AGENT_QUESTION_V7_RELEASE = "3f0b7d046e06b9569302069476fb4553f3698bb2";
-export const AGENT_QUESTION_V7_PRODUCTION_ACTIVATION = "22dbff834beb4f794fc27e9e33176139d5193718";
+export const AGENT_QUESTION_V7_PRODUCTION_ACTIVATION = "22dbff80a09276098287249d5b8f992dec5cfa0e";
 export const AGENT_QUESTION_V7_PRODUCTION_ACTIVATED_AT = "2026-07-22T21:28:08.590Z";
 export const AGENT_QUESTION_V7_ROTATION = "agent_finder_contract_epoch_55";
 export const AGENT_QUESTION_V7_EPOCH = 55;

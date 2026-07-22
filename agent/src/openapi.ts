@@ -1,6 +1,6 @@
 import { BOUNTY_DISCOVERY_DESCRIPTION, outputSchema, portfolioOutputSchema } from "./discovery.ts";
 import { harnessOutputSchema } from "./harness-discovery.ts";
-import { skillOutputSchema } from "./skill-discovery.ts";
+import { SKILL_DISCOVERY_DESCRIPTION, skillOutputSchema } from "./skill-discovery.ts";
 import { runOutputSchema } from "./run-discovery.ts";
 import { FLAKE_SERVICE_REUSE, flakeOutputSchema } from "./flake-discovery.ts";
 import { SERVICE_REUSE } from "./reuse.ts";
@@ -373,7 +373,7 @@ export function createOpenApi(
       "/api/skill": {
         get: {
           summary: "Audit a public agent skill before installation",
-          description: "Pins the repository default branch to a commit and statically scans the requested SKILL.md plus its bounded directory context without executing code. Returns redacted findings, capabilities, domains, coverage, and a LOW_RISK, REVIEW, or BLOCK verdict.",
+          description: SKILL_DISCOVERY_DESCRIPTION,
           operationId: "checkSkillVerdict",
           ...agentMetadata(origin, {
             tags: ["skill-security"],

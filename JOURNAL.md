@@ -1229,4 +1229,6 @@ Timeline pull-request evidence now uses the same repository boundary as exact PR
 
 Live replay proves the change precisely. The current production-equivalent source sees **11** linked PRs and a merged hard stop pointing at the unrelated SchoolPulse PR. The held correction sees **10** linked PRs, removes that hard stop, and retains the real open Elysia PR as competition evidence. The issue remains AVOID on its other cumulative risks, so the correction removes false evidence without manufacturing an actionable bounty.
 
-The complete public suite passes **168 / 168**, the Worker and operations suite passes **503 / 503**, TypeScript checking passes, and `git diff --check` passes. No issue was claimed and no production, listing, payment, or funnel mutation occurred.
+The two proven blind-search misses are now staged on this held branch as question-led resource descriptions. BountyVerdict begins with `Should I work on this GitHub issue?`; SkillVerdict begins with `Is this agent skill safe to install?`. Both remain below CDP's 500-character limit and are asserted in the actual unpaid x402 challenges and OpenAPI contract. They will be released only after v7 freezes its 25-event boundary, together with the quality fixes in one deployment and one excluded drain.
+
+The complete public suite passes **168 / 168**, the Worker and operations suite passes **504 / 504**, TypeScript checking passes, generated public documentation is synchronized, and `git diff --check` passes. No issue was claimed and no production, listing, payment, or funnel mutation occurred.

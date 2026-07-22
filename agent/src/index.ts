@@ -18,7 +18,11 @@ import { checkBountyPortfolio, validatePortfolioUrls } from "./portfolio.ts";
 import { checkGithubHarness, HarnessError, parseRepositoryUrl } from "./harness.ts";
 import { harnessDiscoveryExtension, harnessExample } from "./harness-discovery.ts";
 import { checkGithubSkill, normalizeSkillPath } from "./skill.ts";
-import { skillDiscoveryExtension, skillExample } from "./skill-discovery.ts";
+import {
+  SKILL_DISCOVERY_DESCRIPTION,
+  skillDiscoveryExtension,
+  skillExample,
+} from "./skill-discovery.ts";
 import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { runDiscoveryExtension, runExample } from "./run-discovery.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
@@ -399,7 +403,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: requireCdpResourceDescription("Pre-install security audit for a public agent SKILL.md bundle. Pins the repository to a commit, scans the whole skill directory without executing it, uses repository context to reduce false positives, and flags credential exfiltration, remote or encoded execution, destructive commands, persistence, privilege escalation, instruction evasion, hidden scripts, symlinks, submodules, hardcoded secrets, and undeclared capabilities."),
+    description: requireCdpResourceDescription(SKILL_DISCOVERY_DESCRIPTION),
     mimeType: "application/json",
     serviceName: "SkillVerdict",
     tags: ["agent-skills", "skill-md", "security", "supply-chain", "prompt-injection", "pre-install"],

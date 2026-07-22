@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
 import { BOUNTY_DISCOVERY_DESCRIPTION } from "../src/discovery.ts";
+import { SKILL_DISCOVERY_DESCRIPTION } from "../src/skill-discovery.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 
 const env = {
@@ -133,6 +134,20 @@ test("BountyVerdict challenge leads with exact eligibility and claimability inte
     "assignment-status",
     "due-diligence",
   ]);
+});
+
+test("SkillVerdict challenge leads with the broad pre-install safety question", async () => {
+  const response = await app.request(
+    "/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo&skill_path=skills%2Fexample",
+    {},
+    env,
+  );
+  assert.equal(response.status, 402);
+  const encoded = response.headers.get("payment-required");
+  assert.ok(encoded);
+  const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(decoded.resource.description, SKILL_DISCOVERY_DESCRIPTION);
+  assert.match(decoded.resource.description, /^Is this agent skill safe to install\?/);
 });
 
 test("legacy BountyVerdict GET remains a payable compatibility transport", async () => {

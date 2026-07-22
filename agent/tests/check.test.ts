@@ -108,6 +108,56 @@ test("returns AVOID when a maintainer rejects AI bounty work", async () => {
 
   assert.equal(result.verdict, "AVOID");
   assert.ok(result.signals.some((signal) => signal.hard_stop));
+  assert.equal(
+    result.summary,
+    "A public hard stop or severe risk signal makes this issue an unsafe bounty target.",
+  );
+});
+
+test("explains a cumulative-risk AVOID without claiming a hard stop", async () => {
+  const comments = ["alice", "bob", "carol"].map((login, index) => ({
+    body: "I am working on this issue.",
+    author_association: "NONE",
+    created_at: `2026-07-20T10:0${index}:00Z`,
+    html_url: `https://github.com/acme/widget/issues/4#issuecomment-${index + 1}`,
+    user: { login },
+  }));
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: comments.length }, { headers });
+    if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+    if (/\/comments\?/.test(url)) return Response.json(comments.map((comment, index) => ({ id: index + 1, ...comment })), { headers });
+    if (/\/timeline\?/.test(url)) {
+      return Response.json([{
+        event: "cross-referenced",
+        created_at: "2026-07-20T10:10:00Z",
+        source: {
+          issue: {
+            title: "Competing fix",
+            state: "open",
+            user: { login: "solver" },
+            pull_request: { html_url: "https://github.com/acme/widget/pull/9" },
+          },
+        },
+      }], { headers });
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(!result.signals.some((signal) => signal.hard_stop));
+  assert.equal(
+    result.summary,
+    "Cumulative public risk and competition signals make this issue an unsafe bounty target, even though no single hard stop was found.",
+  );
 });
 
 test("returns AVOID when GitHub already lists an assignee", async () => {

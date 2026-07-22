@@ -271,12 +271,15 @@ function isTimelineEvidencePage(data: unknown): data is Array<Record<string, unk
   );
 }
 
-function summarize(verdict: AgentVerdict["verdict"]): string {
+function summarize(verdict: AgentVerdict["verdict"], hasHardStop: boolean): string {
   if (verdict === "VIABLE") {
     return "No obvious public hard stop was found. Confirm reward terms and reproduce the issue before coding.";
   }
   if (verdict === "CAUTION") {
     return "Competition, staleness, or ambiguity makes this issue a risky use of agent compute.";
+  }
+  if (!hasHardStop) {
+    return "Cumulative public risk and competition signals make this issue an unsafe bounty target, even though no single hard stop was found.";
   }
   return "A public hard stop or severe risk signal makes this issue an unsafe bounty target.";
 }
@@ -374,7 +377,7 @@ export async function checkGithubIssue(
     version: "1.0",
     verdict: analysis.verdict,
     score: analysis.score,
-    summary: summarize(analysis.verdict),
+    summary: summarize(analysis.verdict, analysis.signals.some((item) => item.hardStop)),
     service_reuse: SERVICE_REUSE.single,
     issue: {
       url: issueResponse.data.html_url,

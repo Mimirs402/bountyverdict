@@ -1245,3 +1245,20 @@ A fresh search found `theCeramist/rsi-eaf#178`, an owner-authored open issue pre
 The held analyzer now fails closed only when a trusted repository authority requires the contributor to send, pay, tip, transfer, or purchase, requires transaction proof or ties eligibility to that payment, and supplies no explicit cash payout, reimbursement, or authenticated platform reward. It clears the claimed amount and currency, returns **AVOID 0**, and emits an evidence-linked `Contributor payment required` hard stop. Untrusted comments cannot fabricate the stop, ordinary payment-flow implementation prose does not trigger it, genuine contributor payouts and reimbursed test expenses remain valid, and trusted Algora application or API evidence stays controlling. An outgoing amount under a generic `Bounty` heading is explicitly covered so it cannot bypass the guard.
 
 The exact live replay now returns **AVOID 0**, an unverified reward with no amount or currency, and the canonical issue URL as evidence. The public analysis suite passes **94 / 94** and the complete Worker and operations suite passes **507 / 507**. No bounty was claimed, no outgoing payment was authorized, and production and the v7 measurement coordinate remain unchanged.
+
+## 2026-07-23 — Transferred repositories retain verified IssueHunt funding
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Held release identity: **v1.1.10**
+- Production treatment: **unchanged until the immutable v7 boundary closes**
+
+A real bounty replay exposed a provenance gap after GitHub repository transfers. `publicdomaincompany/scroll#30` now resolves to `breck7/scroll#30`, but IssueHunt still serves its funded record at the former repository route. Querying only the canonical route discarded a real **$30** deposit and returned no trusted reward evidence.
+
+BountyVerdict now checks the canonical IssueHunt route first, then a deduplicated bounded set containing the GitHub URL originally submitted by the caller and at most three exact same-issue IssueHunt routes present in the issue body or scanned comments. A legacy route is only accepted when IssueHunt's embedded repository and issue records both match the live canonical GitHub repository's immutable numeric ID, the exact route coordinates, the exact issue number, and the existing deposit aggregate checks. A wrong repository ID fails closed, and the original IssueHunt evidence URL is preserved.
+
+Live replay proves the whole path. Both `publicdomaincompany/scroll#30` and the current `breck7/scroll#30` now return the same trusted-platform **$30** record at `https://oss.issuehunt.io/r/publicdomaincompany/scroll/issues/30`. Both still return **AVOID** because the GitHub issue is closed, so better funding provenance does not weaken actionability safeguards.
+
+Because the held branch adds the structured `linked_source` output, its public plugin, MCP, Registry, Glama, ToolHive, monitoring, and nomination identities are staged consistently as **v1.1.10** rather than reusing the immutable v1.1.9 identity. Nomination documentation explicitly requires the Registry to verify v1.1.10 before any nomination can be sent.
+
+The complete public suite passes **174 / 174** and the Worker and operations suite passes **509 / 509**. TypeScript checking, synchronized public documentation, dry Worker deployment, Glama release verification, both dependency audits, and `git diff --check` all pass. No production deployment, listing mutation, bounty claim, bid, payment, client contact, or synthetic demand occurred.

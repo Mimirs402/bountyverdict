@@ -12,6 +12,7 @@ const NEGATIVE_MAINTAINER_PATTERNS = [
   /do not (?:work|submit|open)/i,
   /don['’]?t (?:work|submit|open)/i,
   /stop (?:working|submitting)/i,
+  /refrain from (?:submitting|opening).{0,30}(?:additional|new|further)?\s*(?:prs?|pull requests?)/i,
   /bounty hunters?.*(?:noise|slop|spam)/i
 ];
 
@@ -65,6 +66,19 @@ const AI_POLICY_DISCLOSURE_PATTERNS = [
   /(?:must|required to|please)\s+(?:clearly\s+)?(?:disclose|declare|label).{0,60}(?:ai|llm|chatgpt|generative)/i,
   /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i
 ];
+
+const POLICY_REWARD_DISAVOWAL_PATTERNS = [
+  /(?:bount(?:y|ies)|rewards?).{0,100}(?:symbolic|not paid|unpaid|academic study)/i,
+  /(?:not|never)\s+(?:paid work|a paid bounty|a payable bounty)/i,
+  /(?:paid bounty work|paid contribution work).{0,60}(?:not the right|not intended|not available)/i,
+];
+
+function policyRequestsSensitiveAgentContext(value) {
+  const text = String(value ?? "");
+  return /(?:init_context|initialization (?:text|context)|system prompt)/i.test(text) &&
+    /(?:tool_access|session_config|tool access|session configuration)/i.test(text) &&
+    /(?:do not truncate|exact content|full initialization|populate.{0,40}real values)/i.test(text);
+}
 
 const CLAIM_INTENT_TTL_DAYS = 30;
 const CLAIM_INTENT_PATTERNS = [
@@ -346,6 +360,26 @@ function amountFromText(text) {
   };
 }
 
+function amountFromAlgoraListing(text) {
+  const listingHeaders = Array.from(String(text ?? "").matchAll(
+    /^##\s*💎\s*\$\s*[\d][\d,]*(?:\.\d{1,2})?\s*[kK]?(?:\s*(?:USDC|USD))?\s+bounty\b.*$/gim,
+  ));
+  if (!listingHeaders.length) return amountFromText(text);
+
+  const amounts = listingHeaders.map(([header]) => amountFromText(header));
+  if (amounts.some(({ amount, currency }) => amount === null || currency === null)) {
+    return { amount: null, currency: null };
+  }
+  const currencies = new Set(amounts.map(({ currency }) => currency));
+  if (currencies.size !== 1) return { amount: null, currency: null };
+
+  const total = amounts.reduce((sum, { amount }) => sum + amount, 0);
+  return {
+    amount: Number.isFinite(total) ? Math.round(total * 100) / 100 : null,
+    currency: amounts[0].currency,
+  };
+}
+
 function isAffirmativeRewardedLabel(value) {
   const normalized = String(value ?? "")
     .normalize("NFKC")
@@ -431,7 +465,9 @@ function rewardEvidence(issue, comments, opire) {
       state: "LISTED",
       verification: "TRUSTED_PLATFORM_APP",
       platform: trustedListing.platform,
-      ...amountFromText(trustedListing.comment.body),
+      ...(trustedListing.platform === "Algora"
+        ? amountFromAlgoraListing(trustedListing.comment.body)
+        : amountFromText(trustedListing.comment.body)),
       evidenceUrl: trustedListing.comment.html_url ?? issue.html_url,
     };
   }
@@ -591,7 +627,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const claimantInterest = activeClaimIntent(comments, now);
   const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
-  const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
+  const maintainerWarnings = matchingComments([issue, ...comments], NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
   const reward = rewardEvidence(issue, comments, opire);
   const platformRejection = relevantOpireRejection(issue, opire, reward);
@@ -643,6 +679,12 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   );
   const aiPolicyRequirements = policyDocuments.filter((document) =>
     AI_POLICY_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
+  );
+  const policyRewardDisavowals = policyDocuments.filter((document) =>
+    POLICY_REWARD_DISAVOWAL_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
+  );
+  const sensitivePolicyRequests = policyDocuments.filter((document) =>
+    policyRequestsSensitiveAgentContext(document.body)
   );
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
@@ -850,7 +892,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   if (maintainerWarnings.length) {
     score -= 60;
     const comment = maintainerWarnings.at(-1);
-    signals.push(signal("Maintainer rejection signal", -60, "A maintainer comment contains an explicit rejection, spam, or low-quality-contribution warning.", comment.html_url, true));
+    signals.push(signal("Maintainer rejection signal", -60, "A maintainer-authored issue or comment contains an explicit rejection, spam, or low-quality-contribution warning.", comment.html_url, true));
   }
 
   if (platformRejection) {
@@ -893,6 +935,30 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     score -= 5;
     const document = aiPolicyRequirements[0];
     signals.push(signal("AI-use disclosure required", -5, "An official contribution document appears to require disclosure or labeling of AI assistance.", document.html_url));
+  }
+
+  if (policyRewardDisavowals.length) {
+    score -= 100;
+    const document = policyRewardDisavowals[0];
+    signals.push(signal(
+      "Repository policy disavows paid bounty",
+      -100,
+      "An official contribution document says repository bounties or rewards are symbolic, unpaid, or not paid work.",
+      document.html_url,
+      true,
+    ));
+  }
+
+  if (sensitivePolicyRequests.length) {
+    score -= 100;
+    const document = sensitivePolicyRequests[0];
+    signals.push(signal(
+      "Repository policy requests sensitive agent context",
+      -100,
+      "An official contribution document requests full initialization context together with tool-access or session-configuration details. Do not disclose private agent context.",
+      document.html_url,
+      true,
+    ));
   }
 
   if ((issue.body ?? "").trim().length < 120) {

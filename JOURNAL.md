@@ -1172,3 +1172,14 @@ The captured live records now resolve correctly: `egoist/denote#3` is a verified
 The complete public suite passes **161 / 161**, the Worker and operations suite passes **494 / 494**, TypeScript checking passes, and `git diff --check` passes. No claim, bid, payment, or client contact occurred.
 
 The combined quality release `3f0b7d046e06b9569302069476fb4553f3698bb2` is now live. Deployment workflow [`29959242330`](https://github.com/Mimirs402/bountyverdict/actions/runs/29959242330) passed the production contract suite, every real handler canary, and public manifest activation. Activation commit `22dbff80a09276098287249d5b8f992dec5cfa0e` records `2026-07-22T21:28:08.590Z`. The next agent-question checkpoint is isolated as v7 and binds those exact production coordinates to rotation `agent_finder_contract_epoch_55`; it cannot activate until epoch 55 is the exact active conversion-eligible zero-prefix boundary. With the v7 guards included, the Worker and operations suite passes **496 / 496**.
+
+## 2026-07-23 — Clean v7 selection measurement activated
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Active experiment: **mcp-agent-question-descriptions-v7 on epoch 55**
+- Clean starting checkpoint: **0 / 25 eligible tools/list; zero downstream calls**
+
+Rotation `agent_finder_contract_epoch_55` remained stable for **903 seconds** across five observations and activated epoch 55 at `2026-07-22T21:34:44.881Z`. Its active baseline carries the same epoch and timestamp and is conversion-eligible. The v7 reconciler wrote an owner-private mode-`0600` activation bound to production release `3f0b7d046e06b9569302069476fb4553f3698bb2`, manifest activation `22dbff80a09276098287249d5b8f992dec5cfa0e`, and the exact drain boundary.
+
+A concurrent publication handoff briefly generated a private activation with the correct release and timestamp but a non-existent manifest commit suffix. The monitor failed closed when that coordinate changed. Both invalid artifacts were retained as mode-`0600` audit backups, the activation was regenerated from the authoritative Git commit, and the stale field was removed from a preserved report copy. The subsequent report-only service completed successfully with `healthy: true`, no errors, a frozen all-zero v7 prefix, **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs. No owner request is counted as customer demand.

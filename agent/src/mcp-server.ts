@@ -18,7 +18,7 @@ import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
 
 const MCP_BODY_LIMIT_BYTES = MCP_DRIFT_MAX_BODY_BYTES + 64 * 1024;
-const MCP_SERVER_VERSION = "1.1.7";
+const MCP_SERVER_VERSION = "1.1.8";
 const MCP_ALLOWED_BROWSER_ORIGINS = new Set(["https://playground.ai.cloudflare.com"]);
 const GITHUB_ISSUE_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/;
 const GITHUB_REPOSITORY_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
@@ -322,9 +322,10 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
   }, {
     instructions: `Choose by task: one bounty -> check_github_bounty; 2-10 bounties -> rank_github_bounties; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. All six tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
   });
-  const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+  const githubAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+  const closedWorldAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
-  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations }, async ({ issue_url }, extra) => {
+  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeIssueUrl(issue_url); } catch (error) {
       emitMcpEvent("validation_error", "single", request, "invalid_issue_url");
@@ -336,7 +337,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: TOOL_DESCRIPTIONS.rank_github_bounties, inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.rank_github_bounties, annotations }, async ({ issue_urls }, extra) => {
+  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: TOOL_DESCRIPTIONS.rank_github_bounties, inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.rank_github_bounties, annotations: githubAnnotations }, async ({ issue_urls }, extra) => {
     let normalized: string[];
     try { normalized = validatePortfolioUrls(issue_urls); } catch (error) {
       emitMcpEvent("validation_error", "portfolio", request, "invalid_portfolio");
@@ -348,7 +349,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: TOOL_DESCRIPTIONS.audit_agent_harness, inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.audit_agent_harness, annotations }, async ({ repo_url }, extra) => {
+  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: TOOL_DESCRIPTIONS.audit_agent_harness, inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.audit_agent_harness, annotations: githubAnnotations }, async ({ repo_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRepositoryUrl(repo_url); } catch (error) {
       emitMcpEvent("validation_error", "harness", request, "invalid_repository_url");
@@ -360,7 +361,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: TOOL_DESCRIPTIONS.diagnose_github_actions_run, inputSchema: z.object({ run_url: runUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.diagnose_github_actions_run, annotations }, async ({ run_url }, extra) => {
+  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: TOOL_DESCRIPTIONS.diagnose_github_actions_run, inputSchema: z.object({ run_url: runUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.diagnose_github_actions_run, annotations: githubAnnotations }, async ({ run_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRunUrl(run_url); } catch (error) {
       emitMcpEvent("validation_error", "run", request, "invalid_run_or_attempt");
@@ -375,7 +376,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
   server.registerTool("classify_github_actions_flake", { title: "Decide whether to retry failed GitHub Actions", description: TOOL_DESCRIPTIONS.classify_github_actions_flake, inputSchema: z.object({
     run_url: runUrlSchema,
     attempt: z.number().int().positive().optional().describe(FLAKE_ATTEMPT_DESCRIPTION),
-  }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.classify_github_actions_flake, annotations }, async ({ run_url, attempt }, extra) => {
+  }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.classify_github_actions_flake, annotations: githubAnnotations }, async ({ run_url, attempt }, extra) => {
     let normalized: string;
     let normalizedAttempt: number | undefined;
     try {
@@ -402,7 +403,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: TOOL_DESCRIPTIONS.check_mcp_tool_drift, inputSchema: mcpDriftLiveInputSchema, outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_mcp_tool_drift, annotations }, async (args, extra) => {
+  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: TOOL_DESCRIPTIONS.check_mcp_tool_drift, inputSchema: mcpDriftLiveInputSchema, outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_mcp_tool_drift, annotations: closedWorldAnnotations }, async (args, extra) => {
     let result: Awaited<ReturnType<typeof parseAndAnalyzeMcpDrift>>;
     const normalized = { contract_version: args.contract_version, subject: args.subject, annotation_source_trust: args.annotation_source_trust, baseline: args.baseline, current: args.current };
     try { result = await parseAndAnalyzeMcpDrift(JSON.stringify(normalized)); }

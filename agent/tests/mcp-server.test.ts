@@ -51,7 +51,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   });
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
-  assert.equal(body.result.serverInfo.version, "1.1.7");
+  assert.equal(body.result.serverInfo.version, "1.1.8");
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
@@ -74,7 +74,7 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: true,
+      openWorldHint: tool.name !== "check_mcp_tool_drift",
     });
     assert.equal(tool.inputSchema.type, "object");
     assert.equal(tool.outputSchema.type, "object");

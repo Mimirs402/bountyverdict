@@ -153,7 +153,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-22T00:05:36Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.1.7";
+const githubSkillReleaseTag = "v1.1.8";
 const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
@@ -1480,7 +1480,7 @@ async function geminiCliGalleryStatus(
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
     const contractVerified = Boolean(entry && entry.url === repository && entry.extensionName === "bountyverdict" &&
-      entry.extensionVersion === "1.1.7" && entry.hasMCP === true);
+      entry.extensionVersion === "1.1.8" && entry.hasMCP === true);
     return {
       url: "https://geminicli.com/extensions/",
       catalog_url: geminiCliGalleryUrl,

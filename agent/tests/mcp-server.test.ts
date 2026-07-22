@@ -154,8 +154,81 @@ test("MCP rejects schema-invalid and unknown tool calls before payment", async (
   assert.equal(missing.result.isError, true);
   assert.match(missing.result.content[0].text, /validation error/i);
   const unknown = await rpcBody(5, "tools/call", { name: "invented_tool", arguments: {} });
-  assert.equal(unknown.result.isError, true);
-  assert.match(unknown.result.content[0].text, /not found/i);
+  assert.equal(unknown.result, undefined);
+  assert.equal(unknown.error.code, -32602);
+  assert.match(unknown.error.message, /tool not found/i);
+  assert.match(unknown.error.message, /no payment was attempted/i);
+  assert.match(unknown.error.message, /refresh tools\/list/i);
+  assert.equal(unknown.error.data.recovery, "refresh_tools_list");
+  assert.deepEqual(unknown.error.data.advertised_tools.map(({ name }: { name: string }) => name), MCP_DISTRIBUTED_TOOL_NAMES);
+  for (const { name, task } of unknown.error.data.advertised_tools) {
+    assert.equal(typeof task, "string");
+    assert.ok(task.length > 0, `${name} is missing task routing`);
+  }
+  assert.doesNotMatch(JSON.stringify(unknown), /invented_tool/);
+  assert.doesNotMatch(JSON.stringify(unknown), /x402|accepts|payment handoff/i);
+});
+
+test("unknown-tool recovery does not bypass MCP request validation", async () => {
+  const malformedBodies = [
+    { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "invented_tool", arguments: [] } },
+    { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "invented_tool", arguments: "private-argument" } },
+    { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "invented_tool", task: "bad" } },
+    { jsonrpc: "2.0", id: 9.5, method: "tools/call", params: { name: "invented_tool", arguments: {} } },
+    { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "invented_tool", arguments: {}, _meta: "private-meta" } },
+    { jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "invented_tool", arguments: {} }, privateExtra: "discard-me" },
+  ];
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    for (const body of malformedBodies) {
+      const response = await app.request(`${origin}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      }, env);
+      const value = await response.json() as any;
+      assert.equal(value.result, undefined);
+      assert.equal(typeof value.error?.code, "number");
+      assert.notEqual(value.error.code, -32602);
+      assert.equal(value.error.data?.recovery, undefined);
+      assert.doesNotMatch(JSON.stringify(value), /advertised_tools|refresh_tools_list|private-argument|private-meta|discard-me/);
+    }
+  } finally {
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  }).filter((event) => event.type === "bountyverdict_mcp_funnel");
+  assert.equal(events.length, malformedBodies.length);
+  assert.equal(events.every((event) => event.stage === "protocol_error"), true);
+  assert.equal(events.some((event) => event.stage === "tool_not_found"), false);
+});
+
+test("unknown-tool recovery records one privacy-safe event without echoing the requested name", async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    await rpcBody(6, "tools/call", { name: "private_invented_name", arguments: { private_value: "discard-me" } });
+  } finally {
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  }).filter((event) => event.type === "bountyverdict_mcp_funnel");
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], {
+    type: "bountyverdict_mcp_funnel",
+    schema_version: 3,
+    stage: "tool_not_found",
+    product: null,
+    source: "owner_automation",
+    client_family: "not_applicable",
+    validation_kind: "not_applicable",
+  });
+  assert.doesNotMatch(JSON.stringify(events), /private_invented_name|discard-me/);
 });
 
 test("MCP records valid signed FlakeVerdict capacity rejection separately from invalid input", async () => {

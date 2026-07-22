@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, JSONRPCRequestSchema, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { createPaymentWrapper, type PaymentRequirements } from "@x402/mcp";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { z } from "zod";
@@ -89,6 +89,15 @@ const TOOL_PRODUCT = Object.freeze({
 } as const satisfies Record<string, DistributedProduct>);
 
 type ToolName = keyof typeof TOOL_PRODUCT;
+
+const TOOL_RECOVERY_TASKS = Object.freeze({
+  check_github_bounty: "assess one public GitHub bounty",
+  rank_github_bounties: "rank two to ten public GitHub bounties",
+  audit_agent_harness: "audit repository coding-agent instructions",
+  diagnose_github_actions_run: "diagnose one failed GitHub Actions run",
+  classify_github_actions_flake: "decide retry once versus fix",
+  check_mcp_tool_drift: "compare complete MCP tools/list snapshots",
+} as const satisfies Record<ToolName, string>);
 
 const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free $0 selection preview, exact x402 quote, and payment handoff. Only an authorized signed retry can settle. Never call with missing, invented, or placeholder arguments.";
 const unsignedPreviewGuidance = (price: string) => `First unsigned call with real input cannot charge; it returns a free $0 selection preview and exact quote. Only an authorized signed retry costs ${price} USDC on Base.`;
@@ -421,6 +430,23 @@ function jsonRpcHttpError(status: number, code: number, message: string): Respon
   return new Response(JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id: null }), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...(status === 405 ? { Allow: "POST" } : {}) } });
 }
 
+function unknownToolError(id: string | number): Response {
+  const routes = Object.entries(TOOL_RECOVERY_TASKS)
+    .map(([name, task]) => ({ name, task }));
+  return new Response(JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: -32602,
+      message: "Tool not found; no payment was attempted, so refresh tools/list and retry one exact advertised name without guessing or aliasing.",
+      data: {
+        recovery: "refresh_tools_list",
+        advertised_tools: routes,
+      },
+    },
+  }), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
 export async function handleMcpRequest(request: Request, env: McpEnvironment): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -469,21 +495,33 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   if (method === "initialize") emitMcpEvent("initialize", null, classification);
   if (method === "tools/list") emitMcpEvent("tools_list", null, classification);
 
+  const validatedRpc = JSONRPCRequestSchema.safeParse(parsedBody);
+  const validatedCall = CallToolRequestSchema.safeParse(parsedBody);
+  const requestedTool = validatedCall.success ? validatedCall.data.params.name : null;
+  const knownTool = requestedTool !== null && Object.hasOwn(TOOL_PRODUCT, requestedTool);
+  if (validatedRpc.success && validatedCall.success && !knownTool && !unsupportedProtocol) {
+    emitMcpEvent("tool_not_found", null, classification);
+    return respond(unknownToolError(validatedRpc.data.id));
+  }
+
   try {
     const server = await createMcpServer(env, url.origin, classification);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     const response = await transport.handleRequest(request, parsedBody === undefined ? undefined : { parsedBody });
     if (unsupportedProtocol && response.status >= 400) emitMcpEvent("protocol_error", null, classification);
-    if (method === "tools/call" && !classification.toolStageEmitted) {
-      const toolName = (parsedBody as { params?: { name?: unknown } }).params?.name;
-      const product = typeof toolName === "string" ? TOOL_PRODUCT[toolName as ToolName] : undefined;
-      emitMcpEvent(
-        product ? "validation_error" : "tool_not_found",
-        product || null,
-        classification,
-        product ? "schema_rejected_before_handler" : "not_applicable",
-      );
+    if (method === "tools/call" && !classification.toolStageEmitted && !unsupportedProtocol) {
+      if (!validatedRpc.success || !validatedCall.success) {
+        emitMcpEvent("protocol_error", null, classification);
+      } else {
+        const product = TOOL_PRODUCT[validatedCall.data.params.name as ToolName];
+        emitMcpEvent(
+          product ? "validation_error" : "tool_not_found",
+          product || null,
+          classification,
+          product ? "schema_rejected_before_handler" : "not_applicable",
+        );
+      }
     }
     return respond(response);
   } catch (error) {

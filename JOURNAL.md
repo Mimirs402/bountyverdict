@@ -821,8 +821,20 @@ A versioned release handoff replaces the obsolete local sequence: only its expli
 - Customer revenue: **$0.00**
 - Experiment status at discovery: **15 / 25 eligible tools/list events**
 
-Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call` request for an unknown tool name. The exact name, arguments, request, and caller are intentionally not retained. Because the selection experiment previously omitted `tool_not_found` and `protocol_error`, a terminal report could have incorrectly labeled this real invocation attempt as no invocation and rejected only the copy hypothesis.
+Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call`-shaped event classified as `tool_not_found`. The exact request shape, name, arguments, and caller are intentionally not retained. Because the selection experiment previously omitted `tool_not_found` and `protocol_error`, a terminal report could have incorrectly labeled this aggregate invocation signal as no invocation and rejected only the copy hypothesis.
 
-Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage. Unknown-tool calls contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
+Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage or structural validity. `tool_not_found`-classified events contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
 
 The change affects only the private report classifier. It does not alter the production Worker, product contracts, prices, traffic, or settlement accounting. All **146 / 146** public tests and **426 / 426** Worker and operations tests, TypeScript checking, `git diff --check`, Cloudflare dry deployment, and the zero-vulnerability production dependency audit pass.
+
+## 2026-07-22 — Unknown-tool recovery (prepared, not deployed)
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Selection boundary: **25 / 25 tools/list; one unknown-tool invocation; zero valid or paid calls**
+
+The immutable schema-3 boundary preserved one aggregate buyer-candidate event classified as `tool_not_found` after a `tools/call`-shaped request. The privacy contract intentionally discarded the name, arguments, request shape, and caller. The frozen evidence therefore neither proves that the request was structurally valid nor justifies any alias. Automatic AgentMRR publication and the task-first description treatment remain closed for this terminal outcome.
+
+This isolated treatment improves only future, structurally valid unknown-tool responses. A fully validated JSON-RPC and MCP `tools/call` request for an unadvertised string name receives a payment-free MCP `InvalidParams` error that tells the agent to refresh `tools/list`, enumerates the six exact supported names with task routing, and warns against guessed aliases. The response and telemetry never echo or retain the requested name or arguments. Unsupported protocol and malformed JSON-RPC or MCP call traffic continue through the SDK's existing validation path, and all known-tool payment behavior is unchanged.
+
+The focused MCP suite passes **24 / 24**, the full Worker and operations suite passes **428 / 428**, and the public contract suite passes **146 / 146** on Node 22.23.1. TypeScript checking, `git diff --check`, the production dependency audit, and Cloudflare's production dry bundle also pass. The candidate remains local and has not generated production traffic.

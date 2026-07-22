@@ -278,12 +278,12 @@ const mcpMarketplaceSearchEndpoint = "https://mcp-marketplace.io/api/mcp/mcp";
 const mcpMarketplaceSearchLimit = 25;
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
 const ardRepresentativeQueries = Object.freeze([
-  "check whether a github bounty issue is still open claimed or worth coding",
-  "compare github bounty issues and choose the best candidate",
-  "audit repository coding agent instructions before autonomous work",
-  "why did this github actions workflow run fail",
-  "should i retry this failed github actions run once or fix it",
-  "check whether an mcp tools list schema change will break an agent",
+  "is this github issue bounty still claimable or already being worked on",
+  "which github bounty should i work on next",
+  "can a coding agent safely work in this repository without missing instructions",
+  "why did this github actions run fail and what should i fix",
+  "is this github actions failure flaky should i retry once or fix the code",
+  "will this mcp tools list upgrade break my agent",
 ]);
 const ardCapabilities = Object.freeze([
   "check_github_bounty",
@@ -300,6 +300,7 @@ const index402Listings = Object.freeze([
   { product: "skill", id: "f7ae83f3-cef1-4d9e-ae80-327b07d4f674", path: "/api/skill", method: "GET" },
   { product: "run", id: "19eada5c-4d79-4868-8183-745aab875cbb", path: "/api/run", method: "GET" },
   { product: "flake", id: "2d2fb88a-7402-4d1a-ab66-63d4e9ba1031", path: "/api/flake", method: "GET" },
+  { product: "mcpdrift", id: "cd56e182-b989-49ae-b407-03ad8c3d1c6c", path: "/api/mcp-drift", method: "POST" },
 ]);
 const x402ScanResources = Object.freeze([
   { product: "single", url: `${productionOrigin}/api/bounty-preflight`, method: "POST" },
@@ -2355,7 +2356,9 @@ async function agentToolsCloudStatus(): Promise<Record<string, unknown>> {
       }),
       mcp: parseAgentToolsCloudMcpListing(mcpSearch, mcpDetail, {
         endpointUrl: `${productionOrigin}/mcp?source=mcp-registry`,
-        homepageUrl: "https://mimirs402.github.io/bountyverdict/",
+        // Agent Tools Cloud derives homepage_url from the submitted MCP URL;
+        // its submission contract does not expose a separate homepage field.
+        homepageUrl: `${productionOrigin}/mcp?source=mcp-registry`,
         name: "BountyVerdict Agent Decision Tools",
         slug: agentToolsCloudMcpSlug,
         expectedTools: agentToolsCloudMcpTools,
@@ -2461,8 +2464,8 @@ async function index402Status(): Promise<Record<string, unknown>> {
       const response = await fetch(`${index402Api}/${id}`, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) throw new Error(`402 Index ${product} returned HTTP ${response.status}.`);
       const entry = await response.json() as Record<string, unknown>;
-      const expected = x402ScanResources.find((resource) => resource.url === `${productionOrigin}${path}`);
-      if (!expected || expected.method !== method || entry.id !== id || entry.url !== expected.url || entry.protocol !== "x402" ||
+      const expectedUrl = `${productionOrigin}${path}`;
+      if (entry.id !== id || entry.url !== expectedUrl || entry.protocol !== "x402" ||
         entry.payment_network !== "eip155:8453" || entry.http_method !== method) {
         throw new Error(`402 Index ${product} contract telemetry drifted.`);
       }
@@ -2473,19 +2476,29 @@ async function index402Status(): Promise<Record<string, unknown>> {
         status: entry.status,
         health_status: entry.health_status,
         probe_status: entry.probe_status,
+        payment_valid: entry.x402_payment_valid === 1,
         provider_display: entry.provider,
       };
     }));
-    const active = resources.filter(({ status, health_status, probe_status }) =>
+    const active = resources.filter(({ status }) => status === "active");
+    const healthy = resources.filter(({ status, health_status, probe_status }) =>
       status === "active" && health_status === "healthy" && probe_status === "probeable"
     );
+    const listed = active.length === index402Listings.length;
     return {
       url: "https://402index.io/",
-      listed: active.length === index402Listings.length,
-      status: active.length === index402Listings.length ? "listed" : active.length ? "partial" : "unavailable",
+      listed,
+      status: healthy.length === index402Listings.length
+        ? "listed_healthy"
+        : listed
+          ? "listed_degraded"
+          : active.length
+            ? "partial"
+            : "unavailable",
       expected_resources: index402Listings.length,
       active_resources: active.length,
-      missing_product: "mcpdrift",
+      healthy_resources: healthy.length,
+      missing_products: resources.filter(({ status }) => status !== "active").map(({ product }) => product),
       resources,
       measurement: "public_directory_listing_not_customer_purchase",
     };

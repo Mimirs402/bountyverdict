@@ -104,7 +104,9 @@ const expectedMcpTools = [
 ];
 const mcpSlug = "bountyverdict-agent-decision-tools-bountyverdict-agent-production-mimirslab-work";
 const mcpEndpoint = `${productionOrigin}/mcp?source=mcp-registry`;
-const mcpHomepage = "https://mimirs402.github.io/bountyverdict/";
+// Agent Tools Cloud derives homepage_url from the submitted MCP URL because
+// its submission contract does not expose a separate homepage field.
+const mcpHomepage = mcpEndpoint;
 const mcpName = "BountyVerdict Agent Decision Tools";
 const expectedMcpDescriptionPrefixes = Object.fromEntries(
   expectedMcpTools.map((name) => [name, `${name} task description`]),

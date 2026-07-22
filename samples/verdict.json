@@ -100,14 +100,6 @@
     "currency": null,
     "evidence_url": "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437"
   },
-  "linked_source": {
-    "state": "NOT_APPLICABLE",
-    "url": null,
-    "verdict": null,
-    "reward_state": null,
-    "reward_verification": null,
-    "error_code": null
-  },
   "coverage": {
     "comments_scanned": 96,
     "comments_total": 96,
@@ -126,7 +118,6 @@
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
     "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
-    "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere."

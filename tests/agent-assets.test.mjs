@@ -167,14 +167,10 @@ test("public samples remain valid JSON with the declared product contracts", asy
   const mcpDrift = await readJson("../samples/mcp-drift.json");
   assert.equal(verdict.product, "BountyVerdict");
   assert.ok(["AVOID", "CAUTION", "VIABLE"].includes(verdict.verdict));
-  assert.equal(verdict.linked_source.state, "NOT_APPLICABLE");
   assertReusable(verdict.service_reuse);
   assert.equal(portfolio.product, "BountyVerdict Portfolio");
   assertReusable(portfolio.service_reuse);
-  portfolio.ranked.forEach((result) => {
-    assertReusable(result.service_reuse);
-    assert.equal(result.linked_source.state, "NOT_APPLICABLE");
-  });
+  portfolio.ranked.forEach((result) => assertReusable(result.service_reuse));
   assert.equal(portfolio.counts.checked, portfolio.ranked.length);
   assert.equal(portfolio.counts.failed, portfolio.failures.length);
   assert.equal(harness.product, "HarnessVerdict");

@@ -253,7 +253,7 @@ const OPEN_AVAILABILITY_PATTERNS = [
 
 const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
 
-export function externalSourceIssue(issue, repository) {
+function externalSourceIssue(issue, repository) {
   const body = typeof issue?.body === "string" ? issue.body : "";
   const current = typeof repository?.full_name === "string" ? repository.full_name.toLowerCase() : "";
   for (const match of body.matchAll(EXTERNAL_SOURCE_LABEL_PATTERN)) {
@@ -268,24 +268,6 @@ export function externalSourceIssue(issue, repository) {
     };
   }
   return null;
-}
-
-const AMBIGUOUS_NON_CASH_REWARD_PATTERN = /\b(?:payment|reward|bounty)\b[^\r\n]{0,160}(?:\$\s*)?\d[\d,.]*(?:\s*(?:USD|USDC))?[^\r\n]{0,60}\(\s*[^)\r\n]{0,64}\b(?:dockets?|points?|credits?|coins?)\b[^)\r\n]*\)/i;
-
-function ambiguousNonCashReward(issue, comments) {
-  const sources = [
-    {
-      body: authoredIssueRewardText(issue),
-      evidenceUrl: issue?.html_url ?? null,
-      trusted: MAINTAINER_ASSOCIATIONS.has(issue?.author_association),
-    },
-    ...comments.map((comment) => ({
-      body: String(comment?.body ?? ""),
-      evidenceUrl: comment?.html_url ?? issue?.html_url ?? null,
-      trusted: MAINTAINER_ASSOCIATIONS.has(comment?.author_association),
-    })),
-  ];
-  return sources.find(({ body, trusted }) => trusted && AMBIGUOUS_NON_CASH_REWARD_PATTERN.test(body)) ?? null;
 }
 
 function externalBountySource(issue) {
@@ -895,7 +877,6 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const maintainerWarnings = matchingComments([issue, ...comments], NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
   const reward = rewardEvidence(issue, comments, opire, platformEvidence);
-  const ambiguousReward = ambiguousNonCashReward(issue, comments);
   const platformRejection = relevantOpireRejection(issue, opire, reward);
   const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
@@ -938,13 +919,6 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.amount = null;
     reward.currency = null;
     reward.evidenceUrl = platformEmpty.html_url ?? issue.html_url;
-  }
-  if (ambiguousReward && reward.state === "PROMISED" && reward.verification === "MAINTAINER_STATEMENT") {
-    reward.state = "UNVERIFIED";
-    reward.verification = "UNVERIFIED";
-    reward.amount = null;
-    reward.currency = null;
-    reward.evidenceUrl = ambiguousReward.evidenceUrl;
   }
   const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward, platformEvidence);
   const aiPolicyBlocks = policyDocuments.filter((document) =>
@@ -1111,17 +1085,6 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       -25,
       "No trusted platform listing or maintainer-authored reward statement appeared in the bounded GitHub evidence.",
       reward.evidenceUrl,
-    ));
-  }
-
-  if (ambiguousReward) {
-    score -= 100;
-    signals.push(signal(
-      "Reward denomination is non-cash or ambiguous",
-      -100,
-      "The payment statement qualifies a nominal USD amount with a separate docket, point, credit, or coin denomination. Treat it as non-cash and unverified until an exact settlement asset and redemption contract are public.",
-      ambiguousReward.evidenceUrl,
-      true,
     ));
   }
 

@@ -503,27 +503,6 @@ test("a mirrored bounty requires checking its external source issue", () => {
   ));
 });
 
-test("a nominal USD promise qualified as non-cash dockets is unverified and unsafe", () => {
-  const output = analyzeBounty({
-    issue: {
-      ...healthyIssue,
-      title: "[Bounty] [100$] Rewrite every comment",
-      body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\nPayment: The payment has been confirmed! 100USD (Unity-Station Dockets).\n\n### Real Reward\n$100\n\nComplete acceptance criteria and implementation scope are provided.",
-    },
-    repository: healthyRepo,
-    now,
-  });
-
-  assert.equal(output.verdict, "AVOID");
-  assert.equal(output.reward.state, "UNVERIFIED");
-  assert.equal(output.reward.verification, "UNVERIFIED");
-  assert.equal(output.reward.amount, null);
-  assert.equal(output.reward.currency, null);
-  assert.ok(output.signals.some((item) =>
-    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
-  ));
-});
-
 test("a same-repository source link is not treated as a mirror", () => {
   const output = analyzeBounty({
     issue: {

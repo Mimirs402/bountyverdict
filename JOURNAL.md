@@ -1198,31 +1198,3 @@ The misses identify a bounded copy-distribution opportunity: the two weak Bazaar
 An independent live browser verification found BountyVerdict already indexed at `https://mcpmarket.com/server/bountyverdict` under `Mimirs402`. Its rendered listing accurately describes seven paid, bounded decision APIs, per-call Base USDC through x402, free samples, and the canonical product page. The raw catalog stub alone is not used because it carries older generic copy. A bounded fail-closed parser and audited directory-monitor entry now verify the rendered business identity, paid x402 disclosure, canonical listing, and product link. MCP Market exposes no bounded public impression, install, or call counter on this listing, so the monitor records none and makes no demand claim.
 
 During the final verification window, epoch 55 observed one eligible privacy-safe buyer-candidate pair: one initialization and one tools/list response from an unknown client over a direct or hidden channel, followed by no tool invocation. A separate registry-or-directory pair remains distribution-crawler evidence and is excluded from the v7 buyer-candidate delta. The clean interpretation is therefore reach without selection, with **24** eligible tools/list events still required; neither pair is a purchase.
-
-## 2026-07-23 — Mirrored non-cash bounty false positive removed
-
-- Genuine external purchases: **0 / 10**
-- Customer revenue: **$0.00**
-- Fresh marketplace inventory: **no positive-risk-adjusted executable task**
-- Production treatment: **unchanged while v7 collects the immutable epoch-55 boundary**
-
-A real-world BountyVerdict pass found `zhangjiayang6835-cyber/bounty-plaza#668`, a mirror advertising an apparent **$100 USD** reward, while its explicit canonical source `Iamgoofball/-tg-station#221` was authored by an untrusted issuer, labeled against automated submissions, and described the consideration as **Unity-Station Dockets** under an NDA. The existing checker treated the mirror as CAUTION 53 and did not fetch the authoritative source, creating an avoidable false positive.
-
-The checker now treats a maintainer-authored nominal USD amount qualified by dockets, points, credits, or coins as non-cash and unverified. It also follows exactly one explicit external GitHub source-issue link, returns that bounded source result in a structured `linked_source` object, and hard-stops a mirror when the source is AVOID or cannot be verified. Longer source chains remain depth-limited. The exact captured mirror/source regression now returns **AVOID**, score **0**, with no asserted cash amount or currency and both public evidence URLs preserved.
-
-The complete public suite passes **162 / 162**, the Worker and operations suite passes **502 / 502**, TypeScript checking passes, Bazaar declarations validate under the live 500-character description limit, and `git diff --check` passes. This correction is committed for review but deliberately not deployed until the active v7 boundary closes, so production treatment and clean selection attribution remain unchanged.
-
-The concurrent demand audit found 18 open Taskmarket tasks but no safe positive-EV execution: the nine tracked submissions remain eight pending and one completed without award, the 1.999999-USDC Flowise opportunity remains pending amid seven pitches, twelve insect tasks still omit their mandatory guide, and the CAPTCHA task has negative expected value before labor. Clawlancer remains unfunded and Payan exposes no relevant escrow-backed request. No claim, bid, payment, self-purchase, client contact, or fabricated demand occurred. Honest accounting remains **0** purchases, **$0.00** revenue, and **1.012 USDC** tracked costs.
-
-## 2026-07-23 — External bounty sources and non-cash rewards fail closed
-
-- Genuine external purchases: **0 / 10**
-- Customer revenue: **$0.00**
-- Clean v7 raw checkpoint: **2 / 25 eligible tools/list; zero downstream calls**
-- Production treatment: **unchanged; quality fix held outside `main`**
-
-A live candidate exposed a material provenance trap. [`Iamgoofball/-tg-station#221`](https://github.com/Iamgoofball/-tg-station/issues/221) advertises `100USD` but immediately qualifies it as Unity-Station Dockets, and its author has no authority in the repository. [`zhangjiayang6835-cyber/bounty-plaza#668`](https://github.com/zhangjiayang6835-cyber/bounty-plaza/issues/668) mirrors that issue while separately presenting the reward as `$100` and coins. Treating either nominal figure as cash would send an agent toward unverified work.
-
-The held checker now recognizes explicit cross-repository source-issue labels, follows one bounded GitHub source hop, and fails closed when that source is unavailable or itself AVOID. It reports the linked source's verdict and reward provenance without traversing an unbounded mirror chain. Trusted payment language whose nominal USD or USDC figure is qualified in parentheses as dockets, points, credits, or coins is downgraded to an unverified non-cash denomination and becomes a hard stop.
-
-The live source now returns **AVOID**, score **0**, with an unverified reward and unauthorized-issuer hard stop. Its mirror also returns **AVOID**, score **0**, with both the ambiguous-denomination and non-actionable-source hard stops. The public suite passes **162 / 162**, the Worker and operations suite passes **502 / 502**, TypeScript checking passes, the generated public contract is synchronized, and `git diff --check` passes. No issue was claimed, no payment was made, and the active v7 production coordinate was not changed.

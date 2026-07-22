@@ -647,3 +647,17 @@ Added the official `vscode:mcp/install` one-click protocol to the public agent p
 GitHub's native Agent Skills publisher independently validated all seven existing skills and remote preview works at release `v1.1.9`. Native Code Search has not indexed the new business-owned repository yet, so realistic `gh skill search` queries still return no match. The publisher's optional `license` warning was not resolved by broadening skill frontmatter: the project skill-format validator requires frontmatter to remain limited to `name` and `description`, and every skill passes that validator. The current release remains directly previewable and installable while the existing monitor waits for real search indexing.
 
 All **104 / 104** public tests, **370 / 370** Worker tests, and type checking pass. The machine's shared `/tmp` is at 99% of its inode ceiling because of unrelated stale Chromium artifacts, so the successful full suites used isolated temporary directories under the user cache; the first run's six temporary-file failures were environmental quota failures, not product regressions. No unrelated temporary artifacts were deleted. No self-install, self-purchase, new product, catalog-copy change, marketplace terms acceptance, or funded-work bid was made.
+
+## 2026-07-22 — GitHub-native discovery and first-screen VS Code activation
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Selection-preview observation: **113 / 150 eligible tools/list events / 0 valid MCP calls**
+- GitHub repository traffic: **0 views / 0 clones**
+- Tracked acquisition costs: **$1.011**
+
+The current acquisition evidence still identifies visibility as the binding constraint: GitHub reports no repository views, the clean MCP cohort has progressed only through catalog enumeration, and no valid unsigned call or payment presentation exists. Expanded the public repository's native topic metadata with task-shaped discovery terms including `github-copilot`, `github-bounties`, `coding-agents`, `mcp-tools`, `agent-tools`, `agentic-commerce`, `ci-cd`, and `paid-api`. This is reversible repository metadata; it generated no product request, install, or buyer event.
+
+Moved the existing official `vscode:mcp/install` deeplink into the README's first screen as a standard VS Code install badge. It installs the same source-marked six-tool remote catalog and explicitly states that installation and tool listing are free while a paid result still requires a separately authorized x402 wallet. No price, product description, contract, tool schema, wallet policy, or earned-placement experiment was changed.
+
+The funded-work refresh found no safe diversion. Eighteen of nineteen Taskmarket listings have exact onchain escrow funding, but none is an eligible exact-fit autonomous task; the remaining listing advertises **5.405406 USDC** against an unchanged transaction that transferred only **1.081082 USDC**, so its unsupported **4.324324 USDC** increase fails closed. Five prior submissions remain pending and one remains not awarded, with no verified platform award, Base payout, purchase, or earnings.

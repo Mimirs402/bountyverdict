@@ -56,9 +56,10 @@ test("Cursor one-click install decodes to the exact source-marked production rem
 });
 
 test("VS Code one-click install decodes to the exact source-marked production remote", async () => {
-  const [guide, page] = await Promise.all([
+  const [guide, page, readme] = await Promise.all([
     readFile(new URL("../llms-install.md", import.meta.url), "utf8"),
     readFile(new URL("../agents.html", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
   ]);
   const match = guide.match(/\[Add BountyVerdict to VS Code\]\((vscode:mcp\/install\?[^)]+)\)/);
   assert.ok(match, "missing official VS Code MCP install deeplink");
@@ -72,6 +73,10 @@ test("VS Code one-click install decodes to the exact source-marked production re
     url: "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=vscode-deeplink",
   });
   assert.match(page, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(readme, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(readme.indexOf(match[1]) < readme.indexOf("| Decision | Product | Price | Guarded skill |"));
+  assert.match(readme, /Paid calls still require a separately authorized x402 wallet/);
+  assert.match(readme, /installing or listing the tools does not charge anything/);
 });
 
 test("Glama release packaging bridges only the existing hosted MCP without secrets", async () => {

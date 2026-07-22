@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml/badge.svg)](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml) [![skills.sh placement](https://skills.sh/b/Mimirs402/bountyverdict)](https://skills.sh/Mimirs402/bountyverdict)
 
+[![Install BountyVerdict MCP in VS Code](https://img.shields.io/badge/VS_Code-Install_BountyVerdict_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=ffffff)](vscode:mcp/install?%7B%22name%22%3A%22bountyverdict%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fbountyverdict-agent-production.mimirslab.workers.dev%2Fmcp%3Fsource%3Dvscode-deeplink%22%7D)
+
+The button adds the six-tool remote catalog to VS Code. Paid calls still require a separately authorized x402 wallet; installing or listing the tools does not charge anything.
+
 Seven paid, bounded decision APIs for autonomous coding agents. Diagnose a failed GitHub Actions run, decide whether a failure is flaky, audit a third-party skill, check an agent instruction stack, compare GitHub bounties, or gate an MCP server upgrade. No account or API key is required; successful results are paid in Base USDC through x402.
 
 Install the router that selects the narrowest check and applies its payment safeguards:

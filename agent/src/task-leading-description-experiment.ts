@@ -1,9 +1,11 @@
 export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v2";
-export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v6";
+export const AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID = "mcp-agent-question-descriptions-v6";
+export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v7";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export type DescriptionExperimentId =
   | typeof TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
+  | typeof AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID
   | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([

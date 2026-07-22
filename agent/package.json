@@ -14,6 +14,7 @@
     "wallet:fund": "REQUEST_FUNDS=YES node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cdp-test-wallet.ts",
     "revenue": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/revenue-monitor.ts",
     "distribution:monitor": "node --experimental-strip-types scripts/distribution-monitor.ts",
+    "experiment:activate-agent-question-v7": "ACTIVATE_AGENT_QUESTION_EXPERIMENT=YES node --experimental-strip-types scripts/activate-agent-question-v7.ts",
     "nominate:github-mcp": "node --env-file-if-exists=$HOME/.config/bountyverdict/github-nomination.env --experimental-strip-types scripts/send-github-mcp-nomination.ts",
     "funnel:tail": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cloudflare-funnel-tail.ts",
     "funnel:epoch": "node --experimental-strip-types scripts/start-funnel-epoch.ts",

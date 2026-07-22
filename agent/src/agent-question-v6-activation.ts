@@ -3,9 +3,10 @@ import { constants } from "node:fs";
 import { mkdir, open, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
-  AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+  AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
   TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST,
+  type DescriptionExperimentId,
   type TaskLeadingDescriptionActivation,
 } from "./task-leading-description-experiment.ts";
 
@@ -50,7 +51,7 @@ export function activationFromVerifiedEpoch54(value: unknown): TaskLeadingDescri
 
   return parseTaskLeadingDescriptionActivation({
     schema_version: 1,
-    experiment_id: AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+    experiment_id: AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID,
     release_commit: AGENT_QUESTION_V6_RELEASE,
     production_activation_commit: AGENT_QUESTION_V6_PRODUCTION_ACTIVATION,
     production_activated_at: AGENT_QUESTION_V6_PRODUCTION_ACTIVATED_AT,
@@ -58,7 +59,7 @@ export function activationFromVerifiedEpoch54(value: unknown): TaskLeadingDescri
     measurement_epoch_id: AGENT_QUESTION_V6_EPOCH,
     epoch_activated_at: rotation.activated_at,
     target_tools_list: TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST,
-  }, AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID);
+  }, AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID);
 }
 
 export async function readPrivateJson(path: string, maximumBytes = 64 * 1024 * 1024): Promise<unknown | null> {
@@ -82,8 +83,12 @@ export async function readPrivateJson(path: string, maximumBytes = 64 * 1024 * 1
   }
 }
 
-export async function writePrivateActivation(path: string, activation: TaskLeadingDescriptionActivation): Promise<void> {
-  const validated = parseTaskLeadingDescriptionActivation(activation, AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID);
+export async function writePrivateActivation(
+  path: string,
+  activation: TaskLeadingDescriptionActivation,
+  expectedExperimentId: DescriptionExperimentId = AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID,
+): Promise<void> {
+  const validated = parseTaskLeadingDescriptionActivation(activation, expectedExperimentId);
   if (!validated) throw new Error("Agent-question activation is missing.");
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;

@@ -66,20 +66,35 @@ const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
   /(?:do not|don['’]?t|must not|may not)\s+use\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+to\s+(?:reply|respond|answer)\s+(?:to\s+)?(?:questions?|comments?|review feedback)\b/i,
 ];
 
+const AI_POLICY_ALLOW_PATTERNS = [
+  /\b(?:ai|llm|chatgpt|generative ai)(?:[ -](?:assistance|assisted)|\s+(?:tools?|usage|assistance))?\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
+  /\bcontributions?\s+(?:made\s+)?with\s+(?:the\s+)?assistance\s+of\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+(?:is|are)\s+(?:allowed|permitted|welcome)\b/i,
+];
+
+const AI_POLICY_CONDITIONAL_QUALITY_PATTERNS = [
+  /\b(?:low[ -]effort|unreviewed|unverified|unexplained|undisclosed)\b.{0,80}\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,100}\b(?:closed|rejected|declined|not accepted)\b/i,
+  /\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,80}\b(?:contributions?|pull requests?|patches?|code)\b.{0,40}\b(?:without|unless)\b.{0,100}\b(?:understand|review|verify|test|disclos|explain)\w*\b.{0,80}\b(?:closed|rejected|declined|not accepted)\b/i,
+];
+
 function policyBlocksAiContributions(value) {
-  return String(value ?? "")
+  const clauses = String(value ?? "")
     .split(/\r?\n+|(?<=[.!?])\s+/u)
     .map((clause) => clause.trim())
-    .filter(Boolean)
-    .some((clause) =>
+    .filter(Boolean);
+  const explicitlyAllowsAi = clauses.some((clause) =>
+    AI_POLICY_ALLOW_PATTERNS.some((pattern) => pattern.test(clause))
+  );
+  return clauses.some((clause) =>
       !AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS.some((pattern) => pattern.test(clause)) &&
+      !(explicitlyAllowsAi && AI_POLICY_CONDITIONAL_QUALITY_PATTERNS.some((pattern) => pattern.test(clause))) &&
       AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(clause))
-    );
+  );
 }
 
 const AI_POLICY_DISCLOSURE_PATTERNS = [
   /(?:must|required to|please)\s+(?:clearly\s+)?(?:disclose|declare|label).{0,60}(?:ai|llm|chatgpt|generative)/i,
-  /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i
+  /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i,
+  /(?:if|when)\s+(?:any\s+)?(?:ai|llm|chatgpt|generative ai)(?:\s+tools?)?.{0,40}\b(?:is|are|was|were)?\s*used\b.{0,80}\b(?:mention|disclos|declare|label)\w*\b/i,
 ];
 
 const POLICY_REWARD_DISAVOWAL_PATTERNS = [
@@ -707,6 +722,14 @@ function isTerminalBountyLabel(value) {
     .test(normalized);
 }
 
+function isRestrictedContributorLabel(value) {
+  const normalized = normalizedStatusLabel(value)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^(?:core team|maintainers?) only$/i.test(normalized);
+}
+
 function hasMaintainerTerminalStatement(value) {
   return String(value ?? "")
     .split(/(?<=[.!?;])\s+|[\r\n]+|\b(?:but|however|yet)\b/i)
@@ -962,6 +985,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const referencedPulls = pulls.filter((pull) => pull.state === "referenced");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
   const terminalLabelCandidates = issueLabelNames(issue).filter(isTerminalBountyLabel);
+  const restrictedContributorLabels = issueLabelNames(issue).filter(isRestrictedContributorLabel);
   const opire = opireRewardState(comments);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
   const claimantInterest = activeClaimIntent(issue, comments, now);
@@ -1081,6 +1105,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       "Issue is already assigned",
       -70,
       `GitHub currently lists ${assignees.length} assignee${assignees.length === 1 ? "" : "s"}; treat the work as unavailable unless a maintainer explicitly clears parallel work.`,
+      issue.html_url,
+      true,
+    ));
+  }
+
+  if (restrictedContributorLabels.length) {
+    score -= 70;
+    signals.push(signal(
+      "Issue restricted to core team or maintainers",
+      -70,
+      `GitHub currently labels this issue ${JSON.stringify(restrictedContributorLabels[0])}; external contributors are not eligible unless repository maintainers remove the restriction.`,
       issue.html_url,
       true,
     ));

@@ -16,6 +16,14 @@ const expectedTools = Object.freeze([
   "diagnose_github_actions_run",
   "rank_github_bounties",
 ]);
+const expectedTaskOpeners = Object.freeze({
+  check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
+  rank_github_bounties: /^Which public GitHub bounty should I work on next/,
+  audit_agent_harness: /^Can a coding agent safely work in this public repository/,
+  diagnose_github_actions_run: /^Why did this public GitHub Actions run fail/,
+  classify_github_actions_flake: /^Is this failed GitHub Actions run flaky/,
+  check_mcp_tool_drift: /^Will upgrading to this complete MCP tools\/list break my agent/,
+} as const);
 
 await execFileAsync("docker", ["build", "--pull", "--tag", image, ".."], {
   timeout: 180_000,
@@ -62,7 +70,11 @@ try {
   assert.deepEqual(names, expectedTools);
   for (const tool of result.tools) {
     assert.equal(typeof tool.description, "string");
-    assert.match(tool.description || "", /A first unsigned call with real input cannot charge;.*Only an authorized signed retry costs \$0\.\d{2} USDC on Base\./);
+    assert.match(
+      tool.description || "",
+      expectedTaskOpeners[tool.name as keyof typeof expectedTaskOpeners],
+    );
+    assert.doesNotMatch(tool.description || "", /\bx402\b|\bUSDC\b|payment quote|authorized signed retry|https?:\/\//i);
   }
 } catch (error) {
   if (stderr) console.error(stderr.slice(0, 4_000));

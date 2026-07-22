@@ -1400,6 +1400,7 @@ test("ordinary redacted reproduction details are not unsafe task instructions", 
     "Please include your operating system, CPU architecture, shell, and a minimal reproduction. Do not include secrets or environment variable values.",
     "Show the environment variable names only, not the values, and use placeholders for every credential.",
     "Update the helper that resolves the user's home directory without printing the resulting path.",
+    "You can always provide an access token or deploy key as a secret to authenticate an external CI/CD system.",
   ];
   for (const body of safeRequests) {
     const output = analyzeBounty({
@@ -1409,6 +1410,22 @@ test("ordinary redacted reproduction details are not unsafe task instructions", 
     });
     assert.ok(!output.signals.some((item) => item.label === "Unsafe task instructions"), body);
   }
+});
+
+test("public credential-value requests remain unsafe task instructions", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: `${healthyIssue.body}\nFor acceptance, provide your access token in the public issue comment.`,
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unsafe task instructions" && item.hardStop && /credential values/i.test(item.detail)
+  ));
 });
 
 test("untrusted commenters cannot fabricate an unsafe-task hard stop", () => {

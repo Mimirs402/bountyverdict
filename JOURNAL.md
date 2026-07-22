@@ -1100,3 +1100,16 @@ Current placement evidence separates visibility from demand. Agent Tools Cloud s
 The first epoch-54 quiet window reset at `2026-07-22T20:46:38.438Z` when conversion-capable traffic changed the trusted boundary. The 900-second rule was preserved. A new fail-closed reconciler now derives v6 activation only when rotation `field-test-release-epoch-54` is activated, epoch 54 is still the exact active conversion-eligible epoch, and its private baseline matches the rotation timestamp. It atomically writes a mode-`0600` activation file, refuses drift or late activation, and otherwise exits without changing state. This removes the remaining manual handoff while preserving the immutable v5 checkpoint.
 
 All **159 / 159** public tests and **485 / 485** Worker and operations tests pass, along with TypeScript checking and `git diff --check`. No bid, claim, comment, pull request, client contact, payment, listing resubmission, or customer metric was fabricated during this audit.
+
+## 2026-07-23 — Security-language false positive corrected without disturbing distribution
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Additional non-duplicate bounty candidates checked: **18; zero actionable**
+- Production treatment: **unchanged while v6 awaits clean epoch 54**
+
+The next production-equivalent field pass found no safely claimable work. Its strongest fresh candidates were already claimed, stale, closed, crowded, unverified, or dependent on external accounts or hardware. One closed Gitea bounty did expose a real product-quality defect: an architectural proposal explained that a CI workflow can use an access token or deploy key as a secret, and the analyzer incorrectly treated that neutral design discussion as a demand to publish credential values.
+
+The source classifier now distinguishes credential use from credential exposure. A secret mention becomes an unsafe hard stop only when the text requests an exposing action, explicit raw or unredacted values, or placement into a public artifact. Requests to paste API keys, publish environment-variable values, or reveal credentials remain blocked. The complete live Gitea issue now has no `Unsafe task instructions` signal while retaining its independent closed, contested, locked, and AI-policy hard stops.
+
+The focused analyzer suite passes **80 / 80**, the complete public suite passes **160 / 160**, the Worker and operations suite passes **485 / 485**, and TypeScript checking passes. The first Worker-suite run encountered host `tmpfs` inode quota errors across unrelated atomic-write tests; removing only owner-owned Chromium scoped directories older than twelve hours reduced owned temporary entries from **888,941** to **298,340**, after which the suite passed unchanged. This source correction is deliberately held from production until the active v6 selection boundary closes, so a quality repair does not silently alter the measured treatment.

@@ -89,6 +89,9 @@ const HIDDEN_AGENT_CONTEXT_PATTERNS = [
   /\b(?:init_context|initialization context|initialization text|tool_access|session_config|tool access|session configuration)\b/i,
 ];
 const SECRET_VALUE_PATTERN = /\b(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variable values?)\b|(?:^|\s)\.env\s+(?:file|contents?)\b/i;
+const SECRET_EXPOSURE_ACTION = /\b(?:publish|post|paste|reveal|disclose|expose|print|dump|return|attach|commit|share|send|upload|show)\b/i;
+const EXPLICIT_SECRET_VALUE_PATTERN = /\b(?:raw|actual|real|exact|full|unredacted)\s+(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?)\b|\b(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variables?)\s+(?:values?|contents?|material)\b/i;
+const PUBLIC_SECRET_DESTINATION = /\b(?:in|into|on|to)\s+(?:the\s+|an?\s+|your\s+)?(?:pull request|pr\b|issue comment|public (?:issue|comment|log|artifact)|repository|commit|build log|artifact)\b/i;
 const PRIVATE_MACHINE_PATH_PATTERN = /\b(?:absolute|exact|full|unredacted)\b[^.\n]{0,80}\b(?:home (?:path|directory)|working (?:path|directory)|current working directory|shell history|hostname|machine username)\b/i;
 
 function sensitiveTaskDisclosure(value) {
@@ -102,7 +105,8 @@ function sensitiveTaskDisclosure(value) {
     if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(chunk))) {
       return "hidden agent instructions or context";
     }
-    if (requestsDisclosure && SECRET_VALUE_PATTERN.test(chunk)) {
+    if (requestsDisclosure && SECRET_VALUE_PATTERN.test(chunk) &&
+        (SECRET_EXPOSURE_ACTION.test(chunk) || EXPLICIT_SECRET_VALUE_PATTERN.test(chunk) || PUBLIC_SECRET_DESTINATION.test(chunk))) {
       return "secret or credential values";
     }
     if (requestsDisclosure && PRIVATE_MACHINE_PATH_PATTERN.test(chunk)) {

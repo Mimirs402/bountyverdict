@@ -61,6 +61,8 @@ export interface AgentMrrPublicationGateInput {
   codeReleaseState: unknown;
   codeReleaseMode: number;
   codeReleaseOwnerUid: number;
+  expectedCodeReleaseCommit: string;
+  expectedReleaseSourceHead: string;
   baselineMode: number;
   baselineOwnerUid: number;
   historyMode: number;
@@ -253,14 +255,19 @@ export function validateAgentMrrCodeReleaseState(
   codeReleaseMode: number,
   codeReleaseOwnerUid: number,
   expectedUid: number,
+  expectedCodeReleaseCommit: string,
+  expectedReleaseSourceHead: string,
 ): void {
   const release = record(codeReleaseState);
   if (codeReleaseMode !== 0o600 || codeReleaseOwnerUid !== expectedUid || expectedUid < 0 ||
+      !/^[a-f0-9]{40}$/.test(expectedCodeReleaseCommit) ||
+      !/^[a-f0-9]{40}$/.test(expectedReleaseSourceHead) ||
       release.schema_version !== 1 || release.status !== "complete" ||
       release.source_head !== AGENTMRR_CODE_GATE_COMMIT ||
+      release.release_source_head !== expectedReleaseSourceHead ||
       release.reviewed_source !== AGENTMRR_REVIEWED_SOURCE_COMMIT ||
       release.code_contract !== AGENTMRR_CODE_RELEASE_CONTRACT ||
-      typeof release.release_commit !== "string" || !/^[a-f0-9]{40}$/.test(release.release_commit) ||
+      release.release_commit !== expectedCodeReleaseCommit ||
       release.remote_main !== release.release_commit ||
       typeof release.completed_at !== "string" || !Number.isFinite(Date.parse(release.completed_at))) {
     throw new Error("AgentMRR publication requires the exact completed code release.");
@@ -325,6 +332,8 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
     input.codeReleaseMode,
     input.codeReleaseOwnerUid,
     input.expectedUid,
+    input.expectedCodeReleaseCommit,
+    input.expectedReleaseSourceHead,
   );
   validateAgentMrrLiveCollector(
     input.collectorState,

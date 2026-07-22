@@ -22,6 +22,8 @@ const requestedRotationId = process.env.FUNNEL_ROTATION_ID || "";
 const automaticPoll = requestedRotationId === "AUTO";
 const quietSecondsInput = process.env.QUIET_PERIOD_SECONDS || "900";
 const expectedUid = process.getuid?.() ?? -1;
+const ordinaryStateMaximumBytes = 2_000_000;
+const historyStateMaximumBytes = 64 * 1024 * 1024;
 
 if (process.env.START_FUNNEL_EPOCH !== "YES") throw new Error("Set START_FUNNEL_EPOCH=YES to rotate the trusted funnel epoch.");
 if (!automaticPoll && !/^[a-z0-9][a-z0-9_-]{7,79}$/.test(requestedRotationId)) throw new Error("FUNNEL_ROTATION_ID is invalid.");
@@ -31,13 +33,20 @@ if (!Number.isSafeInteger(quietSeconds) || quietSeconds < 60 || quietSeconds > 3
   throw new Error("QUIET_PERIOD_SECONDS must be between 60 and 3600.");
 }
 
-async function secureReadState(path: string, label: string): Promise<string> {
+async function secureReadState(
+  path: string,
+  label: string,
+  maximumBytes = ordinaryStateMaximumBytes,
+): Promise<string> {
   if (expectedUid < 0) throw new Error(`${label} requires a local Unix owner identity.`);
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 2 || maximumBytes > historyStateMaximumBytes) {
+    throw new Error(`${label} size bound is invalid.`);
+  }
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const metadata = await handle.stat();
     if (!metadata.isFile() || metadata.uid !== expectedUid || (metadata.mode & 0o777) !== 0o600 ||
-        metadata.size < 2 || metadata.size > 2_000_000) {
+        metadata.size < 2 || metadata.size > maximumBytes) {
       throw new Error(`${label} must be a bounded regular owner-owned file with mode 0600.`);
     }
     return await handle.readFile("utf8");
@@ -109,8 +118,16 @@ type Ledger = {
 };
 let ledger: Ledger;
 try {
-  const parsed = JSON.parse(await secureReadState(historyFile, "Trusted funnel epoch ledger")) as Ledger;
-  if (parsed.schema_version !== 2 || !Array.isArray(parsed.epochs) || !Number.isSafeInteger(parsed.active_epoch_id)) {
+  const parsed = JSON.parse(await secureReadState(
+    historyFile,
+    "Trusted funnel epoch ledger",
+    historyStateMaximumBytes,
+  )) as Ledger;
+  if (parsed.schema_version !== 2 || !Array.isArray(parsed.epochs) ||
+      parsed.epochs.length < 1 || parsed.epochs.length > 200 ||
+      !Number.isSafeInteger(parsed.active_epoch_id) ||
+      (parsed.completed_rotations !== undefined &&
+        (!Array.isArray(parsed.completed_rotations) || parsed.completed_rotations.length > 100))) {
     throw new Error("Trusted funnel epoch ledger is malformed.");
   }
   ledger = parsed;

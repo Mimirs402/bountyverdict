@@ -4,6 +4,7 @@ import { lstat, mkdir, open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   AGENTMRR_BASE_URL,
   AGENTMRR_CATALOG_LIMIT,
@@ -37,13 +38,22 @@ const publicationLockFile = `${stateDirectory}/agentmrr-publication.lock`;
 const publicationAttemptFile = `${stateDirectory}/agentmrr-publication-attempt.json`;
 const funnelLockFile = `${historyFile}.lock`;
 const expectedUid = process.getuid?.() ?? -1;
+const ordinaryStateMaximumBytes = 2_000_000;
+const historyStateMaximumBytes = 64 * 1024 * 1024;
 
-async function secureReadFile(path: string, label: string): Promise<{ raw: string; metadata: Stats }> {
+async function secureReadFile(
+  path: string,
+  label: string,
+  maximumBytes = ordinaryStateMaximumBytes,
+): Promise<{ raw: string; metadata: Stats }> {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 2 || maximumBytes > historyStateMaximumBytes) {
+    throw new Error(`${label} size bound is invalid.`);
+  }
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const metadata = await handle.stat();
     if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600 || metadata.uid !== expectedUid ||
-        metadata.size < 2 || metadata.size > 2_000_000) {
+        metadata.size < 2 || metadata.size > maximumBytes) {
       throw new Error(`${label} must be a bounded regular owner-owned file with mode 0600.`);
     }
     return { raw: await handle.readFile({ encoding: "utf8" }), metadata };
@@ -54,6 +64,27 @@ async function secureReadFile(path: string, label: string): Promise<{ raw: strin
 
 async function credentials(): Promise<ReturnType<typeof parseAgentMrrSecret>> {
   return parseAgentMrrSecret((await secureReadFile(secretFile, "AgentMRR credential file")).raw);
+}
+
+async function currentReleaseIdentity(): Promise<{ releaseCommit: string; releaseSourceHead: string }> {
+  const repository = fileURLToPath(new URL("../..", import.meta.url));
+  const runGit = async (...args: string[]): Promise<string> =>
+    (await execFileAsync("git", ["-C", repository, ...args], {
+      timeout: 10_000,
+      maxBuffer: 1_000_000,
+      encoding: "utf8",
+    })).stdout.trim();
+  if (await runGit("branch", "--show-current") !== "main" || await runGit("status", "--porcelain") !== "") {
+    throw new Error("AgentMRR publication requires the clean canonical main worktree.");
+  }
+  const releaseCommit = await runGit("rev-parse", "HEAD");
+  const parents = (await runGit("show", "-s", "--format=%P", releaseCommit)).split(/\s+/).filter(Boolean);
+  const releaseSourceHead = parents.length === 2 ? parents[1] : releaseCommit;
+  if (!/^[a-f0-9]{40}$/.test(releaseCommit) || !/^[a-f0-9]{40}$/.test(releaseSourceHead) ||
+      (parents.length !== 1 && parents.length !== 2)) {
+    throw new Error("AgentMRR publication could not bind the canonical release commit and source head.");
+  }
+  return { releaseCommit, releaseSourceHead };
 }
 
 const catalogResponse = await fetch(
@@ -88,6 +119,7 @@ if (!enabled) {
   }
   const releasePublicationLock = await acquireExclusiveRun(publicationLockFile);
   try {
+    const currentRelease = await currentReleaseIdentity();
     const identity = await credentials();
     const release = await secureReadFile(releaseStateFile, "AgentMRR release receipt");
     const releaseState = JSON.parse(release.raw);
@@ -104,6 +136,8 @@ if (!enabled) {
       codeRelease.metadata.mode & 0o777,
       codeRelease.metadata.uid,
       expectedUid,
+      currentRelease.releaseCommit,
+      currentRelease.releaseSourceHead,
     );
     const parsedCodeRelease = JSON.parse(codeRelease.raw) as { release_commit?: unknown };
     const codeReleaseCommit = String(parsedCodeRelease.release_commit || "");
@@ -160,7 +194,7 @@ if (!enabled) {
           secureReadFile(releaseStateFile, "AgentMRR release receipt"),
           secureReadFile(codeReleaseStateFile, "AgentMRR code release receipt"),
           secureReadFile(baselineFile, "Trusted funnel baseline"),
-          secureReadFile(historyFile, "Trusted funnel history"),
+          secureReadFile(historyFile, "Trusted funnel history", historyStateMaximumBytes),
           secureReadFile(collectorStateFile, "Funnel collector state"),
           ]);
         const baseline = trustedFunnelBaseline(JSON.parse(baselineFileState.raw));
@@ -172,6 +206,8 @@ if (!enabled) {
         codeReleaseState: JSON.parse(freshCodeRelease.raw),
         codeReleaseMode: freshCodeRelease.metadata.mode & 0o777,
         codeReleaseOwnerUid: freshCodeRelease.metadata.uid,
+        expectedCodeReleaseCommit: currentRelease.releaseCommit,
+        expectedReleaseSourceHead: currentRelease.releaseSourceHead,
         baselineMode: baselineFileState.metadata.mode & 0o777,
         baselineOwnerUid: baselineFileState.metadata.uid,
         historyMode: historyFileState.metadata.mode & 0o777,

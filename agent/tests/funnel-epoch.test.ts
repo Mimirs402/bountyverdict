@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -371,8 +371,19 @@ test("epoch rotation closes and opens at one boundary and repairs a partial base
   const first = await execFileAsync(process.execPath, ["--experimental-strip-types", script.pathname], { env });
   assert.match(first.stdout, /draining_started/);
   const draining = JSON.parse(await readFile(historyFile, "utf8"));
+  const historical = {
+    ...draining.epochs[0],
+    status: "closed",
+    ended_at: "2026-07-20T20:01:00Z",
+    final: initial,
+  };
+  draining.epochs.push(...Array.from({ length: 198 }, (_, index) => ({
+    ...historical,
+    id: index + 1_000,
+  })));
   draining.rotation.stable_since = new Date(Date.now() - 120_000).toISOString();
   await writeFile(historyFile, `${JSON.stringify(draining)}\n`);
+  assert.ok((await stat(historyFile)).size > 2_000_000);
   const automaticEnv = { ...env, FUNNEL_ROTATION_ID: "AUTO", FUNNEL_EPOCH_REASON: "" };
   const second = await execFileAsync(process.execPath, ["--experimental-strip-types", script.pathname], { env: automaticEnv });
   assert.match(second.stdout, /"status": "activated"/);

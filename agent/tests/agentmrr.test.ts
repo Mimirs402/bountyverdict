@@ -172,6 +172,7 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
       schema_version: 1,
       status: "complete",
       source_head: AGENTMRR_CODE_GATE_COMMIT,
+      release_source_head: "c".repeat(40),
       reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
       code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
       release_commit: "a".repeat(40),
@@ -180,6 +181,8 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
     },
     codeReleaseMode: 0o600,
     codeReleaseOwnerUid: 1000,
+    expectedCodeReleaseCommit: "a".repeat(40),
+    expectedReleaseSourceHead: "c".repeat(40),
     baselineMode: 0o600,
     baselineOwnerUid: 1000,
     historyMode: 0o600,
@@ -297,18 +300,27 @@ test("AgentMRR code release receipt binds the reviewed source and remote main", 
     schema_version: 1,
     status: "complete",
     source_head: AGENTMRR_CODE_GATE_COMMIT,
+    release_source_head: "d".repeat(40),
     reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
     code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
     release_commit: "b".repeat(40),
     remote_main: "b".repeat(40),
     completed_at: "2026-07-22T07:00:00.000Z",
   };
-  assert.doesNotThrow(() => validateAgentMrrCodeReleaseState(receipt, 0o600, 1000, 1000));
-  assert.throws(() => validateAgentMrrCodeReleaseState({ ...receipt, remote_main: "c".repeat(40) }, 0o600, 1000, 1000), /code release/);
-  assert.throws(() => validateAgentMrrCodeReleaseState({ ...receipt, source_head: "c".repeat(40) }, 0o600, 1000, 1000), /code release/);
+  const validate = (value: unknown) => validateAgentMrrCodeReleaseState(
+    value, 0o600, 1000, 1000, "b".repeat(40), "d".repeat(40),
+  );
+  assert.doesNotThrow(() => validate(receipt));
+  assert.throws(() => validate({ ...receipt, remote_main: "c".repeat(40) }), /code release/);
+  assert.throws(() => validate({ ...receipt, source_head: "c".repeat(40) }), /code release/);
+  assert.throws(() => validate({ ...receipt, release_source_head: "c".repeat(40) }), /code release/);
   const { source_head: _sourceHead, ...missingSource } = receipt;
-  assert.throws(() => validateAgentMrrCodeReleaseState(missingSource, 0o600, 1000, 1000), /code release/);
-  assert.throws(() => validateAgentMrrCodeReleaseState(receipt, 0o644, 1000, 1000), /code release/);
+  assert.throws(() => validate(missingSource), /code release/);
+  const { release_source_head: _releaseSourceHead, ...missingReleaseSource } = receipt;
+  assert.throws(() => validate(missingReleaseSource), /code release/);
+  assert.throws(() => validateAgentMrrCodeReleaseState(
+    receipt, 0o644, 1000, 1000, "b".repeat(40), "d".repeat(40),
+  ), /code release/);
 });
 
 test("AgentMRR response parsing rejects oversized and malformed JSON bodies", async () => {

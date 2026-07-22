@@ -33,7 +33,10 @@ test("plugin manifests expose the existing engineering gates without changing Sk
 });
 
 test("Cursor one-click install decodes to the exact source-marked production remote", async () => {
-  const guide = await readFile(new URL("../llms-install.md", import.meta.url), "utf8");
+  const [guide, page] = await Promise.all([
+    readFile(new URL("../llms-install.md", import.meta.url), "utf8"),
+    readFile(new URL("../agents.html", import.meta.url), "utf8"),
+  ]);
   const match = guide.match(/\[Add BountyVerdict to Cursor\]\((cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?[^)]+)\)/);
   assert.ok(match, "missing official Cursor MCP install deeplink");
   const url = new URL(match[1]);
@@ -48,6 +51,8 @@ test("Cursor one-click install decodes to the exact source-marked production rem
     },
   );
   assert.deepEqual([...url.searchParams.keys()].sort(), ["config", "name"]);
+  assert.match(page, /<section class="agent-hero shell" id="connect-mcp">/);
+  assert.ok(page.includes(match[1].replace("&", "&amp;")));
 });
 
 test("Glama release packaging bridges only the existing hosted MCP without secrets", async () => {

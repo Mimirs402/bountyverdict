@@ -18,7 +18,7 @@
     </header>
 
     <main>
-      <section class="agent-hero shell">
+      <section class="agent-hero shell" id="connect-mcp">
         <p class="kicker">Seven bounded decisions · x402 · Base USDC</p>
         <h1>Agent tools that answer <em>before</em> you act.</h1>
         <p class="lede">No account or API key. Inspect a free sample and the exact payment challenge, then buy only the result your agent needs. Invalid inputs and upstream failures are not settled.</p>
@@ -28,6 +28,7 @@
         <p class="install-command"><code>codex mcp add bountyverdict --url https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p class="install-command"><code>claude mcp add --transport http --scope user bountyverdict https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p class="install-command"><code>gemini mcp add --transport http --scope user bountyverdict https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
+        <p><a class="agent-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name=bountyverdict&amp;config=eyJ1cmwiOiJodHRwczovL2JvdW50eXZlcmRpY3QtYWdlbnQtcHJvZHVjdGlvbi5taW1pcnNsYWIud29ya2Vycy5kZXYvbWNwP3NvdXJjZT1jdXJzb3ItZGVlcGxpbmsifQ==">Add BountyVerdict to Cursor →</a></p>
         <p>VS Code uses a top-level <code>servers</code> object; Cursor and Claude use <code>mcpServers</code>; Gemini JSON uses <code>httpUrl</code>. Follow the exact <a href="llms-install.md">client installation and paid-call handoff guide</a> for Codex, Claude, Gemini, VS Code, Cursor, Cline, and Kilo.</p>
         <p>Connect, call <code>tools/list</code>, and select the narrowest tool. A remote MCP connection does not itself provide a wallet. Direct automatic payment requires an x402-aware MCP client; otherwise the unpaid challenge includes a versioned exact-HTTP handoff for an authorized x402 wallet. Invalid input is rejected before payment.</p>
         <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>

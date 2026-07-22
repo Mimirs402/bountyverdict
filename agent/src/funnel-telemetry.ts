@@ -46,6 +46,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "openhands_integrations",
   "goose_extensions",
   "smithery",
+  "mcpize",
   "agentmrr",
   "x402arena",
   "glama",
@@ -72,6 +73,7 @@ const DISCOVERY_NON_BUYER_CHANNELS = new Set<FunnelChannel>([
 ]);
 const MCP_AMBIGUOUS_MARKETPLACE_INSPECTION_CHANNELS = new Set<FunnelChannel>([
   "smithery",
+  "mcpize",
 ]);
 const MCP_MARKETPLACE_INSPECTION_STAGES = new Set<McpFunnelStage>([
   "initialize",
@@ -760,6 +762,8 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
                   ? "goose_extensions"
                   : declaredSource === "smithery"
                     ? client === "registry_crawler" ? "registry_or_directory" : "smithery"
+                  : declaredSource === "mcpize"
+                    ? "mcpize"
                   : declaredSource === "glama-release"
                     ? "glama"
                   : declaredSource === "mcp-registry"

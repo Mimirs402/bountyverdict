@@ -544,6 +544,12 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(smitheryScanObservations.length, 1);
   assert.equal(smitheryScanObservations[0].channel, "registry_or_directory");
 
+  const mcpize = event("/mcp?source=mcpize", 200, { "user-agent": "MCPize/1.0" }, "POST");
+  Object.assign(mcpize, { logs: kiro.logs });
+  const mcpizeObservations = classifyMcpTailEvents(mcpize);
+  assert.equal(mcpizeObservations.length, 1);
+  assert.equal(mcpizeObservations[0].channel, "mcpize");
+
   const agentMrr = event("/mcp?source=agentmrr", 200, { "user-agent": "Codex/1.0" }, "POST");
   Object.assign(agentMrr, { logs: kiro.logs });
   const agentMrrObservations = classifyMcpTailEvents(agentMrr);
@@ -596,6 +602,8 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     "/mcp?source=goose-extensions&source=goose-extensions",
     "/mcp?source=smithery&private=discard",
     "/mcp?source=smithery&source=smithery",
+    "/mcp?source=mcpize&private=discard",
+    "/mcp?source=mcpize&source=mcpize",
     "/mcp?source=agentmrr&private=discard",
     "/mcp?source=agentmrr&source=agentmrr",
   ]) {
@@ -623,6 +631,7 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...gooseExtensions,
       ...smitheryObservations,
       ...smitheryScanObservations,
+      ...mcpizeObservations,
       ...agentMrrObservations,
       ...registryObservations,
       ...ownerMarker,
@@ -772,6 +781,39 @@ test("Smithery tool-selection stages remain buyer-candidate evidence", () => {
 
   const buyerCandidate = mcpBuyerCandidateTotals(snapshot);
   assert.equal(snapshot.mcp_by_channel.smithery.events, 6);
+  assert.equal(buyerCandidate.events, 3);
+  assert.equal(buyerCandidate.initialize, 0);
+  assert.equal(buyerCandidate.tools_list, 0);
+  assert.equal(buyerCandidate.protocol_error, 0);
+  assert.equal(buyerCandidate.tool_not_found, 1);
+  assert.equal(buyerCandidate.validation_error, 1);
+  assert.equal(buyerCandidate.payment_required, 1);
+});
+
+test("MCPize connection discovery is excluded while selected-tool stages remain buyer evidence", () => {
+  const snapshot = createFunnelSnapshot();
+  for (const stage of [
+    "initialize",
+    "tools_list",
+    "protocol_error",
+    "tool_not_found",
+    "validation_error",
+    "payment_required",
+  ] as const) {
+    recordMcpObservation(snapshot, {
+      observed_at: "2026-07-23T00:20:00.000Z",
+      stage,
+      product: stage === "validation_error" || stage === "payment_required" ? "single" : null,
+      source: "automated_client",
+      client_class: "agent_runtime",
+      client_family: "not_applicable",
+      validation_kind: stage === "validation_error" ? "missing_required" : "not_applicable",
+      channel: "mcpize",
+    });
+  }
+
+  const buyerCandidate = mcpBuyerCandidateTotals(snapshot);
+  assert.equal(snapshot.mcp_by_channel.mcpize.events, 6);
   assert.equal(buyerCandidate.events, 3);
   assert.equal(buyerCandidate.initialize, 0);
   assert.equal(buyerCandidate.tools_list, 0);

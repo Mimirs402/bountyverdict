@@ -700,13 +700,23 @@ test("directory monitoring verifies the origin ARD catalog without calling publi
   assert.match(directory, /async function ardCatalogStatus/);
   assert.match(directory, /\.well-known\/ai-catalog\.json/);
   assert.match(directory, /application\/mcp-server-card\+json/);
-  assert.match(directory, /why did this github actions workflow run fail/);
-  assert.match(directory, /should i retry this failed github actions run once or fix it/);
+  assert.match(directory, /why did this github actions run fail and what should i fix/);
+  assert.match(directory, /is this github actions failure flaky should i retry once or fix the code/);
   assert.match(directory, /origin_owned_ard_catalog_availability_not_registry_indexing_impressions_tool_calls_purchases_or_revenue/);
   assert.match(directory, /ard_catalog: ardCatalog/);
   assert.match(distribution, /Agentic Resource Discovery catalog/);
   assert.match(distribution, /direct catalog availability is not registry indexing/);
   assert.match(deployWorkflow, /representativeQueries\?\.length !== 6/);
+});
+
+test("402 Index monitoring includes every paid product without treating probe health as listing absence", async () => {
+  const directory = await readFile(directoryMonitorUrl, "utf8");
+  assert.match(directory, /cd56e182-b989-49ae-b407-03ad8c3d1c6c/);
+  assert.match(directory, /product: "mcpdrift"/);
+  assert.match(directory, /listed_healthy/);
+  assert.match(directory, /listed_degraded/);
+  assert.match(directory, /payment_valid: entry\.x402_payment_valid === 1/);
+  assert.match(directory, /public_directory_listing_not_customer_purchase/);
 });
 
 test("declared MCP source attribution remains allowlisted, aggregate, and separate from purchase proof", async () => {

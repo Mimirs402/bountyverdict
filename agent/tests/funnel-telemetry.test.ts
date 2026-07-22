@@ -671,6 +671,29 @@ test("attributes only the exact AgentMRR marker on paid REST calls", () => {
   assert.equal(owner.channel, "owner_automation");
 });
 
+test("attributes the exact x402 Arena marker on the verified legacy GET adapter", () => {
+  const exact = classifyFunnelTailEvent(event(
+    "/api/run?run_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex%2Factions%2Fruns%2F29728148711&source=x402arena",
+    402,
+    { "user-agent": "undici", accept: "application/json" },
+    "GET",
+  ));
+  assert.ok(exact);
+  assert.equal(exact.product, "run");
+  assert.equal(exact.channel, "x402arena");
+  assert.equal(exact.input_profile, "complete_expected");
+  assert.equal(exact.outcome, "challenge_402");
+
+  for (const path of [
+    "/api/run?run_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex%2Factions%2Fruns%2F29728148711&source=x402arena&private=discard",
+    "/api/run?run_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex%2Factions%2Fruns%2F29728148711&source=x402arena&source=x402arena",
+  ]) {
+    const ambiguous = classifyFunnelTailEvent(event(path, 402, { "user-agent": "undici" }, "GET"));
+    assert.ok(ambiguous);
+    assert.equal(ambiguous.channel, "direct_or_hidden");
+  }
+});
+
 test("Glama release probes remain distribution evidence and never enter the buyer-candidate funnel", () => {
   const snapshot = createFunnelSnapshot();
   const glama = event("/mcp?source=glama-release", 200, { "user-agent": "Glama/1.0" }, "POST");
@@ -843,6 +866,9 @@ test("schema enrichment preserves previously learned discovery aggregates", () =
   delete (snapshot.by_channel as Record<string, unknown>).agentmrr;
   delete (snapshot.by_discovery_channel as Record<string, unknown>).agentmrr;
   delete (snapshot.mcp_by_channel as Record<string, unknown>).agentmrr;
+  delete (snapshot.by_channel as Record<string, unknown>).x402arena;
+  delete (snapshot.by_discovery_channel as Record<string, unknown>).x402arena;
+  delete (snapshot.mcp_by_channel as Record<string, unknown>).x402arena;
   delete snapshot.mcp_validation_kinds;
   (snapshot.mcp_totals as Record<string, unknown>).events = 2;
   (snapshot.mcp_totals as Record<string, unknown>).validation_error = 2;
@@ -875,6 +901,9 @@ test("schema enrichment preserves previously learned discovery aggregates", () =
   assert.equal(loaded.by_channel.agentmrr.requests, 0);
   assert.equal(loaded.by_discovery_channel.agentmrr.requests, 0);
   assert.equal(loaded.mcp_by_channel.agentmrr.events, 0);
+  assert.equal(loaded.by_channel.x402arena.requests, 0);
+  assert.equal(loaded.by_discovery_channel.x402arena.requests, 0);
+  assert.equal(loaded.mcp_by_channel.x402arena.events, 0);
   activateFunnelCollectorCapabilities(loaded);
   assert.deepEqual(loaded.collector_capabilities, [...FUNNEL_COLLECTOR_CAPABILITIES]);
   assert.deepEqual(loaded.collector_capability_heartbeats, {

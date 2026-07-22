@@ -47,6 +47,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "goose_extensions",
   "smithery",
   "agentmrr",
+  "x402arena",
   "glama",
   "github",
   "web_search",
@@ -534,6 +535,30 @@ function inputProfile(product: ProductKey, url: URL, method: string): FunnelInpu
   return "complete_expected";
 }
 
+function paidRouteDeclaredSource(
+  url: URL,
+  product: ProductKey,
+  method: string,
+): string | null {
+  if (url.searchParams.getAll("source").length !== 1) return null;
+  if (method === "POST") return url.searchParams.size === 1 ? url.searchParams.get("source") : null;
+
+  const allowed = new Set<string>(["source"]);
+  if (product === "single") allowed.add("issue_url");
+  else if (product === "harness") allowed.add("repo_url");
+  else if (product === "skill") {
+    allowed.add("repo_url");
+    allowed.add("skill_path");
+  } else {
+    allowed.add("run_url");
+    if (product === "flake") allowed.add("attempt");
+  }
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) return null;
+  }
+  return url.searchParams.get("source");
+}
+
 function paymentCarrier(headers: Record<string, string>): FunnelPaymentCarrier {
   const v2 = Boolean(headers["payment-signature"]);
   const legacy = Boolean(headers["x-payment"]);
@@ -585,9 +610,7 @@ export function classifyFunnelTailEvent(value: unknown): FunnelObservation | nul
   const timestamp = typeof tail.eventTimestamp === "number" && Number.isFinite(tail.eventTimestamp)
     ? new Date(tail.eventTimestamp).toISOString()
     : new Date().toISOString();
-  const declaredSource = url.searchParams.size === 1 && url.searchParams.getAll("source").length === 1
-    ? url.searchParams.get("source")
-    : null;
+  const declaredSource = paidRouteDeclaredSource(url, product, normalizedMethod);
   return {
     observed_at: timestamp,
     product,
@@ -595,7 +618,11 @@ export function classifyFunnelTailEvent(value: unknown): FunnelObservation | nul
     client_class: client,
     channel: client === "owner_automation"
       ? "owner_automation"
-      : declaredSource === "agentmrr" ? "agentmrr" : channelCategory(headers, client),
+      : declaredSource === "agentmrr"
+        ? "agentmrr"
+        : declaredSource === "x402arena"
+          ? "x402arena"
+          : channelCategory(headers, client),
     input_profile: inputProfile(product, url, normalizedMethod),
     payment_carrier: payment,
     response_preference: responsePreference(headers.accept || ""),

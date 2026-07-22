@@ -462,6 +462,36 @@ test("withdrawn bounty is detected even when issue remains open", () => {
   assert.equal(output.withdrawals.length, 1);
 });
 
+test("an authenticated platform reward-creation failure is a hard stop", () => {
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+    user: { login: "opirebot[bot]" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "WITHDRAWN");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward platform rejected listing" && item.hardStop
+  ));
+});
+
+test("an untrusted commenter cannot forge a platform reward rejection", () => {
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted-rejection",
+    user: { login: "random-user" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) => item.label === "Reward platform rejected listing"));
+});
+
 test("linked competing PR reduces the verdict", () => {
   const timeline = [{
     event: "cross-referenced",

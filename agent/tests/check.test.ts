@@ -138,6 +138,28 @@ test("returns CAUTION when a maintainer-owned listing mirrors an external source
   ));
 });
 
+test("returns AVOID when an authenticated platform app rejected reward creation", async () => {
+  const comments = [{
+    body: "You cannot create a reward of $10. It needs to be at least $20.",
+    author_association: "NONE",
+    performed_via_github_app: { slug: "opirebot" },
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-opire-rejected",
+    user: { login: "opirebot[bot]" },
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "WITHDRAWN");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Reward platform rejected listing" && signal.hard_stop
+  ));
+});
+
 test("rejects a non-issue URL before making an upstream request", async () => {
   let fetched = false;
   const mock = (async () => {

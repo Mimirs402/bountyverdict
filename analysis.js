@@ -1,5 +1,6 @@
 const MAINTAINER_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 const TRUSTED_BOUNTY_APPS = new Set(["algora-pbc"]);
+const TRUSTED_REWARD_FAILURE_APPS = new Set(["opirebot"]);
 
 const NEGATIVE_MAINTAINER_PATTERNS = [
   /ai[ -]slop/i,
@@ -21,6 +22,13 @@ const WITHDRAWAL_PATTERNS = [
   /(?:reward|bounty).{0,40}withdraw(?:n|ing)?/i,
   /no longer.{0,40}(?:reward|bounty)/i,
   /cancel(?:led|ing)?.{0,40}(?:reward|bounty)/i
+];
+
+const REWARD_PLATFORM_REJECTION_PATTERNS = [
+  /cannot create (?:a )?reward/i,
+  /could not create (?:a )?reward/i,
+  /unable to create (?:a )?reward/i,
+  /reward.{0,40}(?:must|needs?) to be at least/i,
 ];
 
 const AI_POLICY_BLOCK_PATTERNS = [
@@ -293,11 +301,18 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = matchingComments(comments, WITHDRAWAL_PATTERNS, false);
+  const platformRejections = comments.filter((comment) =>
+    TRUSTED_REWARD_FAILURE_APPS.has(comment.performed_via_github_app?.slug) &&
+    REWARD_PLATFORM_REJECTION_PATTERNS.some((pattern) => pattern.test(comment.body ?? ""))
+  );
   const reward = rewardEvidence(issue, comments);
   const externalSource = externalSourceIssue(issue, repository);
   if (rewardedLabels.length) {
     reward.state = "PAID_OR_AWARDED";
     reward.evidenceUrl = issue.html_url;
+  } else if (platformRejections.length) {
+    reward.state = "WITHDRAWN";
+    reward.evidenceUrl = platformRejections.at(-1)?.html_url ?? issue.html_url;
   } else if (withdrawals.length) {
     reward.state = "WITHDRAWN";
     reward.evidenceUrl = withdrawals.at(-1)?.html_url ?? issue.html_url;
@@ -483,7 +498,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Maintainer rejection signal", -60, "A maintainer comment contains an explicit rejection, spam, or low-quality-contribution warning.", comment.html_url, true));
   }
 
-  if (withdrawals.length) {
+  if (platformRejections.length) {
+    score -= 70;
+    const comment = platformRejections.at(-1);
+    signals.push(signal(
+      "Reward platform rejected listing",
+      -70,
+      "An authenticated bounty-platform application reports that the advertised reward was not created.",
+      comment.html_url,
+      true,
+    ));
+  } else if (withdrawals.length) {
     score -= 70;
     const comment = withdrawals.at(-1);
     signals.push(signal("Reward withdrawal signal", -70, "The discussion contains language indicating that a bounty or reward was removed, withdrawn, or cancelled.", comment.html_url, true));

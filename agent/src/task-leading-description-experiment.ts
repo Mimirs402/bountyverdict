@@ -1,5 +1,5 @@
 export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v2";
-export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v3";
+export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v4";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export type DescriptionExperimentId =

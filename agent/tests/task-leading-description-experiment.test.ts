@@ -78,7 +78,7 @@ test("activation parser requires exact release, production, drain, epoch, and N=
   assert.throws(() => parseTaskLeadingDescriptionActivation({ ...activation, unexpected: true }), /fields are invalid/);
 });
 
-test("a v3 question-shaped treatment is isolated from the completed v2 experiment", () => {
+test("a v4 question-shaped retry is isolated from the completed v2 experiment", () => {
   const questionActivation = {
     ...activation,
     experiment_id: AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,

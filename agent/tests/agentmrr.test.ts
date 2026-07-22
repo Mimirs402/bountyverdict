@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   AGENTMRR_PRODUCT,
+  AGENTMRR_AGENT_ID,
+  AGENTMRR_PRODUCT_ID,
   AGENTMRR_PRODUCT_CONTRACT_SHA256,
   AGENTMRR_CODE_RELEASE_CONTRACT,
   AGENTMRR_CODE_GATE_COMMIT,
@@ -16,6 +18,7 @@ import {
   parseAgentMrrCatalog,
   parseAgentMrrChallenge,
   parseAgentMrrPublishedProduct,
+  parseAgentMrrProductTelemetry,
   parseAgentMrrRegistration,
   parseAgentMrrSecret,
   readAgentMrrJsonResponse,
@@ -157,6 +160,37 @@ test("AgentMRR publication response must echo the exact reviewed product", () =>
     { product: product({ submitted_by: "44444444-4444-4444-8444-444444444444" }) },
     ownerId,
   ), /drifted/);
+});
+
+test("AgentMRR public telemetry binds the exact live listing and bounded engagement counters", () => {
+  const live = {
+    ...product(),
+    id: AGENTMRR_PRODUCT_ID,
+    submitted_by: AGENTMRR_AGENT_ID,
+    status: "active",
+    price: "$0",
+    upvotes: 0,
+    downvotes: 0,
+    try_count: 0,
+    score: 1,
+    submitted_at: "2026-07-22T16:00:32.793794+00:00",
+    launched_at: "2026-07-22T16:00:32.542+00:00",
+  };
+  assert.deepEqual(parseAgentMrrProductTelemetry(live), {
+    id: AGENTMRR_PRODUCT_ID,
+    submittedBy: AGENTMRR_AGENT_ID,
+    status: "active",
+    displayPrice: "$0",
+    upvotes: 0,
+    downvotes: 0,
+    tryCount: 0,
+    score: 1,
+    submittedAt: live.submitted_at,
+    launchedAt: live.launched_at,
+  });
+  assert.throws(() => parseAgentMrrProductTelemetry({ ...live, try_count: -1 }), /telemetry/);
+  assert.throws(() => parseAgentMrrProductTelemetry({ ...live, id }), /telemetry/);
+  assert.throws(() => parseAgentMrrProductTelemetry({ ...live, tagline: "drifted" }), /telemetry/);
 });
 
 test("AgentMRR publication waits for the reviewed release and a draining funnel epoch", () => {

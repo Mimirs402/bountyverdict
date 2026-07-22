@@ -71,6 +71,11 @@ import {
   readMeasurementExperimentCheckpoint,
   writeMeasurementExperimentCheckpoint,
 } from "../src/recovery-experiment-checkpoint.ts";
+import {
+  AGENTMRR_BASE_URL,
+  AGENTMRR_PRODUCT_ID,
+  parseAgentMrrProductTelemetry,
+} from "../src/agentmrr.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const AGENTIC_MARKET_SERVICE =
@@ -381,6 +386,31 @@ async function mcpIntentPageStatus(): Promise<Record<string, unknown>> {
     scope: ["diagnose_github_actions_run", "classify_github_actions_flake"],
     copy_ready_prompt: true,
     accounting_note: "Availability is distribution evidence only; this owner-run check is not an impression, purchase, or revenue.",
+  };
+}
+
+async function agentMrrStatus(): Promise<Record<string, unknown>> {
+  const response = await monitoredFetch(`${AGENTMRR_BASE_URL}/api/products/${AGENTMRR_PRODUCT_ID}`);
+  if (!response.ok) throw new Error(`AgentMRR returned HTTP ${response.status}.`);
+  const telemetry = parseAgentMrrProductTelemetry(await response.json());
+  return {
+    listed: true,
+    checked_at: new Date().toISOString(),
+    product_id: telemetry.id,
+    listing_api_url: `${AGENTMRR_BASE_URL}/api/products/${telemetry.id}`,
+    status: telemetry.status,
+    submitted_by: telemetry.submittedBy,
+    display_price: telemetry.displayPrice,
+    upvotes: telemetry.upvotes,
+    downvotes: telemetry.downvotes,
+    try_count: telemetry.tryCount,
+    score: telemetry.score,
+    submitted_at: telemetry.submittedAt,
+    launched_at: telemetry.launchedAt,
+    price_disclosure_state: telemetry.displayPrice === "$0"
+      ? "platform_display_price_disagrees_with_0.04_usdc_description"
+      : "platform_display_price_present",
+    accounting_note: "Listing, votes, tries, and score are acquisition telemetry only; they are never purchases or revenue.",
   };
 }
 
@@ -2259,6 +2289,7 @@ function renderMonitorNote(report: Record<string, any>): string {
     : `${Number(githubPrMonitoring.sources_readable ?? githubPrMonitoring.checked ?? 0)} / ${Number(githubPrMonitoring.checked || 0)} legacy PR sources readable; workflow outcomes are unavailable until the next audited directory refresh and zero is not asserted.`;
   const mcpDownstreams = report.acquisition?.mcp_downstreams || {};
   const smithery = report.acquisition?.smithery || {};
+  const agentMrr = report.acquisition?.agentmrr || {};
   const smitheryBenchmark = smithery.buyer_query_benchmark || {};
   const smitherySummary = smithery.listed
     ? smithery.search_indexed
@@ -2326,6 +2357,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Autonomous work safety gate (2026-07-21 snapshot):** minia2a gas task rejected after 79 competing submissions; minia2a CAPTCHA rejected for insufficient authorization, live request/price drift, duplicate payment choices, and unsafe public token delivery; BountyBook excluded because all 32 API-verified jobs reported payout failure, no payout transaction hash, and contract job ID 0. No payment or claim was made.
 - **Tollbooth compatibility probe:** submitted_unverified; its verifier parsed the exact $0.05 x402 v2 Base-USDC challenge and payee but the paid replay stayed at HTTP 402 with no settlement proof. The listing has zero calls and zero revenue; do not retry or weaken the production protocol until Tollbooth demonstrates compatible v2 payment replay.
 - **Smithery marketplace:** ${smitherySummary} at [mimirs402/bountyverdict](https://smithery.ai/servers/mimirs402/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
+- **AgentMRR marketplace:** ${agentMrr.listed ? `RunVerdict active; ${Number(agentMrr.try_count || 0)} tries, ${Number(agentMrr.upvotes || 0)} upvotes, score ${Number(agentMrr.score || 0)}; marketplace display ${String(agentMrr.display_price || "unavailable")}; ${String(agentMrr.price_disclosure_state || "price state unavailable")}` : `unavailable (${agentMrr.error || "not checked"})`} at [product API](${agentMrr.listing_api_url || `https://agentmrr.ai/api/products/${AGENTMRR_PRODUCT_ID}`}) (public engagement counters are acquisition telemetry only, never purchases or revenue; the exact $0.04 Base-USDC price remains disclosed in the product description)
 - **ToolHive in-agent catalog:** ${report.acquisition?.toolhive?.status || "pr_open_pending_directory_refresh"}; issue [#1384](https://github.com/stacklok/toolhive-catalog/issues/1384) and PR [#1388](${report.acquisition?.toolhive?.url || "https://github.com/stacklok/toolhive-catalog/pull/1388"}); PR ${report.acquisition?.toolhive?.pr_status || "open"}, review ${report.acquisition?.toolhive?.pr_review_decision || "REVIEW_REQUIRED"}, merge state ${report.acquisition?.toolhive?.pr_merge_state_status || "BLOCKED"}; exact secret-free six-tool catalog contract ${report.acquisition?.toolhive?.contract_verified ? "verified live" : "pending merge"}. Full catalog validation and Go tests passed before submission. Placement and review state are not impressions, installs, purchases, or revenue.
 - **Clawlancer funded-work canary:** ${clawlancer.available ? `${String(clawlancer.status || "unknown").toUpperCase()}; ${clawlancer.transaction?.fundingTxHash ? "funding transaction reported" : "no funding transaction"}; ${clawlancer.onchain_evidence?.verified ? "release verified on Base and recognized" : "no onchain-verified release, not revenue"}; next action ${clawlancer.action || "unknown"}` : `unavailable (${clawlancer.error || "state not captured"})`} (the pinned deliverable auto-submits only after FUNDED)
 - **Neutral buyer-query retrieval:** ${buyerBenchmarkSummary}
@@ -2703,6 +2735,17 @@ try {
 }
 
 acquisition = await acquisitionStatus();
+
+try {
+  acquisition = {
+    ...acquisition,
+    agentmrr: await agentMrrStatus(),
+  };
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  acquisition = { ...acquisition, agentmrr: { listed: false, checked_at: checkedAt, error: message } };
+  errors.push(`AgentMRR: ${message}`);
+}
 
 if (reportOnly) {
   acquisition = {

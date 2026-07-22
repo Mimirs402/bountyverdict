@@ -11,6 +11,8 @@ export const AGENTMRR_REVIEWED_SOURCE_COMMIT = "f23f043142f356584393992f399f6b11
 export const AGENTMRR_CODE_GATE_COMMIT = "ec1b7f827015408efc54c6c2e34e17ccbd573bda";
 export const AGENTMRR_CODE_RELEASE_CONTRACT = "agentmrr-attribution-v1";
 export const AGENTMRR_AGENT_NAME = "BountyVerdict";
+export const AGENTMRR_AGENT_ID = "07ed2a12-70e9-46b3-b8ca-314d6cc29c38";
+export const AGENTMRR_PRODUCT_ID = "13d7287b-deb5-4e52-a501-15f697b18535";
 export const AGENTMRR_CATALOG_LIMIT = 1_000;
 export const AGENTMRR_ROTATION_REASON =
   "AgentMRR publication can trigger unattributed downstream origin crawls; exclude the publication and drain until external aggregates are stable.";
@@ -52,6 +54,19 @@ export interface AgentMrrProductRecord {
   name: string;
   exact: boolean;
   submittedBy: string;
+}
+
+export interface AgentMrrProductTelemetry {
+  id: string;
+  submittedBy: string;
+  status: "active";
+  displayPrice: string;
+  upvotes: number;
+  downvotes: number;
+  tryCount: number;
+  score: number;
+  submittedAt: string;
+  launchedAt: string;
 }
 
 export interface AgentMrrPublicationGateInput {
@@ -234,6 +249,33 @@ export function parseAgentMrrPublishedProduct(value: unknown, expectedOwner: str
     throw new Error("AgentMRR returned a drifted published product.");
   }
   return { id: product.id, name: AGENTMRR_PRODUCT.name, exact: true, submittedBy: expectedOwner };
+}
+
+export function parseAgentMrrProductTelemetry(value: unknown): AgentMrrProductTelemetry {
+  const product = record(value);
+  const integers = [product.upvotes, product.downvotes, product.try_count];
+  const submittedAt = typeof product.submitted_at === "string" ? product.submitted_at : "";
+  const launchedAt = typeof product.launched_at === "string" ? product.launched_at : "";
+  if (product.id !== AGENTMRR_PRODUCT_ID || product.submitted_by !== AGENTMRR_AGENT_ID ||
+      product.status !== "active" || !exactProduct(product) ||
+      typeof product.price !== "string" || product.price.length < 1 || product.price.length > 64 ||
+      integers.some((counter) => !Number.isSafeInteger(counter) || Number(counter) < 0) ||
+      typeof product.score !== "number" || !Number.isFinite(product.score) || product.score < 0 ||
+      !Number.isFinite(Date.parse(submittedAt)) || !Number.isFinite(Date.parse(launchedAt))) {
+    throw new Error("AgentMRR product telemetry is malformed or drifted.");
+  }
+  return {
+    id: AGENTMRR_PRODUCT_ID,
+    submittedBy: AGENTMRR_AGENT_ID,
+    status: "active",
+    displayPrice: product.price,
+    upvotes: Number(product.upvotes),
+    downvotes: Number(product.downvotes),
+    tryCount: Number(product.try_count),
+    score: product.score,
+    submittedAt,
+    launchedAt,
+  };
 }
 
 export function validateAgentMrrReleaseState(

@@ -144,6 +144,8 @@ const askillRefreshRecordedAt = "2026-07-21T16:00:14Z";
 const askillRefreshResult = "existing_skill_skipped_zero_indexed";
 const askillDedicatedSearchUrl = "https://askill.sh/api/v1/skills?q=route-github-agent-decisions&owner=Mimirs402&repo=bountyverdict-mcp-skill&limit=20";
 const askillDedicatedSubmittedAt = "2026-07-21T21:37:35.000Z";
+const askillDedicatedRefreshRecordedAt = "2026-07-22T20:25:57.000Z";
+const askillDedicatedRefreshResult = "existing_skill_skipped_zero_indexed_issue_20";
 const askillMainSubmittedAt = "2026-07-22T00:19:00.000Z";
 const askillLegacyMonitor = Object.freeze({
   searchUrl: askillSearchUrl,
@@ -165,6 +167,9 @@ const askillDedicatedMonitor = Object.freeze({
     indexed: true,
     entry_id: 703722,
     repository: "Mimirs402/bountyverdict-mcp-skill",
+    refresh_recorded_at: askillDedicatedRefreshRecordedAt,
+    refresh_result: askillDedicatedRefreshResult,
+    refresh_issue_url: "https://github.com/avibe-bot/askill/issues/20",
   },
 });
 const agentSkillsMdSubmissionRecordedAt = "2026-07-22T00:05:36Z";

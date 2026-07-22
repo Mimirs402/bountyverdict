@@ -6,13 +6,13 @@ export const ASKILL_PATH = `skills/${ASKILL_SKILL_NAME}`;
 export const ASKILL_FILE_PATH = `${ASKILL_PATH}/SKILL.md`;
 export const ASKILL_INSTALL_REF = `gh:${ASKILL_REPOSITORY}@${ASKILL_SKILL_NAME}`;
 export const ASKILL_BUYER_LANGUAGE_DESCRIPTION =
-  "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
+  "Use for: why did a GitHub Actions run fail (root cause); retry a failed workflow; is a GitHub bounty open; which bounty to work on; audit AGENTS.md; will MCP tools/list changes break clients.";
 export const ASKILL_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-21T15:51:34.000Z";
 export const ASKILL_DEDICATED_REPOSITORY = "Mimirs402/bountyverdict-mcp-skill";
 export const ASKILL_DEDICATED_OWNER = "Mimirs402";
 export const ASKILL_DEDICATED_INSTALL_REF =
   `gh:${ASKILL_DEDICATED_REPOSITORY}@${ASKILL_SKILL_NAME}`;
-export const ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-21T21:37:35.000Z";
+export const ASKILL_DEDICATED_REQUIRED_ADAPTER_REVISION_PUSHED_AT = "2026-07-22T20:24:13.000Z";
 export const ASKILL_MAIN_OWNER = "Mimirs402";
 export const ASKILL_MAIN_REPO = "bountyverdict";
 export const ASKILL_MAIN_REPOSITORY = `${ASKILL_MAIN_OWNER}/${ASKILL_MAIN_REPO}`;

@@ -150,6 +150,17 @@ test("tracks the dedicated Mimir's Lab askill listing without merging legacy tel
     rank: 1,
     returned_results: 2,
   });
+
+  const staleDedicated = {
+    ...dedicated,
+    description: "Older discovery copy.",
+    updatedAt: "2026-07-21T21:37:35.000Z",
+    lastPushed: "2026-07-21T21:37:35.000Z",
+  };
+  const staleParsed = parseAskillSearchPayload(payload([staleDedicated, exactEntry]), ASKILL_DEDICATED_IDENTITY);
+  assert.equal(staleParsed.buyer_language_revision_live, false);
+  assert.equal(staleParsed.adapter_revision_live, false);
+  assert.equal(staleParsed.status, "listed_pending_content_refresh");
 });
 
 test("rejects duplicate, malformed, and unbounded askill telemetry", () => {

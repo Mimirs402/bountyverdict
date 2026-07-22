@@ -81,6 +81,15 @@ test("reconciles an older exact release to current clean main and deployed produ
   ));
 });
 
+test("reconciliation refresh is limited to its reviewed attestation files", async () => {
+  const { AGENTMRR_RECONCILIATION_FILES } = await import("../src/agentmrr-reconciliation.ts");
+  assert.deepEqual([...AGENTMRR_RECONCILIATION_FILES], [
+    "JOURNAL.md",
+    "agent/src/agentmrr-reconciliation.ts",
+    "agent/tests/agentmrr-reconciliation.test.ts",
+  ]);
+});
+
 test("rejects drifted prior receipts, workflow identities, and future evidence", () => {
   assert.throws(() => buildAgentMrrReconciledCodeRelease({
     ...evidence,

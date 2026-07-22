@@ -852,3 +852,13 @@ Buyer-candidate accounting now excludes Smithery initialization, tool listing, a
 The first remote CI run exposed a stale Glama release assertion that still required payment guidance to be the first sentence, even though the deployed task-leading treatment deliberately places buyer intent first. The verifier now requires the exact free-preview and signed-price clauses anywhere in every live tool description. A local container build and owner-attributed six-tool MCP smoke test pass; no customer traffic or payment was generated.
 
 The contaminated experiment remains preserved as `mcp-task-leading-descriptions-v1`; its activation and checkpoint are not rewritten. A new `mcp-task-leading-descriptions-v2` identity starts from a frozen zero prefix only after the conservative accounting rotation activates epoch 49. This keeps the same deployed treatment while making the accounting definition and measurement boundary explicit.
+
+## 2026-07-22 — AgentMRR publication release re-attested
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Product to publish: **RunVerdict at $0.04 Base USDC**
+
+Routine distribution reports were still causing hidden MCP catalog sessions: seven through downstream mirrors and one through the official Registry lookup. Report-only monitoring now reuses their last audited state. Two consecutive routine runs proved the direct-or-hidden MCP counters stayed flat after the final fix; full audited runs retain the live propagation checks. Epoch 49 remains a publication boundary rather than treatment evidence because the earlier self-sessions are already inside it.
+
+The AgentMRR product and publisher contract are byte-identical to the earlier reviewed release. This narrow attestation refresh binds the current clean business main, its successful CI and Pages runs, and the active task-first Worker release without deploying the Worker again. The reconciliation allowlist contains only this journal entry, the refreshed immutable coordinates, and their test. Publication remains behind the existing private identity, live collector, exact product hash, and audited funnel-rotation gates.

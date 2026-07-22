@@ -5,18 +5,15 @@ import {
   validateAgentMrrCodeReleaseState,
 } from "./agentmrr.ts";
 
-export const AGENTMRR_RECONCILIATION_BASE_COMMIT = "2dbe744508b05e185c5701ab66cb898064d3e1c9";
-export const AGENTMRR_PREVIOUS_CODE_RELEASE = "6ff3091f7fad214ba92dd9bc8f7337e3d0dad65e";
-export const AGENTMRR_PREVIOUS_RELEASE_SOURCE = "59431bb13e8c26a9bd24702759ec802148aec3d9";
-export const AGENTMRR_PREVIOUS_RECEIPT_SHA256 = "ad87e3b9ef19d9f0e1fd15e29fefdf4813bc1c5a88d63e308b65c04974b56fa7";
-export const AGENTMRR_PRODUCTION_RELEASE = "556b35fc200240d89a4f855716232c6484cb1e1d";
-export const AGENTMRR_PRODUCTION_ACTIVATION = "4aaf56a074f91b8f74f20d72373c35ddcd2efd82";
+export const AGENTMRR_RECONCILIATION_BASE_COMMIT = "baf07599f08113718c040ccb8d6a2ac56bc806d4";
+export const AGENTMRR_PREVIOUS_CODE_RELEASE = "a1afa86b7bb3c9a00c06143e93670fd472fb939f";
+export const AGENTMRR_PREVIOUS_RELEASE_SOURCE = "a1afa86b7bb3c9a00c06143e93670fd472fb939f";
+export const AGENTMRR_PREVIOUS_RECEIPT_SHA256 = "f2a80673bc28c88b83c0cba06fe545751416c63499c26987fa76045c5f060281";
+export const AGENTMRR_PRODUCTION_RELEASE = "43208a886680d6388e651f630dd7f965f5e2556a";
+export const AGENTMRR_PRODUCTION_ACTIVATION = "db0b5cb9b1d7a1379a27176d1d95bd25931b1c0f";
 
 export const AGENTMRR_RECONCILIATION_FILES = Object.freeze([
   "JOURNAL.md",
-  "agent/package.json",
-  "agent/scripts/release-agentmrr-current.ts",
-  "agent/scripts/reconcile-agentmrr-code-release.ts",
   "agent/src/agentmrr-reconciliation.ts",
   "agent/tests/agentmrr-reconciliation.test.ts",
 ] as const);

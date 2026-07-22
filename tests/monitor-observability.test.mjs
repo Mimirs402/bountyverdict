@@ -234,6 +234,21 @@ test("distribution monitoring measures the task-specific MCP description from an
   assert.match(distribution, /AbortSignal\.timeout\(timeoutMs\)/);
 });
 
+test("distribution monitoring measures unknown-tool recovery only from clean epoch 46 without causal claims", async () => {
+  const distribution = await readFile(distributionUrl, "utf8");
+  assert.match(distribution, /mcp-unknown-tool-recovery-epoch46-v1/);
+  assert.match(distribution, /measurement_epoch_id: 46/);
+  assert.match(distribution, /target_tools_list: 25/);
+  assert.match(distribution, /eligible_prefix: Object\.freeze\(\{\s+initialize: 0,\s+tools_list: 0/s);
+  assert.match(distribution, /updateUnknownToolRecoveryExperiment/);
+  assert.match(distribution, /currentEpochId: Number\(trustedBaseline\.epoch_id \|\| 1\)/);
+  assert.match(distribution, /effectiveTrustedMcp\?\.buyer_candidate_totals \|\| null/);
+  assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment \|\| null,\s+previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment \|\| null/s);
+  assert.match(distribution, /previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment/);
+  assert.match(distribution, /first report at or above 25 eligible epoch-46 tools\/list events is immutable/);
+  assert.match(distribution, /no session\/retry linkage and never establish a causal recovery rate/);
+});
+
 test("distribution monitoring reports MCP conversion from the active trusted epoch", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /trustedMcpDelta\(state, trustedBaseline\.mcp\)/);

@@ -56,6 +56,25 @@ const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
   /\b(?:dropping|giving up)\s+(?:this|it|the issue|my claim)\b/i,
 ];
 
+const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+url|original\s+(?:issue|link)|upstream\s+issue|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
+
+function externalSourceIssue(issue, repository) {
+  const body = typeof issue?.body === "string" ? issue.body : "";
+  const current = typeof repository?.full_name === "string" ? repository.full_name.toLowerCase() : "";
+  for (const match of body.matchAll(EXTERNAL_SOURCE_LABEL_PATTERN)) {
+    const owner = match[1];
+    const repo = match[2];
+    const number = Number(match[3]);
+    if (!owner || !repo || !Number.isSafeInteger(number) || number < 1) continue;
+    if (`${owner}/${repo}`.toLowerCase() === current) continue;
+    return {
+      url: `https://github.com/${owner}/${repo}/issues/${number}`,
+      repository: `${owner}/${repo}`,
+    };
+  }
+  return null;
+}
+
 export function parseIssueUrl(value) {
   let url;
   try {
@@ -275,6 +294,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const maintainerWarnings = matchingComments(comments, NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = matchingComments(comments, WITHDRAWAL_PATTERNS, false);
   const reward = rewardEvidence(issue, comments);
+  const externalSource = externalSourceIssue(issue, repository);
   if (rewardedLabels.length) {
     reward.state = "PAID_OR_AWARDED";
     reward.evidenceUrl = issue.html_url;
@@ -402,6 +422,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       -25,
       "No trusted platform listing or maintainer-authored reward statement appeared in the bounded GitHub evidence.",
       reward.evidenceUrl,
+    ));
+  }
+
+  if (externalSource) {
+    score -= 40;
+    signals.push(signal(
+      "External source issue requires separate verification",
+      -40,
+      `This issue mirrors work from ${externalSource.repository}. Authority in the mirror does not prove that the target repository will accept the work; check the linked source issue before coding.`,
+      externalSource.url,
     ));
   }
 

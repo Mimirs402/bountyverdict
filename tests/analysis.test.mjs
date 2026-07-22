@@ -122,6 +122,37 @@ test("a maintainer confirmation clears the untrusted-issuer hard stop", () => {
   assert.ok(!output.signals.some((item) => item.label === "Bounty issuer lacks repository authority"));
 });
 
+test("a mirrored bounty requires checking its external source issue", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\n$500 reward for completing the copied task specification, including reproducible current behavior, expected behavior, implementation scope, tests, and acceptance criteria.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "CAUTION");
+  assert.ok(output.signals.some((item) =>
+    item.label === "External source issue requires separate verification" &&
+    item.evidenceUrl === "https://github.com/upstream/project/issues/77"
+  ));
+});
+
+test("a same-repository source link is not treated as a mirror", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Original issue: https://github.com/acme/widget/issues/77\n\n$500 reward with a complete implementation specification.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "External source issue requires separate verification"));
+});
+
 test("parses abbreviated thousands in bounty titles", () => {
   const output = analyzeBounty({
     issue: {

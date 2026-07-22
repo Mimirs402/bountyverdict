@@ -118,6 +118,26 @@ test("returns AVOID for an unconfirmed bounty posted by a non-maintainer", async
   ));
 });
 
+test("returns CAUTION when a maintainer-owned listing mirrors an external source issue", async () => {
+  const mirrored = {
+    ...issue,
+    body: "### Original link\nhttps://github.com/upstream/project/issues/77\n\nThis $500 bounty mirrors the external implementation target with complete acceptance criteria.",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, mirrored),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PROMISED");
+  assert.equal(result.verdict, "CAUTION");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External source issue requires separate verification" &&
+    signal.evidence_url === "https://github.com/upstream/project/issues/77"
+  ));
+});
+
 test("rejects a non-issue URL before making an upstream request", async () => {
   let fetched = false;
   const mock = (async () => {

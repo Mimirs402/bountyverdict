@@ -689,3 +689,16 @@ A fresh public bounty sweep found a concrete safety miss in BountyVerdict. [`Iam
 The queued analyzer now makes that combination an explicit hard stop: an unverified bounty posted by a non-maintainer returns `AVOID` with `Bounty issuer lacks repository authority`. The rule is deliberately narrow. A trusted platform application or a repository owner, member, or collaborator confirming the reward upgrades provenance before this gate runs, so legitimate third-party sponsors can still proceed after authoritative confirmation.
 
 The exact live issue now evaluates to `AVOID` at 0 in the isolated post-boundary worktree. All **105 / 105** public tests, **377 / 377** Worker and operations tests, type checking, and Cloudflare dry deployment pass. No production route, price, schema, catalog copy, payment, GitHub issue, or customer metric changed; release remains queued until the precommitted clean experiment reaches its immutable boundary.
+
+## 2026-07-22 — Mirrored bounty target verification (queued)
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Selection-preview observation: **128 / 150 eligible tools/list events**, frozen during audited drain
+- Production status: **held for the clean selection boundary; not deployed**
+
+The next live bounty cohort exposed a separate provenance gap. A newly created mirror repository copied third-party issues from `Iamgoofball/-tg-station`, relabeled its own owner as the bounty issuer, and advertised rewards ranging from **$145** to **$1.5 million**. Because the mirror owner is authoritative only inside the mirror, the previous analyzer returned `VIABLE` at 93 even though that authority said nothing about whether the external implementation target would accept the work.
+
+The queued analyzer now recognizes explicitly labeled external GitHub source issues and returns `CAUTION` with `External source issue requires separate verification`. It does not call the mirror fraudulent or erase the mirror owner's payment promise; it separates sponsor provenance from target-repository authority and links the exact source issue an agent must inspect. Same-repository references are unaffected.
+
+The live mirror samples now return `CAUTION` at 53 instead of `VIABLE` at 93. Their three linked source issues independently return `AVOID`: two because the reward issuer lacks repository authority and one because the discussion withdrew the bounty. All **107 / 107** public tests and **378 / 378** Worker and operations tests pass. No production route, price, schema, catalog copy, payment, external comment, or buyer metric changed.

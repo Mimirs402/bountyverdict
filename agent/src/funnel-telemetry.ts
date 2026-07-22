@@ -45,6 +45,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "vscode_deeplink",
   "openhands_integrations",
   "goose_extensions",
+  "smithery",
   "agentmrr",
   "glama",
   "github",
@@ -712,6 +713,8 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
                 ? "openhands_integrations"
                 : declaredSource === "goose-extensions"
                   ? "goose_extensions"
+                  : declaredSource === "smithery"
+                    ? client === "registry_crawler" ? "registry_or_directory" : "smithery"
                   : declaredSource === "glama-release"
                     ? "glama"
                   : declaredSource === "mcp-registry"

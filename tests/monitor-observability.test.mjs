@@ -275,7 +275,10 @@ test("Smithery monitoring measures fixed agent tasks without inventing demand", 
   assert.match(distribution, /public use counter are placement\/use telemetry, not search volume, impressions, purchases, or revenue/);
   assert.match(distribution, /Fixed unbranded task descriptions supplied by context-isolated agents/);
   assert.match(distribution, /bounded to Smithery's first 20 results/);
+  assert.match(distribution, /listed_pending_search_index/);
+  assert.match(distribution, /use count and unbranded retrieval are not yet measurable/);
   assert.match(smithery, /SMITHERY_TOOL_NAMES/);
+  assert.match(smithery, /mimirs402\/bountyverdict/);
 });
 
 test("the monitor turns privacy-safe hits into bounded actionable cohort summaries", async () => {

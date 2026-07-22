@@ -1686,22 +1686,28 @@ async function smitheryStatus(checkedAt: string): Promise<Record<string, unknown
     ...SMITHERY_BUYER_QUERIES.map((query) => search(query)),
   ]);
   const server = normalizeSmitheryServer(serverBody);
-  if (branded.found !== true || !Number.isSafeInteger(branded.use_count) || Number(branded.use_count) < 0) {
-    throw new Error("Smithery's branded lookup did not expose the exact listing and use counter.");
+  const searchIndexed = branded.found === true;
+  if (searchIndexed && (!Number.isSafeInteger(branded.use_count) || Number(branded.use_count) < 0)) {
+    throw new Error("Smithery's branded lookup exposed a malformed use counter.");
   }
   const observedUseCounts = queries
     .filter((query) => query.found === true)
     .map((query) => query.use_count);
+  if (!searchIndexed && observedUseCounts.length > 0) {
+    throw new Error("Smithery exposed the listing to task search before its branded index entry.");
+  }
   if (observedUseCounts.some((useCount) => useCount !== branded.use_count)) {
     throw new Error("Smithery returned inconsistent use counters across its search results.");
   }
   const found = queries.filter((query) => query.found === true);
   return {
     ...server,
+    status: searchIndexed ? "listed" : "listed_pending_search_index",
+    search_indexed: searchIndexed,
     checked_at: checkedAt,
     listing_url: `https://smithery.ai/servers/${SMITHERY_QUALIFIED_NAME}`,
-    use_count: branded.use_count,
-    branded_rank: branded.rank,
+    use_count: searchIndexed ? branded.use_count : null,
+    branded_rank: searchIndexed ? branded.rank : null,
     buyer_query_benchmark: {
       query_count: queries.length,
       found_queries: found.length,
@@ -2155,7 +2161,9 @@ function renderMonitorNote(report: Record<string, any>): string {
   const smithery = report.acquisition?.smithery || {};
   const smitheryBenchmark = smithery.buyer_query_benchmark || {};
   const smitherySummary = smithery.listed
-    ? `${Number(smithery.tool_count || 0)} tools live; ${Number(smithery.use_count || 0)} public uses; unbranded retrieval ${Number(smitheryBenchmark.found_queries || 0)} / ${Number(smitheryBenchmark.query_count || SMITHERY_BUYER_QUERIES.length)} queries found, ${Number(smitheryBenchmark.top_ten_queries || 0)} top-ten, and ${Number(smitheryBenchmark.top_three_queries || 0)} top-three`
+    ? smithery.search_indexed
+      ? `${Number(smithery.tool_count || 0)} tools live; ${Number(smithery.use_count || 0)} public uses; unbranded retrieval ${Number(smitheryBenchmark.found_queries || 0)} / ${Number(smitheryBenchmark.query_count || SMITHERY_BUYER_QUERIES.length)} queries found, ${Number(smitheryBenchmark.top_ten_queries || 0)} top-ten, and ${Number(smitheryBenchmark.top_three_queries || 0)} top-three`
+      : `${Number(smithery.tool_count || 0)} tools live; search indexing pending, so use count and unbranded retrieval are not yet measurable`
     : `unavailable (${smithery.error || smithery.status || "not checked"})`;
   const githubTraffic = report.acquisition?.github_traffic || {};
   const the402OutcomeTotals = report.marketplaces?.the402?.service_outcome_totals || {};
@@ -2217,7 +2225,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Pending Taskmarket opportunity estimate (not revenue):** ${Number(taskmarketTracked.pending_submissions || 0)} submissions; $${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net if awarded (pool-task net is explicitly operator-estimated from submitted record types; gross is scaled by that task's live reward/net contract, never the full escrow)
 - **Autonomous work safety gate (2026-07-21 snapshot):** minia2a gas task rejected after 79 competing submissions; minia2a CAPTCHA rejected for insufficient authorization, live request/price drift, duplicate payment choices, and unsafe public token delivery; BountyBook excluded because all 32 API-verified jobs reported payout failure, no payout transaction hash, and contract job ID 0. No payment or claim was made.
 - **Tollbooth compatibility probe:** submitted_unverified; its verifier parsed the exact $0.05 x402 v2 Base-USDC challenge and payee but the paid replay stayed at HTTP 402 with no settlement proof. The listing has zero calls and zero revenue; do not retry or weaken the production protocol until Tollbooth demonstrates compatible v2 payment replay.
-- **Smithery marketplace:** ${smitherySummary} at [cristianmoroaica/bountyverdict](https://smithery.ai/servers/cristianmoroaica/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
+- **Smithery marketplace:** ${smitherySummary} at [mimirs402/bountyverdict](https://smithery.ai/servers/mimirs402/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
 - **ToolHive in-agent catalog:** ${report.acquisition?.toolhive?.status || "pr_open_pending_directory_refresh"}; issue [#1384](https://github.com/stacklok/toolhive-catalog/issues/1384) and PR [#1388](${report.acquisition?.toolhive?.url || "https://github.com/stacklok/toolhive-catalog/pull/1388"}); PR ${report.acquisition?.toolhive?.pr_status || "open"}, review ${report.acquisition?.toolhive?.pr_review_decision || "REVIEW_REQUIRED"}, merge state ${report.acquisition?.toolhive?.pr_merge_state_status || "BLOCKED"}; exact secret-free six-tool catalog contract ${report.acquisition?.toolhive?.contract_verified ? "verified live" : "pending merge"}. Full catalog validation and Go tests passed before submission. Placement and review state are not impressions, installs, purchases, or revenue.
 - **Clawlancer funded-work canary:** ${clawlancer.available ? `${String(clawlancer.status || "unknown").toUpperCase()}; ${clawlancer.transaction?.fundingTxHash ? "funding transaction reported" : "no funding transaction"}; ${clawlancer.onchain_evidence?.verified ? "release verified on Base and recognized" : "no onchain-verified release, not revenue"}; next action ${clawlancer.action || "unknown"}` : `unavailable (${clawlancer.error || "state not captured"})`} (the pinned deliverable auto-submits only after FUNDED)
 - **Neutral buyer-query retrieval:** ${buyerBenchmarkSummary}

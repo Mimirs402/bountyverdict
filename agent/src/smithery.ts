@@ -1,4 +1,4 @@
-export const SMITHERY_QUALIFIED_NAME = "cristianmoroaica/bountyverdict";
+export const SMITHERY_QUALIFIED_NAME = "mimirs402/bountyverdict";
 
 export const SMITHERY_BUYER_QUERIES = Object.freeze([
   "GitHub Actions failed workflow run URL root cause analysis",

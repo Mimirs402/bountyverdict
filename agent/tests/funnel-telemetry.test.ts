@@ -532,6 +532,18 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(gooseExtensions.length, 1);
   assert.equal(gooseExtensions[0].channel, "goose_extensions");
 
+  const smithery = event("/mcp?source=smithery", 200, { "user-agent": "Codex/1.0" }, "POST");
+  Object.assign(smithery, { logs: kiro.logs });
+  const smitheryObservations = classifyMcpTailEvents(smithery);
+  assert.equal(smitheryObservations.length, 1);
+  assert.equal(smitheryObservations[0].channel, "smithery");
+
+  const smitheryScan = event("/mcp?source=smithery", 200, { "user-agent": "SmitheryBot/1.0 (+https://smithery.ai)" }, "POST");
+  Object.assign(smitheryScan, { logs: kiro.logs });
+  const smitheryScanObservations = classifyMcpTailEvents(smitheryScan);
+  assert.equal(smitheryScanObservations.length, 1);
+  assert.equal(smitheryScanObservations[0].channel, "registry_or_directory");
+
   const agentMrr = event("/mcp?source=agentmrr", 200, { "user-agent": "Codex/1.0" }, "POST");
   Object.assign(agentMrr, { logs: kiro.logs });
   const agentMrrObservations = classifyMcpTailEvents(agentMrr);
@@ -582,6 +594,8 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     "/mcp?source=openhands-integrations&source=openhands-integrations",
     "/mcp?source=goose-extensions&private=discard",
     "/mcp?source=goose-extensions&source=goose-extensions",
+    "/mcp?source=smithery&private=discard",
+    "/mcp?source=smithery&source=smithery",
     "/mcp?source=agentmrr&private=discard",
     "/mcp?source=agentmrr&source=agentmrr",
   ]) {
@@ -607,6 +621,8 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...vscodeDeeplink,
       ...openhandsIntegrations,
       ...gooseExtensions,
+      ...smitheryObservations,
+      ...smitheryScanObservations,
       ...agentMrrObservations,
       ...registryObservations,
       ...ownerMarker,
@@ -685,6 +701,7 @@ test("direct editor and integration runtime channels remain buyer-candidate acti
     "/mcp?source=vscode-deeplink",
     "/mcp?source=openhands-integrations",
     "/mcp?source=goose-extensions",
+    "/mcp?source=smithery",
   ]) {
     const request = event(path, 200, { "user-agent": "OpenHands/1.0" }, "POST");
     Object.assign(request, { logs: [{ message: [JSON.stringify({
@@ -703,7 +720,8 @@ test("direct editor and integration runtime channels remain buyer-candidate acti
   assert.equal(snapshot.mcp_by_channel.vscode_deeplink.tools_list, 1);
   assert.equal(snapshot.mcp_by_channel.openhands_integrations.tools_list, 1);
   assert.equal(snapshot.mcp_by_channel.goose_extensions.tools_list, 1);
-  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 4);
+  assert.equal(snapshot.mcp_by_channel.smithery.tools_list, 1);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 5);
 });
 
 test("buyer-candidate discovery excludes directory health without hiding real acquisition channels", () => {

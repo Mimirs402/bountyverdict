@@ -532,11 +532,13 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(funnel, /declaredSource === "kilo-marketplace"/);
   assert.match(funnel, /declaredSource === "cursor-deeplink"/);
   assert.match(funnel, /declaredSource === "openhands-integrations"/);
+  assert.match(funnel, /declaredSource === "goose-extensions"/);
   assert.match(funnel, /\? "agent_skills_marketplace"/);
   assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);
   assert.match(distribution, /Cursor direct MCP workflow/);
   assert.match(distribution, /OpenHands integrations registry/);
+  assert.match(distribution, /goose Extensions runtime/);
   assert.match(distribution, /source marker is aggregate attribution, not proof of install, identity, or purchase/);
 });
 
@@ -554,6 +556,23 @@ test("OpenHands runtime-registry monitoring pins the exact PR and no-auth remote
   assert.match(distribution, /state\.openhands_integrations/);
   assert.match(distribution, /OpenHands integrations registry/);
   assert.match(distribution, /PR \[#416\]/);
+  assert.match(distribution, /not installs, unique agents, purchases, or revenue/);
+});
+
+test("goose runtime-registry monitoring pins the exact PR and keyless remote contract", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  assert.match(directory, /gooseExtensionsPrNumber = 10625/);
+  assert.match(directory, /aaif-goose\/goose\/pull\/\$\{gooseExtensionsPrNumber\}/);
+  assert.match(directory, /documentation\/static\/servers\.json/);
+  assert.match(directory, /mcp\?source=goose-extensions/);
+  assert.match(directory, /type: "streamable-http"/);
+  assert.match(directory, /goose_extensions: gooseExtensions/);
+  assert.match(distribution, /state\.goose_extensions/);
+  assert.match(distribution, /goose Extensions runtime/);
+  assert.match(distribution, /PR \[#10625\]/);
   assert.match(distribution, /not installs, unique agents, purchases, or revenue/);
 });
 

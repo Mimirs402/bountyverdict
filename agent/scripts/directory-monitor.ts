@@ -220,6 +220,11 @@ const openHandsIntegrationsCatalogUrl =
 const openHandsIntegrationsEndpoint = `${productionOrigin}/mcp?source=openhands-integrations`;
 const openHandsIntegrationsDescription =
   "Remote, account-free MCP server for preflight decisions on public GitHub bounties, coding-agent repository instructions, GitHub Actions failures, flaky retries, and MCP tool-catalog changes. Six read-only tools return evidence-linked verdicts. A valid first unsigned call cannot charge and returns a structured selection preview plus the exact x402 USDC quote.";
+const gooseExtensionsPrNumber = 10625;
+const gooseExtensionsPrUrl = `https://github.com/aaif-goose/goose/pull/${gooseExtensionsPrNumber}`;
+const gooseExtensionsCatalogUrl =
+  "https://raw.githubusercontent.com/aaif-goose/goose/main/documentation/static/servers.json";
+const gooseExtensionsEndpoint = `${productionOrigin}/mcp?source=goose-extensions`;
 const officialMcpServerName = "io.github.Mimirs402/bountyverdict";
 const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
@@ -1545,6 +1550,81 @@ async function openHandsIntegrationsStatus(
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
       measurement: "submission_and_openhands_runtime_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
+async function gooseExtensionsStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const [review, catalogResponse] = await Promise.all([
+      githubPrStatus("aaif-goose", "goose", gooseExtensionsPrNumber, gooseExtensionsPrUrl),
+      fetch(gooseExtensionsCatalogUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    ]);
+    if (!catalogResponse.ok) throw new Error(`goose Extensions catalog returned HTTP ${catalogResponse.status}.`);
+    const body = await catalogResponse.text();
+    if (body.length > 5_000_000) throw new Error("goose Extensions catalog is unbounded.");
+    const entries = JSON.parse(body) as unknown;
+    if (!Array.isArray(entries)) throw new Error("goose Extensions catalog is malformed.");
+    const matching = entries.filter((entry) => entry && typeof entry === "object" &&
+      (entry as Record<string, unknown>).id === "bountyverdict");
+    const listed = matching.length === 1;
+    const expected = {
+      id: "bountyverdict",
+      name: "BountyVerdict Agent Decision Tools",
+      description: openHandsIntegrationsDescription,
+      type: "streamable-http",
+      url: gooseExtensionsEndpoint,
+      link: "https://github.com/Mimirs402/bountyverdict",
+      installation_notes: "No BountyVerdict account or API key is required. Connecting and listing tools are free. A valid unsigned tool call returns an exact x402 v2 Base USDC payment requirement; the standard goose MCP connection does not itself authorize or settle the payment.",
+      is_builtin: false,
+      endorsed: false,
+      environmentVariables: [],
+    };
+    const contractVerified = listed && JSON.stringify(matching[0]) === JSON.stringify(expected);
+    const contractError = matching.length > 0 && !contractVerified
+      ? "goose catalog entry drifted from the exact keyless Streamable HTTP contract."
+      : null;
+    const prStatus = String(review.status || "unknown");
+    const status = contractVerified
+      ? "catalog_listed"
+      : matching.length > 0
+        ? "catalog_contract_drift"
+        : prStatus === "merged"
+          ? "pr_merged_awaiting_catalog"
+          : prStatus === "open"
+            ? "pr_open"
+            : prStatus === "closed"
+              ? "pr_closed_without_catalog"
+              : "pr_status_unknown";
+    return {
+      url: gooseExtensionsPrUrl,
+      catalog_url: gooseExtensionsCatalogUrl,
+      pr_status: prStatus,
+      ...githubPrFields(review),
+      catalog_http_status: catalogResponse.status,
+      listed,
+      matching_entries: matching.length,
+      contract_verified: contractVerified,
+      contract_error: contractError,
+      status,
+      first_listed_at: contractVerified ? previousStatus.first_listed_at || observedAt : null,
+      measurement: "submission_and_goose_in_agent_extensions_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: gooseExtensionsPrUrl,
+      catalog_url: gooseExtensionsCatalogUrl,
+      listed: false,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "submission_and_goose_in_agent_extensions_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   }
 }
@@ -2985,6 +3065,7 @@ const [
   kiloMarketplace,
   toolHive,
   openHandsIntegrations,
+  gooseExtensions,
   geminiCliGallery,
   agentFinderCatalog,
   ardCatalog,
@@ -3031,6 +3112,7 @@ const [
   kiloMarketplaceStatus(previous.kilo_marketplace || {}, new Date().toISOString()),
   toolHiveStatus(previous.toolhive || {}, new Date().toISOString()),
   openHandsIntegrationsStatus(previous.openhands_integrations || {}, new Date().toISOString()),
+  gooseExtensionsStatus(previous.goose_extensions || {}, new Date().toISOString()),
   geminiCliGalleryStatus(previous.gemini_cli_gallery || {}, new Date().toISOString()),
   agentFinderCatalogStatus(previous.agent_finder_catalog || {}, new Date().toISOString()),
   ardCatalogStatus(previous.ard_catalog || {}, new Date().toISOString()),
@@ -3103,6 +3185,7 @@ const githubPrChecks = [
   ["kilo_marketplace", kiloMarketplace],
   ["toolhive", toolHive],
   ["openhands_integrations", openHandsIntegrations],
+  ["goose_extensions", gooseExtensions],
   ["agent_finder_catalog", agentFinderCatalog],
 ] as const;
 const prTelemetryValue = (normalized: Record<string, unknown>, field: string): unknown =>
@@ -3272,6 +3355,7 @@ const state = {
   kilo_marketplace: kiloMarketplace,
   toolhive: toolHive,
   openhands_integrations: openHandsIntegrations,
+  goose_extensions: gooseExtensions,
   gemini_cli_gallery: geminiCliGallery,
   agent_finder_catalog: agentFinderCatalog,
   ard_catalog: ardCatalog,

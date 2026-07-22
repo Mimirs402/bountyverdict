@@ -80,7 +80,7 @@ const skillsDedicatedIssueUrl = "https://github.com/vercel-labs/skills/issues/17
 const skillsDedicatedIssueTitle = "Listing: Request indexing for Mimirs402/bountyverdict-mcp-skill";
 const awesomeSkillsSubmittedAt = "2026-07-21T23:44:27Z";
 const securityDirectoryPrUrl = "https://github.com/LLMSecurity/awesome-agent-skills-security/pull/38";
-const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/934";
+const x402DirectoryPrUrl = "https://github.com/xpaysh/awesome-x402/pull/959";
 const agentPluginsPrUrl = "https://github.com/dmgrok/agent-plugins/pull/97";
 const agentPluginsCatalogUrl = "https://cdn.jsdelivr.net/gh/dmgrok/agent-plugins@main/catalog.json";
 const awesomeCopilotIssueUrl = "https://github.com/github/awesome-copilot/issues/2385";
@@ -3295,7 +3295,7 @@ const [
   mcpObservatoryStatus(),
   githubPrStatus("roverbird", "mcpub", 4, mcpubCrawlerPrUrl),
   githubPrStatus("LLMSecurity", "awesome-agent-skills-security", 38, securityDirectoryPrUrl),
-  githubPrStatus("xpaysh", "awesome-x402", 934, x402DirectoryPrUrl),
+  githubPrStatus("xpaysh", "awesome-x402", 959, x402DirectoryPrUrl),
   githubPrStatus("dmgrok", "agent-plugins", 97, agentPluginsPrUrl),
   agentPluginsCatalogStatus(),
   awesomeCopilotStatus(previous.awesome_copilot || {}, new Date().toISOString()),

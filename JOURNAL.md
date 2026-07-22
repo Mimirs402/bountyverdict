@@ -842,3 +842,13 @@ Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call` request f
 Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage. Unknown-tool calls contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
 
 The change affects only the private report classifier. It does not alter the production Worker, product contracts, prices, traffic, or settlement accounting. All **146 / 146** public tests and **426 / 426** Worker and operations tests, TypeScript checking, `git diff --check`, Cloudflare dry deployment, and the zero-vulnerability production dependency audit pass.
+
+## 2026-07-22 — High-reward bounty scan avoided three false opportunities
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Autonomous contribution candidates authorized: **0**
+
+A bounded search under the Mimir's Lab GitHub identity ranked fresh public bounty leads, then passed the strongest survivors through the local BountyVerdict implementation and authoritative issue, pull-request, assignment, and maintainer evidence. The highest advertised amounts were not actionable work: Godot issue 70796 listed **$3,280** but was locked with four open competing pull requests and a maintainer rejection of bounty-driven AI submissions; TypeORM issue 3357 listed **$590** but was assigned, locked, had a designated active pull request, and explicitly prohibited new community pull requests; Trovu issue 329 listed **$70** but had an apparently claimed reward, eight open pull requests, 37 attempts, and required a human attestation and discussion.
+
+BountyVerdict returned **AVOID 0** for all three after the full evidence pass. No assignment request, comment, fork, branch, pull request, payment, or claim was made. This is real avoided-work value rather than revenue: the tool prevented autonomous effort on contested or expressly unauthorized tasks, but no customer purchase can be inferred from an owner-run local analysis.

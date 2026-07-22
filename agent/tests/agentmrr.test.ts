@@ -25,6 +25,7 @@ import {
   solveAgentMrrChallenge,
   validateAgentMrrPublicationGate,
   validateAgentMrrPublicationAttempt,
+  validateAgentMrrPublicationCompletion,
   validateAgentMrrCodeReleaseState,
 } from "../src/agentmrr.ts";
 import {
@@ -83,7 +84,28 @@ test("AgentMRR publication attempt binds agent, product, rotation, and code rele
   };
   assert.equal(validateAgentMrrPublicationAttempt(attempt, 0o600, 1000, 1000, ownerId, "a".repeat(40)), attempt.rotation_id);
   assert.throws(() => validateAgentMrrPublicationAttempt({ ...attempt, product_contract_sha256: "0".repeat(64) }, 0o600, 1000, 1000, ownerId, "a".repeat(40)), /attempt receipt/);
+  assert.throws(() => validateAgentMrrPublicationAttempt({ ...attempt, extra: true }, 0o600, 1000, 1000, ownerId, "a".repeat(40)), /attempt receipt/);
   assert.throws(() => validateAgentMrrPublicationAttempt(attempt, 0o600, 1000, 1000, id, "a".repeat(40)), /attempt receipt/);
+  const completion = {
+    ...attempt,
+    status: "complete",
+    completed_at: "2026-07-22T07:00:01.000Z",
+    action: "existing",
+    product_id: id,
+  };
+  assert.equal(validateAgentMrrPublicationCompletion(
+    completion, 0o600, 1000, 1000, ownerId, "a".repeat(40), id,
+  ), attempt.rotation_id);
+  assert.throws(() => validateAgentMrrPublicationCompletion(
+    { ...completion, product_id: ownerId }, 0o600, 1000, 1000, ownerId, "a".repeat(40), id,
+  ), /completed publication receipt/);
+  assert.throws(() => validateAgentMrrPublicationCompletion(
+    { ...completion, completed_at: "2026-07-22T06:59:59.000Z" },
+    0o600, 1000, 1000, ownerId, "a".repeat(40), id,
+  ), /completed publication receipt/);
+  assert.throws(() => validateAgentMrrPublicationCompletion(
+    { ...completion, extra: true }, 0o600, 1000, 1000, ownerId, "a".repeat(40), id,
+  ), /completed publication receipt/);
 });
 
 test("AgentMRR registration accepts only a bounded agent identity and secret", () => {
@@ -385,6 +407,8 @@ test("AgentMRR scripts keep credentials private and expose no self-promotion act
   assert.match(publishScript, /acquireExclusiveRun\(funnelLockFile\)/);
   assert.match(publishScript, /open\(publicationAttemptFile, "wx", 0o600\)/);
   assert.match(publishScript, /validateAgentMrrPublicationAttempt/);
+  assert.match(publishScript, /validateAgentMrrPublicationCompletion/);
+  assert.match(publishScript, /atomicWritePublicationReceipt/);
   assert.match(publishScript, /validateAgentMrrPublicationGate/);
   assert.doesNotMatch(`${registerScript}\n${publishScript}`, /\/vote|\/try|upvote|downvote/);
 });

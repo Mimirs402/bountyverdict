@@ -6,7 +6,7 @@ const complete = Object.freeze({
   PRODUCTION_API_URL: "https://bountyverdict-agent-production.mimirslab.workers.dev",
   REVENUE_WALLET: "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614",
   START_BLOCK: "48876000",
-  TRACKED_COSTS_USDC: "1.011",
+  TRACKED_COSTS_USDC: "1.012",
   SETTLEMENT_BUYER_ADDRESS: "0x1111111111111111111111111111111111111111",
   SETTLEMENT_CANARY_ENABLED: "NO",
   THE402_API_KEY: "the402-secret",
@@ -22,7 +22,7 @@ test("distribution monitor configuration preserves explicit accounting boundarie
   const parsed = loadDistributionMonitorConfiguration({ ...complete, REPORT_ONLY: "YES" });
   assert.equal(parsed.revenueWallet, complete.REVENUE_WALLET);
   assert.equal(parsed.startBlock, "48876000");
-  assert.equal(parsed.trackedCostsUsdc, "1.011");
+  assert.equal(parsed.trackedCostsUsdc, "1.012");
   assert.equal(parsed.settlementBuyerAddress, complete.SETTLEMENT_BUYER_ADDRESS);
   assert.equal(parsed.settlementCanaryEnabled, false);
   assert.equal(parsed.reportOnly, true);

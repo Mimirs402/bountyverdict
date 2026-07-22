@@ -12,6 +12,8 @@ const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.u
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
+const taskmarketPitchServiceUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.service", import.meta.url);
+const taskmarketPitchTimerUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.timer", import.meta.url);
 const geminiExtensionUrl = new URL("../gemini-extension.json", import.meta.url);
 
 test("frequent reporting samples merchant activity without semantic retrieval while full audits establish a drain", async () => {
@@ -319,6 +321,25 @@ test("marketplace retrieval uses a blind-agent task holdout instead of seller-sh
   assert.match(distribution, /not observed marketplace query volume/);
 });
 
+test("Agent402 monitoring is passive and exposes catalog over-indexing without fake demand", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  const start = directory.indexOf("async function agent402Status");
+  const end = directory.indexOf("async function githubPrStatus", start);
+  assert.ok(start >= 0 && end > start);
+  const monitor = directory.slice(start, end);
+  assert.match(monitor, /fetch\(`\$\{agent402Api\}\/index`/);
+  assert.doesNotMatch(monitor, /\/route|query_benchmark|found_queries|top_three_queries/);
+  assert.match(monitor, /expected_paid_tool_count: expectedAgent402PaidTools/);
+  assert.match(monitor, /overindexed_non_paid_operations/);
+  assert.match(monitor, /semantic_query_monitoring: "disabled"/);
+  assert.match(monitor, /not impressions or demand/);
+  assert.match(distribution, /passive cached index health only/);
+  assert.match(distribution, /semantic owner-query monitoring disabled/);
+});
+
 test("Smithery monitoring measures fixed agent tasks without inventing demand", async () => {
   const [distribution, smithery] = await Promise.all([
     readFile(distributionUrl, "utf8"),
@@ -396,7 +417,9 @@ test("directory monitoring tracks TensorBlock and Agentage as placement-only age
   ]);
   assert.match(directory, /async function tensorBlockMcpIndexStatus/);
   assert.match(directory, /const tensorBlockIssueNumber = 1311/);
-  assert.match(directory, /const tensorBlockPrNumber = 1312/);
+  assert.match(directory, /const tensorBlockSourcePrNumber = 1312/);
+  assert.match(directory, /const tensorBlockPrNumber = 1346/);
+  assert.match(directory, /github-mimirs402-bountyverdict-0abea513/);
   assert.match(directory, /parseTensorBlockSearch/);
   assert.match(directory, /tensorblock_mcp_index: tensorBlockMcpIndex/);
   assert.match(directory, /async function agentageStatus/);
@@ -895,6 +918,24 @@ test("the normal distribution timer is report-only and retains explicit accounti
   assert.match(service, /Environment=REPORT_ONLY=YES/);
   assert.match(service, /Environment=REVENUE_WALLET=0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614/);
   assert.match(service, /Environment=START_BLOCK=48876000/);
-  assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.011/);
+  assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.012/);
   assert.doesNotMatch(service, /run-audited-monitor/);
+});
+
+test("the exact AgentWork pitch is polled read-only with private state", async () => {
+  const [service, timer, script, parser] = await Promise.all([
+    readFile(taskmarketPitchServiceUrl, "utf8"),
+    readFile(taskmarketPitchTimerUrl, "utf8"),
+    readFile(new URL("../agent/scripts/taskmarket-agentwork-pitch.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/src/taskmarket-pitch.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /Type=oneshot/);
+  assert.match(service, /UMask=0077/);
+  assert.match(service, /scripts\/taskmarket-agentwork-pitch\.ts/);
+  assert.match(timer, /OnUnitActiveSec=10min/);
+  assert.match(timer, /Persistent=true/);
+  assert.match(script, /method:\s*["']GET["']/);
+  assert.doesNotMatch(script, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.match(script, /mode: 0o600/);
+  assert.match(parser, /pitch_and_selection_state_are_not_purchase_award_settlement_or_revenue/);
 });

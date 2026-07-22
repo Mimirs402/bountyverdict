@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { constants, type Stats } from "node:fs";
-import { lstat, mkdir, open } from "node:fs/promises";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
@@ -17,6 +17,7 @@ import {
   readAgentMrrJsonResponse,
   validateAgentMrrPublicationGate,
   validateAgentMrrPublicationAttempt,
+  validateAgentMrrPublicationCompletion,
   validateAgentMrrCodeReleaseState,
   validateAgentMrrLiveCollector,
   validateAgentMrrReleaseState,
@@ -64,6 +65,42 @@ async function secureReadFile(
 
 async function credentials(): Promise<ReturnType<typeof parseAgentMrrSecret>> {
   return parseAgentMrrSecret((await secureReadFile(secretFile, "AgentMRR credential file")).raw);
+}
+
+async function atomicWritePublicationReceipt(value: Record<string, unknown>): Promise<void> {
+  const temporary = `${publicationAttemptFile}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+  let moved = false;
+  try {
+    const handle = await open(temporary, "wx", 0o600);
+    try {
+      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, publicationAttemptFile);
+    const directory = await open(stateDirectory, constants.O_RDONLY | constants.O_DIRECTORY);
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+    moved = true;
+  } finally {
+    if (!moved) await unlink(temporary).catch(() => undefined);
+  }
+}
+
+function codeReleaseIdentity(value: unknown): { releaseCommit: string; releaseSourceHead: string } {
+  const receipt = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const releaseCommit = String(receipt.release_commit || "");
+  const releaseSourceHead = String(receipt.release_source_head || "");
+  if (!/^[a-f0-9]{40}$/.test(releaseCommit) || !/^[a-f0-9]{40}$/.test(releaseSourceHead)) {
+    throw new Error("AgentMRR code release receipt identity is malformed.");
+  }
+  return { releaseCommit, releaseSourceHead };
 }
 
 async function currentReleaseIdentity(): Promise<{ releaseCommit: string; releaseSourceHead: string }> {
@@ -119,52 +156,86 @@ if (!enabled) {
   }
   const releasePublicationLock = await acquireExclusiveRun(publicationLockFile);
   try {
-    const currentRelease = await currentReleaseIdentity();
     const identity = await credentials();
-    const release = await secureReadFile(releaseStateFile, "AgentMRR release receipt");
-    const releaseState = JSON.parse(release.raw);
-    validateAgentMrrReleaseState(
-      releaseState,
-      release.metadata.mode & 0o777,
-      release.metadata.uid,
-      expectedUid,
-    );
     const codeRelease = await secureReadFile(codeReleaseStateFile, "AgentMRR code release receipt");
     const codeReleaseState = JSON.parse(codeRelease.raw);
+    const codeReleaseIdentityValue = codeReleaseIdentity(codeReleaseState);
     validateAgentMrrCodeReleaseState(
       codeReleaseState,
       codeRelease.metadata.mode & 0o777,
       codeRelease.metadata.uid,
       expectedUid,
-      currentRelease.releaseCommit,
-      currentRelease.releaseSourceHead,
+      codeReleaseIdentityValue.releaseCommit,
+      codeReleaseIdentityValue.releaseSourceHead,
     );
-    const parsedCodeRelease = JSON.parse(codeRelease.raw) as { release_commit?: unknown };
-    const codeReleaseCommit = String(parsedCodeRelease.release_commit || "");
-    const collector = await secureReadFile(collectorStateFile, "Funnel collector state");
-    validateAgentMrrLiveCollector(
-      JSON.parse(collector.raw),
-      collector.metadata.mode & 0o777,
-      collector.metadata.uid,
-      expectedUid,
-      new Date(),
-    );
+    const codeReleaseCommit = codeReleaseIdentityValue.releaseCommit;
 
     if (existing) {
       if (!existing.exact || existing.submittedBy !== identity.agentId) {
         throw new Error("Existing AgentMRR RunVerdict listing is drifted or owned by another agent.");
       }
       const attempt = await secureReadFile(publicationAttemptFile, "AgentMRR publication attempt receipt");
-      validateAgentMrrPublicationAttempt(
-        JSON.parse(attempt.raw),
-        attempt.metadata.mode & 0o777,
-        attempt.metadata.uid,
-        expectedUid,
-        identity.agentId,
-        codeReleaseCommit,
-      );
+      const attemptState = JSON.parse(attempt.raw) as Record<string, unknown>;
+      if (attemptState.status === "complete") {
+        validateAgentMrrPublicationCompletion(
+          attemptState,
+          attempt.metadata.mode & 0o777,
+          attempt.metadata.uid,
+          expectedUid,
+          identity.agentId,
+          codeReleaseCommit,
+          existing.id,
+        );
+      } else {
+        validateAgentMrrPublicationAttempt(
+          attemptState,
+          attempt.metadata.mode & 0o777,
+          attempt.metadata.uid,
+          expectedUid,
+          identity.agentId,
+          codeReleaseCommit,
+        );
+        const completion = {
+          ...attemptState,
+          status: "complete",
+          completed_at: new Date().toISOString(),
+          action: "existing",
+          product_id: existing.id,
+        };
+        validateAgentMrrPublicationCompletion(
+          completion,
+          0o600,
+          expectedUid,
+          expectedUid,
+          identity.agentId,
+          codeReleaseCommit,
+          existing.id,
+        );
+        await atomicWritePublicationReceipt(completion);
+      }
       console.log(JSON.stringify({ action: "existing", product_id: existing.id, name: existing.name }, null, 2));
     } else {
+      const currentRelease = await currentReleaseIdentity();
+      if (currentRelease.releaseCommit !== codeReleaseIdentityValue.releaseCommit ||
+          currentRelease.releaseSourceHead !== codeReleaseIdentityValue.releaseSourceHead) {
+        throw new Error("AgentMRR publication requires the current clean code release receipt.");
+      }
+      const release = await secureReadFile(releaseStateFile, "AgentMRR release receipt");
+      const releaseState = JSON.parse(release.raw);
+      validateAgentMrrReleaseState(
+        releaseState,
+        release.metadata.mode & 0o777,
+        release.metadata.uid,
+        expectedUid,
+      );
+      const collector = await secureReadFile(collectorStateFile, "Funnel collector state");
+      validateAgentMrrLiveCollector(
+        JSON.parse(collector.raw),
+        collector.metadata.mode & 0o777,
+        collector.metadata.uid,
+        expectedUid,
+        new Date(),
+      );
       const rotationId = `agentmrr-publish-${Date.now().toString(36)}-${randomBytes(8).toString("hex")}`;
       const rotationScript = new URL("./start-funnel-epoch.ts", import.meta.url);
       const rotation = await execFileAsync(
@@ -259,6 +330,36 @@ if (!enabled) {
           await readAgentMrrJsonResponse(publishResponse, "publication"),
           identity.agentId,
         );
+        const originalAttemptFile = await secureReadFile(
+          publicationAttemptFile,
+          "AgentMRR publication attempt receipt",
+        );
+        const originalAttempt = JSON.parse(originalAttemptFile.raw) as Record<string, unknown>;
+        validateAgentMrrPublicationAttempt(
+          originalAttempt,
+          originalAttemptFile.metadata.mode & 0o777,
+          originalAttemptFile.metadata.uid,
+          expectedUid,
+          identity.agentId,
+          codeReleaseCommit,
+        );
+        const completion = {
+          ...originalAttempt,
+          status: "complete",
+          completed_at: new Date().toISOString(),
+          action: "published",
+          product_id: published.id,
+        };
+        validateAgentMrrPublicationCompletion(
+          completion,
+          0o600,
+          expectedUid,
+          expectedUid,
+          identity.agentId,
+          codeReleaseCommit,
+          published.id,
+        );
+        await atomicWritePublicationReceipt(completion);
         console.log(JSON.stringify({ action: "published", product_id: published.id, name: published.name }, null, 2));
       } finally {
         await releaseFunnelLock();

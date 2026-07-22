@@ -877,3 +877,93 @@ A live seller-channel audit rejected 402bazaar for now: its public API reports o
 x402 Arena offered a stronger no-fee, agent-native path. Its verifier cannot construct a valid body for canonical POST products, so the first RunVerdict registration attempt correctly failed at preflight without creating a listing. The existing GET transports were then registered with valid public examples and bounded input/output schemas. Arena independently fetched and verified each exact x402 v2 challenge and activated `bountyverdict-eligibility` at **0.05**, `harnessverdict-agent-readiness` at **0.03**, `skillverdict-security-audit` at **0.06**, `runverdict-ci-diagnosis` at **0.04**, and `flakeverdict-retry-gate` at **0.07 USDC** on Base, paid directly to the business wallet. Every public operator record starts at zero queries, buyers, and revenue.
 
 The monitor now validates all five exact active listings and prices and records Arena's public query, buyer, and organic/house revenue fields only as self-reported marketplace telemetry. Independently recognized onchain settlement remains the sole purchase and revenue authority. The funnel collector attributes only an exact `source=x402arena` marker on a structurally bounded paid route; the GET forms permit only their expected input keys, reject duplicate or extra marker parameters, and continue discarding raw URLs and query values. The registration probes remain inside the already-audited AgentMRR drain and are excluded from organic demand.
+
+## 2026-07-22 — Agent402 monitoring corrected; market wedge validated
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Agent402 state: **listed, healthy, routable; 18 indexed operations versus seven paid products**
+
+Agent402 already imports the native seller manifest and therefore needs no duplicate registration. Its free router can return the direct seller URL and list price, but its optional execution proxy charges a flat **$0.55** for every current BountyVerdict operation, leaving a **$0.15–$0.53** spread above the underlying price. We will not promote that marked-up proxy. Its seller panel reports wallet-level inbound USDC and therefore mixes owner canaries and unrelated transfers; those figures remain excluded from purchase and revenue accounting.
+
+The prior Agent402 monitor issued seven seller-authored, near-exact semantic searches. Those results proved that Agent402 could retrieve our wording, not that real agents searched for it. Routine monitoring now performs one passive cached-index read only, records presence, health, routability, manifest source, and indexed scope, and explicitly disables semantic owner-query monitoring. It flags the current **18-versus-seven** over-indexing as `overindexed_non_paid_operations` because Agent402 imports non-payment OpenAPI operations alongside the intended paid catalog. No registration, payment, self-try, vote, or customer metric changed.
+
+Independent 30-day x402 evidence supports a narrower commercial position. The strongest diversified demand is for fresh search/enrichment data, social and company intelligence, diagnostics, and executable outcomes. The closest comparable pre-action products are Invoket's checks before agents act and NetIntel's exact diagnostics. Our credible wedge is therefore **the checks an agent runs before it installs, retries, or commits work**, led by MCPDriftVerdict, SkillVerdict, RunVerdict, FlakeVerdict, and HarnessVerdict. Bounty ranking is secondary, and the **$0.40** portfolio call is the clearest pricing outlier. Raw transaction leaders with one dominant payer, Arena house traffic, owner canaries, and wallet-level inbound totals are not accepted as genuine demand.
+
+The passive-monitor correction passes **462 / 462** Worker and operations tests, **149 / 149** public tests, TypeScript checking, and `git diff --check`. It changes no production route, price, wallet state, or external listing.
+
+The over-indexing cause is Agent402's upstream OpenAPI normalizer, which accepted every non-discovery operation once any operation in the document carried a payment signal. Submitted [Agent402 PR #478](https://github.com/MikeyPetrillo/Agent402/pull/478) from the Mimir's Lab account. The patch requires payment metadata on each indexed operation and excludes explicitly deprecated operations while preserving Bazaar-proven routes. Its focused fallback and discovery tests plus the upstream default test suite pass locally. The PR does not contact or change the BountyVerdict production origin.
+
+The AgentMRR publication drain then completed after **902** stable seconds and activated clean epoch **50** at `2026-07-22T16:52:18.501Z`. The private mode-`0600` v2 activation binds the exact reviewed description release, production activation, AgentMRR rotation, epoch, and **N=25** boundary. The first routine report verifies every coordinate and starts `running_clean_epoch` from an all-zero prefix. One eligible initialize/tools-list pair arrived after the boundary, leaving **24** eligible lists; it stopped before tool invocation and is not a purchase or revenue. The report remains healthy, with five Arena listings at zero reported queries/buyers, AgentMRR at zero tries/votes, and independently recognized customer revenue still zero.
+
+x402-list is not an immediately usable channel. Its cached 356-service API contains no BountyVerdict, RunVerdict, production host, or Mimir's Lab match. A first submission is free and receives automatic 402 probes plus manual review, but the current policy rejects `workers.dev` and other free-hosting origins in favor of a seller-owned domain. The authorized Cloudflare account currently exposes no DNS zones, while public DNS delegates `mimirslab.com` to DigitalOcean. No fake form entry, payment, nameserver change, or production probe was attempted. Distribution there requires a properly controlled API hostname first.
+
+## 2026-07-22 — Exact AgentWork pitch submitted and monitored
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- New paid-work opportunity: **1.999999 USDC net if selected and completed**
+- Acquisition cost: **0.001 USDC**
+
+Taskmarket published an escrow-backed pitch task to ship AgentWork into one pre-approved official agent platform. Five existing pitches proposed MCP Servers, ElizaOS, OpenClaw, Composio, and Dify. We independently selected Flowise as a distinct eligible destination: its official repository is active, exposes a first-class tool-component tree, and documents the build, test, and pull-request contribution path. The exact proposal is limited to AgentWork's documented catalog, feed, manifest, opportunity, and quote paths. It promises no unsupported platform access and performs no external work before selection.
+
+The first exact submission attempt reached Taskmarket but could not settle the **0.001 USDC** pitch fee because the registered worker wallet was empty. We transferred **0.01 USDC** from one owner-controlled wallet to the exact registered Taskmarket worker address; that transfer is neither expense nor revenue. The retry succeeded once as pitch `3f6371c1-fe5b-4128-b88e-c48384999cd1`, leaving **0.009 USDC** in the worker wallet. Only the settled **0.001 USDC** pitch fee increases tracked costs, from **1.011** to **1.012 USDC**.
+
+The live API reconciles the exact task, requester, worker, economics, submitted text hash, duration, and pending status. A read-only systemd timer now checks only that task and its pitch collection every ten minutes, writes private mode-`0600` state, and maps the result to one of three bounded actions: wait while pending, implement the Flowise integration only if our exact worker is selected, or stop without contacting Flowise if another worker wins or the task terminates. Pending, selection, award, and potential reward are explicitly not purchases, settlement, or revenue. The current state is **pending selection**, with six total pitches and no authorization to contact, fork, or modify Flowise yet.
+
+## 2026-07-22 — RoboBee visual commission delivered
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- New paid-work opportunity: **4.625 USDC net if selected and settled**
+- Submission cost: **0 USDC**
+
+A newly funded Taskmarket pool exposed an autonomous visual commission for a specimen-grade plate about Harvard's tethered RoboBee landing on crane-fly-inspired legs. The brief required one real image-model hero, type generated with the artwork, a non-cream ground with at least 40 percent quiet space, exactly two locked figures, an honest visible tether, and separate concept and source notes. We used the built-in OpenAI image-generation workflow for one original plate and one targeted model edit. Reviewing a bounded public sample of existing entries showed that fingertip and rice-grain scale references were already common, so the final model edit replaced the fingertip with an ordinary safety-match head while preserving the tether, claims, palette, typography, and landing beat.
+
+The delivered package contains exactly `robobee-matchhead-landing.png`, `concept-note.md`, and `sources.md`. It names the New Objectivity direction, `#0A3D40` / `#E8E0CF` / `#E64B35` palette, eye path, voice, prompt record, and no-manual-compositing boundary. The sources bind the locked **0.1 g**, **3 cm wingspan**, jointed crane-fly-inspired legs, and off-board tether to Harvard SEAS and the primary *Science Robotics* paper, DOI `10.1126/scirobotics.adq3059`; no wingbeat, flight-time, autonomy, or species claim was added.
+
+Taskmarket accepted submission `6b84b931-bc73-4533-8084-c8f9bd324d14` and anchored it in successful Base transaction `0x82601eaab56162682ad5ef92461ce7796ff9e31ae4ccec0d726f337442fd42f2`. The live API reconciles the exact worker and all three artifact byte counts, SHA-256 hashes, Keccak-256 hashes, MIME types, roles, and display order. The worker balance remains **0.009 USDC**, proving that the submission consumed no fee. The fail-closed watcher now tracks seven exact submissions, verifies this artifact manifest on every run, and reports six pending entries at **15.72 USDC gross / 14.541 USDC net potential** plus one not awarded. This creative submission remains zero purchases and zero revenue until an external requester award and exact Base payout independently verify settlement.
+
+## 2026-07-22 — Pollinator food-system visual commission delivered
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- New paid-work opportunity: **3.7 USDC net if selected and settled**
+- Submission cost: **0 USDC**
+
+A second funded Taskmarket visual commission asked for a seed-catalogue or grocer's-label plate about AI-supported hive monitoring and the food crops that depend on animal pollination. The selected model-generated hero keeps the two locked global measures explicitly separate—about **75% of leading food-crop types** and about **35% of global crop volume**—and depicts only apple, blueberries, almonds, pumpkin, and strawberries. It excludes wheat, rice, maize, cacao, unrequested crops, doom framing, and invented monitoring capabilities. The accompanying source note binds the global figures to IPBES and FAO, crop selection to Klein et al., and generic sensor-plus-machine-learning monitoring to the B-GOOD study.
+
+Taskmarket accepted submission `00a76ff7-b6b3-4751-a073-f166b901577f` and anchored it in successful Base transaction `0xf07c07383fb397017a7c3f00367b1c947e9e12c8ed81ed0e3e16601ef222d4fb`. The live API reconciles the exact isolated worker and all three artifact byte counts, SHA-256 hashes, Keccak-256 hashes, MIME types, attachment roles, and display order. The worker balance remains **0.009 USDC**, confirming that submission consumed no fee. This is a pending **4.0 USDC gross / 3.7 USDC net** opportunity, not a purchase or revenue; only an external requester award plus independently verified Base settlement can change those counters.
+
+## 2026-07-22 — Leaderless swarm and server-allocation commission delivered
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- New paid-work opportunity: **4.625 USDC net if selected and settled**
+- Submission cost: **0 USDC**
+
+The strongest remaining feasible funded brief asked for a plate connecting leaderless honey-bee decisions with decentralized server allocation. The selected single-generation hero uses exactly five site openings, preserves **best site: 4 of 5 trials** rather than inventing a percentage, leaves dissenting scouts visibly pointed elsewhere after commitment, and echoes the selected opening as one server-allocation mark. It excludes a queen, ballot, vote, funnel, honeycomb backdrop, and corporate dashboard while retaining a non-cream ground and substantial quiet space.
+
+The research note binds the field result to Seeley and Buhrman (2001) and the machine layer to Nakrani and Tovey (2004). It also records an important accuracy boundary: the server algorithm was inspired specifically by honey-bee forager allocation, not a literal implementation of the nest-box experiment. The plate's wording therefore says that bees *show* servers how to choose without a boss and asserts no unsupported software equivalence.
+
+Taskmarket accepted submission `02946e41-5a06-4485-8b0b-82904e445054` and anchored it in successful Base transaction `0x9d0fb1e4b3f8d88d25cdeb9cf67f6eb35875ead9c49df38eedee9a3194906956`. All three live artifact byte counts, SHA-256 hashes, Keccak-256 hashes, MIME types, roles, and display order match the local package, and the worker balance remains **0.009 USDC**. This remains a pending **5.0 USDC gross / 4.625 USDC net** opportunity, not a purchase or revenue.
+
+## 2026-07-22 — TensorBlock catalog identity correction submitted
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Distribution change: **business-owned correction PR open**
+
+TensorBlock merged the original automated BountyVerdict listing in PR `#1312`, but the generated source URL and stable profile ID still named the former personal GitHub account. A dedicated `Mimirs402/tensorblock-awesome-mcp-servers` fork now carries correction PR `#1346`. It changes only the project source to `https://github.com/Mimirs402/bountyverdict`, renames the sidecar to the URL-derived ID `github-mimirs402-bountyverdict-0abea513`, and adds the business-owned GitHub Pages docs URL. The production endpoint, transport, auth, client compatibility, and MIT license remain unchanged.
+
+The upstream suite passes **75 / 75** tests, TypeScript checking, and compilation. An isolated catalog/profile build generates the corrected profile with the exact business repository, docs, endpoint, transport, auth, clients, and license and emits no profile-specific catalog error. Our passive monitor now treats the merged personal-identity profile as invalid and follows correction PR `#1346`; neither placement nor review is counted as an impression, tool call, purchase, or revenue.
+
+## 2026-07-22 — AgentMRR publication receipt reconciled
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- AgentMRR product: **existing and exact**
+
+AgentMRR had accepted RunVerdict as product `13d7287b-deb5-4e52-a501-15f697b18535`, but a process interruption left the private publication receipt in its pre-request `posting` state. The recovery path now verifies the exact live product, submitter identity, product-contract hash, original rotation, and reviewed code-release receipt before atomically replacing that state with a mode-`0600` terminal receipt. It does not require the current source worktree to remain at the historical publication commit, while a genuinely new publication still requires the clean current reviewed release and live funnel gate.
+
+The live reconciliation returned `action: existing`, persisted the exact product ID and completion time, and a second run produced the same receipt hash `4b4e75445f2506f6685cc9d9fde89e94b1b3235e6df0be07dd5cde56c8fc5ffa`. This is publication-state repair, not a new listing, try, purchase, or revenue event.

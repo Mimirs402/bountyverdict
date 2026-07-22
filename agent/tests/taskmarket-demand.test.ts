@@ -113,7 +113,7 @@ const tracked: readonly TaskmarketTrackedSpecification[] = [{
   expected_net_atomic: "138750",
 }];
 
-test("Taskmarket production tracker pins the isolated worker and all six public receipts", () => {
+test("Taskmarket production tracker pins the isolated worker and all nine public receipts", () => {
   assert.equal(TASKMARKET_WORKER_ADDRESS, "0xe5E0fe496B7283032d034Dc79C305b384Ad1ee67");
   assert.deepEqual(TASKMARKET_TRACKED_SUBMISSIONS, [
     {
@@ -170,7 +170,171 @@ test("Taskmarket production tracker pins the isolated worker and all six public 
       expected_net_atomic: "138750",
       operator_estimated_net_atomic: "46250",
     },
+    {
+      task_id: "0xab6871942fb13f7cfdec23d73a32a230c8b6d2c3880b96bfb7c14844405502ca",
+      submission_id: "6b84b931-bc73-4533-8084-c8f9bd324d14",
+      submit_tx_hash: "0x82601eaab56162682ad5ef92461ce7796ff9e31ae4ccec0d726f337442fd42f2",
+      reward_atomic: "5000000",
+      expected_net_atomic: "4625000",
+      artifact_manifest: [
+        {
+          file_name: "robobee-matchhead-landing.png",
+          mime_type: "image/png",
+          role: "attachment",
+          size_bytes: 1_855_004,
+          sha256_hash: "90b0e004992e8ed207d2d3948b000335c615968570f7f95d7d221eca9c7b6d83",
+          keccak256_hash: "0xb3533eca145e23f54174da38a916b0b9fc4f4781181b636ddd232f346ca5c92d",
+          display_order: 0,
+        },
+        {
+          file_name: "concept-note.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 2_548,
+          sha256_hash: "ce879434978ca446f613d00514506d931b8bca086b164c175d37bbf101586866",
+          keccak256_hash: "0x040855123be0dc7ef327f0b55d89d9c9494c08704222005d0adf2b19792365c1",
+          display_order: 1,
+        },
+        {
+          file_name: "sources.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 1_211,
+          sha256_hash: "50be3a172e36cae88d282d5b9d150da66df4db723af1ae267b0818e9b004d29c",
+          keccak256_hash: "0x9177afe6caadd2ea3337237bd8164b6d764936a771cbfc15a1e1aec207cacd7b",
+          display_order: 2,
+        },
+      ],
+    },
+    {
+      task_id: "0x8188a375e07b0e0edd93c986142c7796b5a3014d213347e6fd0bd839bfdec48e",
+      submission_id: "00a76ff7-b6b3-4751-a073-f166b901577f",
+      submit_tx_hash: "0xf07c07383fb397017a7c3f00367b1c947e9e12c8ed81ed0e3e16601ef222d4fb",
+      reward_atomic: "4000000",
+      expected_net_atomic: "3700000",
+      artifact_manifest: [
+        {
+          file_name: "ai-watches-the-bees-v2.png",
+          mime_type: "image/png",
+          role: "attachment",
+          size_bytes: 2_999_368,
+          sha256_hash: "3c063554ad68a2fe352e7a898d72b32d4702e9942b08917ff90d0af1b9dcac34",
+          keccak256_hash: "0xc4e358249de28f564579682792f53572a42789f7b25826deda24504a31734858",
+          display_order: 0,
+        },
+        {
+          file_name: "concept-note.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 2_499,
+          sha256_hash: "250aae59f43fbbc495a473ac484fcb71bc013eeb4a99b9000586338ad0e8fc0d",
+          keccak256_hash: "0xc8ce6e4bb5287ab2e9a738ec19507fcdf6ed77d7c3eba79db58c00338662ca18",
+          display_order: 1,
+        },
+        {
+          file_name: "sources.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 2_346,
+          sha256_hash: "b1d58ea152ede176d0bb98b93e4d2d59b0755fa9258e2ac7cab12255ec8b0a50",
+          keccak256_hash: "0x793b1ebd0fabe55ce592e780a95743cff8689cc663ee9c3fc485d9f632a8f066",
+          display_order: 2,
+        },
+      ],
+    },
+    {
+      task_id: "0x37b75bf9c4f12262834c020710a723c218d727a22218413b849ba3ce247396c9",
+      submission_id: "02946e41-5a06-4485-8b0b-82904e445054",
+      submit_tx_hash: "0x9d0fb1e4b3f8d88d25cdeb9cf67f6eb35875ead9c49df38eedee9a3194906956",
+      reward_atomic: "5000000",
+      expected_net_atomic: "4625000",
+      artifact_manifest: [
+        {
+          file_name: "bees-show-servers.png",
+          mime_type: "image/png",
+          role: "attachment",
+          size_bytes: 2_100_056,
+          sha256_hash: "075ef61308f472e74e789398479432de97071d9afe39ebf2238d811ae988a4fb",
+          keccak256_hash: "0xbf2321e74ba1fa52784c44eaba0470d8273add4b71abb4aa4d8a605e5805670e",
+          display_order: 0,
+        },
+        {
+          file_name: "concept-note.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 2_892,
+          sha256_hash: "741910aeeadf488969f6d75557258889cc5f97d70be8d5faae6b6a4b9f64c4e8",
+          keccak256_hash: "0x603fa9700ace49a9fb2cca15cae92c399d00d5d373c470e19136708cb7176707",
+          display_order: 1,
+        },
+        {
+          file_name: "sources.md",
+          mime_type: "text/markdown",
+          role: "attachment",
+          size_bytes: 1_842,
+          sha256_hash: "5d3f189808b1c7687c45991ba1d0763b37e122d233f1e21d6b74d3317e56268b",
+          keccak256_hash: "0xa9e1628059e590da834fef7f6428339d8c1f2198fbe0198e48664548d687087f",
+          display_order: 2,
+        },
+      ],
+    },
   ]);
+});
+
+test("Taskmarket verifies an exact tracked artifact manifest without persisting storage locations", () => {
+  const artifact = {
+    file_name: "hero.png",
+    mime_type: "image/png",
+    role: "attachment" as const,
+    size_bytes: 123,
+    sha256_hash: "1".repeat(64),
+    keccak256_hash: `0x${"2".repeat(64)}`,
+    display_order: 0,
+  };
+  const artifactTracked: readonly TaskmarketTrackedSpecification[] = [{
+    ...tracked[0],
+    artifact_manifest: [artifact],
+  }];
+  const artifactSubmission = rawSubmission({
+    artifacts: [{
+      fileName: artifact.file_name,
+      mimeType: artifact.mime_type,
+      role: artifact.role,
+      sizeBytes: artifact.size_bytes,
+      sha256Hash: artifact.sha256_hash,
+      keccak256Hash: artifact.keccak256_hash,
+      displayOrder: artifact.display_order,
+      storageUri: "must-not-be-persisted",
+    }],
+  });
+  const result = reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked: artifactTracked,
+    payloads: [{ task_id: taskId, detail: rawTask(), submissions: [artifactSubmission] }],
+    agent_stats: rawStats(),
+  });
+  assert.equal((result.submissions as Array<Record<string, unknown>>)[0].artifact_manifest_verified, true);
+  assert.doesNotMatch(JSON.stringify(result), /must-not-be-persisted/);
+  assert.throws(() => reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked: artifactTracked,
+    payloads: [{
+      task_id: taskId,
+      detail: rawTask(),
+      submissions: [rawSubmission({
+        artifacts: [{
+          fileName: artifact.file_name,
+          mimeType: artifact.mime_type,
+          role: artifact.role,
+          sizeBytes: artifact.size_bytes,
+          sha256Hash: "3".repeat(64),
+          keccak256Hash: artifact.keccak256_hash,
+          displayOrder: artifact.display_order,
+        }],
+      })],
+    }],
+    agent_stats: rawStats(),
+  }), /artifact manifest drifted/);
 });
 
 test("Taskmarket pool submissions report bounded record value instead of the full escrow pool", () => {

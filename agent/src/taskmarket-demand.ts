@@ -3,6 +3,7 @@ import type { DemandCandidate } from "./demand-watch.ts";
 
 const addressPattern = /^0x[a-f0-9]{40}$/i;
 const bytes32Pattern = /^0x[a-f0-9]{64}$/i;
+const sha256Pattern = /^[a-f0-9]{64}$/i;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const atomicPattern = /^(?:0|[1-9][0-9]{0,15})$/;
 const maximumTasksPerPage = 100;
@@ -76,6 +77,114 @@ export const TASKMARKET_TRACKED_SUBMISSIONS = Object.freeze([
     expected_net_atomic: "138750",
     operator_estimated_net_atomic: "46250",
   }),
+  Object.freeze({
+    task_id: "0xab6871942fb13f7cfdec23d73a32a230c8b6d2c3880b96bfb7c14844405502ca",
+    submission_id: "6b84b931-bc73-4533-8084-c8f9bd324d14",
+    submit_tx_hash: "0x82601eaab56162682ad5ef92461ce7796ff9e31ae4ccec0d726f337442fd42f2",
+    reward_atomic: "5000000",
+    expected_net_atomic: "4625000",
+    artifact_manifest: Object.freeze([
+      Object.freeze({
+        file_name: "robobee-matchhead-landing.png",
+        mime_type: "image/png",
+        role: "attachment",
+        size_bytes: 1_855_004,
+        sha256_hash: "90b0e004992e8ed207d2d3948b000335c615968570f7f95d7d221eca9c7b6d83",
+        keccak256_hash: "0xb3533eca145e23f54174da38a916b0b9fc4f4781181b636ddd232f346ca5c92d",
+        display_order: 0,
+      }),
+      Object.freeze({
+        file_name: "concept-note.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 2_548,
+        sha256_hash: "ce879434978ca446f613d00514506d931b8bca086b164c175d37bbf101586866",
+        keccak256_hash: "0x040855123be0dc7ef327f0b55d89d9c9494c08704222005d0adf2b19792365c1",
+        display_order: 1,
+      }),
+      Object.freeze({
+        file_name: "sources.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 1_211,
+        sha256_hash: "50be3a172e36cae88d282d5b9d150da66df4db723af1ae267b0818e9b004d29c",
+        keccak256_hash: "0x9177afe6caadd2ea3337237bd8164b6d764936a771cbfc15a1e1aec207cacd7b",
+        display_order: 2,
+      }),
+    ]),
+  }),
+  Object.freeze({
+    task_id: "0x8188a375e07b0e0edd93c986142c7796b5a3014d213347e6fd0bd839bfdec48e",
+    submission_id: "00a76ff7-b6b3-4751-a073-f166b901577f",
+    submit_tx_hash: "0xf07c07383fb397017a7c3f00367b1c947e9e12c8ed81ed0e3e16601ef222d4fb",
+    reward_atomic: "4000000",
+    expected_net_atomic: "3700000",
+    artifact_manifest: Object.freeze([
+      Object.freeze({
+        file_name: "ai-watches-the-bees-v2.png",
+        mime_type: "image/png",
+        role: "attachment",
+        size_bytes: 2_999_368,
+        sha256_hash: "3c063554ad68a2fe352e7a898d72b32d4702e9942b08917ff90d0af1b9dcac34",
+        keccak256_hash: "0xc4e358249de28f564579682792f53572a42789f7b25826deda24504a31734858",
+        display_order: 0,
+      }),
+      Object.freeze({
+        file_name: "concept-note.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 2_499,
+        sha256_hash: "250aae59f43fbbc495a473ac484fcb71bc013eeb4a99b9000586338ad0e8fc0d",
+        keccak256_hash: "0xc8ce6e4bb5287ab2e9a738ec19507fcdf6ed77d7c3eba79db58c00338662ca18",
+        display_order: 1,
+      }),
+      Object.freeze({
+        file_name: "sources.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 2_346,
+        sha256_hash: "b1d58ea152ede176d0bb98b93e4d2d59b0755fa9258e2ac7cab12255ec8b0a50",
+        keccak256_hash: "0x793b1ebd0fabe55ce592e780a95743cff8689cc663ee9c3fc485d9f632a8f066",
+        display_order: 2,
+      }),
+    ]),
+  }),
+  Object.freeze({
+    task_id: "0x37b75bf9c4f12262834c020710a723c218d727a22218413b849ba3ce247396c9",
+    submission_id: "02946e41-5a06-4485-8b0b-82904e445054",
+    submit_tx_hash: "0x9d0fb1e4b3f8d88d25cdeb9cf67f6eb35875ead9c49df38eedee9a3194906956",
+    reward_atomic: "5000000",
+    expected_net_atomic: "4625000",
+    artifact_manifest: Object.freeze([
+      Object.freeze({
+        file_name: "bees-show-servers.png",
+        mime_type: "image/png",
+        role: "attachment",
+        size_bytes: 2_100_056,
+        sha256_hash: "075ef61308f472e74e789398479432de97071d9afe39ebf2238d811ae988a4fb",
+        keccak256_hash: "0xbf2321e74ba1fa52784c44eaba0470d8273add4b71abb4aa4d8a605e5805670e",
+        display_order: 0,
+      }),
+      Object.freeze({
+        file_name: "concept-note.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 2_892,
+        sha256_hash: "741910aeeadf488969f6d75557258889cc5f97d70be8d5faae6b6a4b9f64c4e8",
+        keccak256_hash: "0x603fa9700ace49a9fb2cca15cae92c399d00d5d373c470e19136708cb7176707",
+        display_order: 1,
+      }),
+      Object.freeze({
+        file_name: "sources.md",
+        mime_type: "text/markdown",
+        role: "attachment",
+        size_bytes: 1_842,
+        sha256_hash: "5d3f189808b1c7687c45991ba1d0763b37e122d233f1e21d6b74d3317e56268b",
+        keccak256_hash: "0xa9e1628059e590da834fef7f6428339d8c1f2198fbe0198e48664548d687087f",
+        display_order: 2,
+      }),
+    ]),
+  }),
 ]);
 
 type TaskStatus = "open" | "claimed" | "worker_selected" | "pending_approval" | "review" |
@@ -113,6 +222,15 @@ export type TaskmarketTrackedSpecification = Readonly<{
   operator_estimated_net_atomic?: string;
   terminal_reward_atomic?: string;
   terminal_net_reward_atomic?: string;
+  artifact_manifest?: readonly Readonly<{
+    file_name: string;
+    mime_type: string;
+    role: "preview" | "source" | "final" | "attachment";
+    size_bytes: number;
+    sha256_hash: string;
+    keccak256_hash: string;
+    display_order: number;
+  }>[];
   public_proof?: Readonly<{
     service_origin: string;
     note_id: string;
@@ -328,6 +446,63 @@ function parseSubmissions(value: unknown, taskId: string): TaskmarketSubmission[
     throw new Error("Taskmarket submission list contains duplicate IDs.");
   }
   return submissions;
+}
+
+function verifyTrackedArtifactManifest(
+  value: unknown,
+  submissionId: string,
+  expected: TaskmarketTrackedSpecification["artifact_manifest"],
+): boolean | null {
+  if (expected === undefined) return null;
+  if (!Array.isArray(value) || expected.length < 1 || expected.length > 20) {
+    throw new Error("Taskmarket tracked artifact manifest is empty, oversized, or its submission payload is malformed.");
+  }
+  const rawSubmission = value.find((item) => isObject(item) &&
+    typeof item.id === "string" && item.id.toLowerCase() === submissionId.toLowerCase());
+  if (!isObject(rawSubmission) || !Array.isArray(rawSubmission.artifacts) ||
+    rawSubmission.artifacts.length !== expected.length) {
+    throw new Error("Taskmarket tracked artifact manifest is missing or incomplete.");
+  }
+  const expectedOrders = new Set<number>();
+  const expectedNames = new Set<string>();
+  expected.forEach((artifact) => {
+    if (!Number.isSafeInteger(artifact.size_bytes) || artifact.size_bytes < 1 || artifact.size_bytes > 50_000_000 ||
+      !Number.isSafeInteger(artifact.display_order) || artifact.display_order < 0 || artifact.display_order > 19 ||
+      !artifact.file_name || artifact.file_name.length > 255 || !artifact.mime_type || artifact.mime_type.length > 100 ||
+      !["preview", "source", "final", "attachment"].includes(artifact.role) ||
+      !sha256Pattern.test(artifact.sha256_hash) || !bytes32Pattern.test(artifact.keccak256_hash) ||
+      expectedOrders.has(artifact.display_order) || expectedNames.has(artifact.file_name)) {
+      throw new Error("Taskmarket expected artifact manifest is invalid or duplicated.");
+    }
+    expectedOrders.add(artifact.display_order);
+    expectedNames.add(artifact.file_name);
+  });
+  const actual = rawSubmission.artifacts.map((item) => {
+    if (!isObject(item)) throw new Error("Taskmarket tracked artifact row is malformed.");
+    return {
+      file_name: requiredString(item.fileName, "Taskmarket artifact file name", 255),
+      mime_type: requiredString(item.mimeType, "Taskmarket artifact MIME type", 100),
+      role: requiredString(item.role, "Taskmarket artifact role", 20),
+      size_bytes: item.sizeBytes,
+      sha256_hash: exactPattern(item.sha256Hash, "Taskmarket artifact SHA-256", sha256Pattern, 64).toLowerCase(),
+      keccak256_hash: exactPattern(item.keccak256Hash, "Taskmarket artifact Keccak-256", bytes32Pattern, 66).toLowerCase(),
+      display_order: item.displayOrder,
+    };
+  });
+  if (actual.some((artifact) => !Number.isSafeInteger(artifact.size_bytes) || Number(artifact.size_bytes) < 1 ||
+    !Number.isSafeInteger(artifact.display_order) || Number(artifact.display_order) < 0 ||
+    !["preview", "source", "final", "attachment"].includes(artifact.role))) {
+    throw new Error("Taskmarket tracked artifact row has invalid size, order, or role.");
+  }
+  const normalizedExpected = expected.map((artifact) => ({
+    ...artifact,
+    sha256_hash: artifact.sha256_hash.toLowerCase(),
+    keccak256_hash: artifact.keccak256_hash.toLowerCase(),
+  }));
+  if (JSON.stringify(actual) !== JSON.stringify(normalizedExpected)) {
+    throw new Error("Taskmarket tracked artifact manifest drifted.");
+  }
+  return true;
 }
 
 type TaskmarketAward = {
@@ -618,6 +793,11 @@ export function reconcileTaskmarketTracked(input: {
       submission.submitTxHash.toLowerCase() !== expectedSubmitTx.toLowerCase()) {
       throw new Error("Taskmarket tracked submission receipt is missing or disagrees with its worker or transaction.");
     }
+    const artifactManifestVerified = verifyTrackedArtifactManifest(
+      payload.submissions,
+      expectedSubmissionId,
+      expected.artifact_manifest,
+    );
     const award = awards.find(({ workerAddress }) => workerAddress.toLowerCase() === worker.toLowerCase());
     const publicProof = expected.public_proof
       ? parsePublicProof(payload.public_proof_notes, expectedTaskId, expected.public_proof)
@@ -717,6 +897,7 @@ export function reconcileTaskmarketTracked(input: {
         onchain_evidence: awardVerification,
       } : null,
       supporting_public_proof: publicProof,
+      artifact_manifest_verified: artifactManifestVerified,
       accounting_state: settled
         ? "authoritative_completed_task_award_plus_verified_base_receipt"
         : award

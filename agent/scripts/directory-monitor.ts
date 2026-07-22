@@ -177,10 +177,12 @@ const awesomeMcpServersPrUrl = `https://github.com/punkpeye/awesome-mcp-servers/
 const awesomeMcpServersReadmeUrl = "https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md";
 const tensorBlockIssueNumber = 1311;
 const tensorBlockIssueUrl = `https://github.com/TensorBlock/awesome-mcp-servers/issues/${tensorBlockIssueNumber}`;
-const tensorBlockPrNumber = 1312;
+const tensorBlockSourcePrNumber = 1312;
+const tensorBlockSourcePrUrl = `https://github.com/TensorBlock/awesome-mcp-servers/pull/${tensorBlockSourcePrNumber}`;
+const tensorBlockPrNumber = 1346;
 const tensorBlockPrUrl = `https://github.com/TensorBlock/awesome-mcp-servers/pull/${tensorBlockPrNumber}`;
 const tensorBlockIndexApi = "https://mcp-index.tensorblock.co";
-const tensorBlockServerId = "github-cristianmoroaica-bountyverdict-038d60c1";
+const tensorBlockServerId = "github-mimirs402-bountyverdict-0abea513";
 const agentageMcpUrl = "https://catalog.agentage.io/mcp";
 const agentageSlug = "io-github-cristianmoroaica-bountyverdict";
 const dockerMcpRegistryPrNumber = 4509;
@@ -304,15 +306,7 @@ const x402ScoutIds = Object.freeze([
   "10bf30eb-c3f7-4231-ab23-fc16d02a0e7c",
   "98fed8fa-da74-436d-9fbe-22a500abf298",
 ]);
-const agent402BuyerQueries = Object.freeze([
-  { product: "single", path: "/api/verdict", query: "check whether github bounty issue is still open claimed or worth coding" },
-  { product: "portfolio", path: "/api/portfolio", query: "compare and rank github bounty issues to choose the best candidate" },
-  { product: "harness", path: "/api/repository-agent-instructions-audit", query: "audit repository coding agent instructions AGENTS.md CLAUDE.md" },
-  { product: "skill", path: "/api/skill", query: "security audit an agent skill before installation" },
-  { product: "run", path: "/api/github-actions-run-diagnosis", query: "diagnose failed github actions workflow run root cause" },
-  { product: "flake", path: "/api/github-actions-flake-retry-gate", query: "decide whether failed github actions run is flaky and should retry" },
-  { product: "mcpdrift", path: "/api/mcp-drift", query: "check MCP tools list schema drift compatibility breaking change" },
-]);
+const expectedAgent402PaidTools = 7;
 const skillsShBuyerQueries = Object.freeze([
   { skill: "route-github-agent-checks", query: "route github agent checks" },
   { skill: "audit-agent-harness", query: "audit coding agent repository instructions" },
@@ -926,6 +920,7 @@ async function tensorBlockMcpIndexStatus(
             : "submission_pending";
     return {
       url: tensorBlockIssueUrl,
+      source_pr_url: tensorBlockSourcePrUrl,
       pr_url: tensorBlockPrUrl,
       api_url: tensorBlockIndexApi,
       issue_status: issue.state,
@@ -945,6 +940,7 @@ async function tensorBlockMcpIndexStatus(
   } catch (error) {
     return {
       url: tensorBlockIssueUrl,
+      source_pr_url: tensorBlockSourcePrUrl,
       pr_url: tensorBlockPrUrl,
       api_url: tensorBlockIndexApi,
       listed: false,
@@ -2049,21 +2045,10 @@ async function mcpObservatoryStatus(): Promise<Record<string, unknown>> {
 
 async function agent402Status(): Promise<Record<string, unknown>> {
   try {
-    const [indexResponse, ...routeResponses] = await Promise.all([
-      fetch(`${agent402Api}/index`, {
-        headers: { "User-Agent": "bountyverdict-directory-monitor" },
-        signal: AbortSignal.timeout(timeoutMs),
-      }),
-      ...agent402BuyerQueries.map(({ query }) => fetch(`${agent402Api}/route`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "bountyverdict-directory-monitor",
-        },
-        body: JSON.stringify({ query, top: 25, include: "external" }),
-        signal: AbortSignal.timeout(timeoutMs),
-      })),
-    ]);
+    const indexResponse = await fetch(`${agent402Api}/index`, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!indexResponse.ok) {
       return { url: "https://agent402.tools/marketplace", http_status: indexResponse.status, listed: false, status: "unexpected_response" };
     }
@@ -2072,30 +2057,7 @@ async function agent402Status(): Promise<Record<string, unknown>> {
       sellers?: Array<Record<string, unknown>>;
     };
     const seller = (index.sellers || []).find((entry) => entry.origin === productionOrigin);
-    const queries = await Promise.all(routeResponses.map(async (response, queryIndex) => {
-      const expected = agent402BuyerQueries[queryIndex];
-      if (!response.ok) {
-        return { ...expected, found: false, rank: null, http_status: response.status, status: "unexpected_response" };
-      }
-      const payload = await response.json() as { results?: Array<Record<string, unknown>> };
-      const results = Array.isArray(payload.results) ? payload.results : [];
-      const rankIndex = results.findIndex((entry) =>
-        entry.seller === productionOrigin && entry.route === expected.path
-      );
-      const match = rankIndex >= 0 ? results[rankIndex] : null;
-      return {
-        ...expected,
-        found: rankIndex >= 0,
-        rank: rankIndex >= 0 ? rankIndex + 1 : null,
-        score: match && typeof match.score === "number" ? match.score : null,
-        price_usd: match && (typeof match.priceUsd === "number" || typeof match.priceUsd === "string")
-          ? match.priceUsd
-          : null,
-        returned_results: results.length,
-      };
-    }));
-    const foundQueries = queries.filter(({ found }) => found).length;
-    const topThreeQueries = queries.filter(({ rank }) => typeof rank === "number" && rank <= 3).length;
+    const observedToolCount = typeof seller?.toolCount === "number" ? seller.toolCount : null;
     return {
       url: "https://agent402.tools/marketplace",
       api_url: `${agent402Api}/index`,
@@ -2106,13 +2068,17 @@ async function agent402Status(): Promise<Record<string, unknown>> {
       health: typeof seller?.health === "number" ? seller.health : null,
       listing_source: seller?.source || null,
       native_manifest: seller?.source === "manifest",
-      observed_tool_count: typeof seller?.toolCount === "number" ? seller.toolCount : null,
+      observed_tool_count: observedToolCount,
+      expected_paid_tool_count: expectedAgent402PaidTools,
+      indexed_scope_status: observedToolCount === null
+        ? "unknown"
+        : observedToolCount === expectedAgent402PaidTools
+          ? "exact_paid_catalog"
+          : "overindexed_non_paid_operations",
       ecosystem_sellers: index.totals?.sellers ?? null,
-      query_count: queries.length,
-      found_queries: foundQueries,
-      top_three_queries: topThreeQueries,
-      query_benchmark: queries,
-      measurement: "owner_run_unbranded_retrieval_benchmark_not_search_impressions_or_customer_purchases",
+      semantic_query_monitoring: "disabled",
+      semantic_query_reason: "Owner-authored searches are not impressions or demand and can trigger downstream origin traffic.",
+      measurement: "passive_cached_index_presence_health_and_scope_not_search_impressions_tool_calls_customer_purchases_or_revenue",
     };
   } catch (error) {
     return {

@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll the AgentWork Flowise Taskmarket pitch every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=20s
+Persistent=true
+Unit=bountyverdict-taskmarket-agentwork-pitch.service
+
+[Install]
+WantedBy=timers.target

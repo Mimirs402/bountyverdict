@@ -351,8 +351,10 @@ export function validateAgentMrrPublicationAttempt(
   expectedCodeReleaseCommit: string,
 ): string {
   const attempt = record(value);
+  const keys = Object.keys(attempt).sort().join(",");
   if (mode !== 0o600 || ownerUid !== expectedUid || expectedUid < 0 || !isAgentMrrUuid(expectedAgentId) ||
       !/^[a-f0-9]{40}$/.test(expectedCodeReleaseCommit) || attempt.schema_version !== 1 ||
+      keys !== "agent_id,code_release_commit,created_at,product_contract_sha256,rotation_id,schema_version,status" ||
       attempt.status !== "posting" || attempt.agent_id !== expectedAgentId ||
       attempt.product_contract_sha256 !== AGENTMRR_PRODUCT_CONTRACT_SHA256 ||
       attempt.code_release_commit !== expectedCodeReleaseCommit ||
@@ -362,6 +364,36 @@ export function validateAgentMrrPublicationAttempt(
     throw new Error("AgentMRR existing listing requires the exact publication attempt receipt.");
   }
   return attempt.rotation_id;
+}
+
+export function validateAgentMrrPublicationCompletion(
+  value: unknown,
+  mode: number,
+  ownerUid: number,
+  expectedUid: number,
+  expectedAgentId: string,
+  expectedCodeReleaseCommit: string,
+  expectedProductId: string,
+): string {
+  const completion = record(value);
+  const keys = Object.keys(completion).sort().join(",");
+  const createdAt = typeof completion.created_at === "string" ? Date.parse(completion.created_at) : NaN;
+  const completedAt = typeof completion.completed_at === "string" ? Date.parse(completion.completed_at) : NaN;
+  if (mode !== 0o600 || ownerUid !== expectedUid || expectedUid < 0 || !isAgentMrrUuid(expectedAgentId) ||
+      !/^[a-f0-9]{40}$/.test(expectedCodeReleaseCommit) || !isAgentMrrUuid(expectedProductId) ||
+      completion.schema_version !== 1 || completion.status !== "complete" ||
+      keys !== "action,agent_id,code_release_commit,completed_at,created_at,product_contract_sha256,product_id,rotation_id,schema_version,status" ||
+      completion.agent_id !== expectedAgentId ||
+      completion.product_contract_sha256 !== AGENTMRR_PRODUCT_CONTRACT_SHA256 ||
+      completion.code_release_commit !== expectedCodeReleaseCommit ||
+      completion.product_id !== expectedProductId ||
+      (completion.action !== "published" && completion.action !== "existing") ||
+      typeof completion.rotation_id !== "string" ||
+      !/^agentmrr-publish-[a-z0-9]{6,24}-[a-f0-9]{16}$/.test(completion.rotation_id) ||
+      !Number.isFinite(createdAt) || !Number.isFinite(completedAt) || completedAt < createdAt) {
+    throw new Error("AgentMRR completed publication receipt is not exact.");
+  }
+  return completion.rotation_id;
 }
 
 export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateInput): void {

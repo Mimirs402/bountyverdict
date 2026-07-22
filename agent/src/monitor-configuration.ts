@@ -19,7 +19,7 @@ export const PRODUCTION_MONITOR_IDENTITY = Object.freeze({
   productionApi: "https://bountyverdict-agent-production.mimirslab.workers.dev",
   revenueWallet: "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614",
   startBlock: "48876000",
-  trackedCostsUsdc: "1.011",
+  trackedCostsUsdc: "1.012",
 });
 
 function nonEmpty(value: unknown): value is string {

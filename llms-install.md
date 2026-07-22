@@ -65,6 +65,10 @@ Equivalent `settings.json` entry:
 
 ### Visual Studio Code
 
+One-click install:
+
+[Add BountyVerdict to VS Code](vscode:mcp/install?%7B%22name%22%3A%22bountyverdict%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fbountyverdict-agent-production.mimirslab.workers.dev%2Fmcp%3Fsource%3Dvscode-deeplink%22%7D)
+
 Add this to the user MCP configuration or `.vscode/mcp.json`. VS Code uses the top-level key `servers`, not `mcpServers`.
 
 ```json
@@ -72,7 +76,7 @@ Add this to the user MCP configuration or `.vscode/mcp.json`. VS Code uses the t
   "servers": {
     "bountyverdict": {
       "type": "http",
-      "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp"
+      "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=vscode-deeplink"
     }
   }
 }

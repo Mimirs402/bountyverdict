@@ -55,6 +55,25 @@ test("Cursor one-click install decodes to the exact source-marked production rem
   assert.ok(page.includes(match[1].replace("&", "&amp;")));
 });
 
+test("VS Code one-click install decodes to the exact source-marked production remote", async () => {
+  const [guide, page] = await Promise.all([
+    readFile(new URL("../llms-install.md", import.meta.url), "utf8"),
+    readFile(new URL("../agents.html", import.meta.url), "utf8"),
+  ]);
+  const match = guide.match(/\[Add BountyVerdict to VS Code\]\((vscode:mcp\/install\?[^)]+)\)/);
+  assert.ok(match, "missing official VS Code MCP install deeplink");
+  const url = new URL(match[1]);
+  assert.equal(url.protocol, "vscode:");
+  assert.equal(url.pathname, "mcp/install");
+  const config = JSON.parse(decodeURIComponent(url.search.slice(1)));
+  assert.deepEqual(config, {
+    name: "bountyverdict",
+    type: "http",
+    url: "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=vscode-deeplink",
+  });
+  assert.match(page, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
 test("Glama release packaging bridges only the existing hosted MCP without secrets", async () => {
   const [dockerfile, dockerignore, glama, packageJson, packageLock, smoke, workflow] = await Promise.all([
     readFile(new URL("../Dockerfile", import.meta.url), "utf8"),

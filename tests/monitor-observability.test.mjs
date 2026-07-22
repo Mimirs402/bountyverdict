@@ -272,13 +272,13 @@ test("distribution monitoring keeps task-leading descriptions in a separate fail
   assert.match(distribution, /constants\.O_RDONLY \| constants\.O_NOFOLLOW/);
   assert.match(distribution, /mode 0600/);
   assert.match(distribution, /persistedTaskLeadingDescriptionExperiment \|\|\s+previousReport\.funnel\?\.mcp_task_leading_description_experiment \|\| null/);
-  assert.match(distribution, /experiments\/mcp-task-leading-descriptions-v1\.json/);
+  assert.match(distribution, /experiments\/mcp-task-leading-descriptions-v2\.json/);
   assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+taskLeadingDescriptionExperimentStateFile/s);
   assert.match(distribution, /mcp_task_leading_description_experiment: mcpTaskLeadingDescriptionExperiment/);
   assert.match(distribution, /inactive until exact reviewed release, production activation, completed drain rotation, and fresh epoch coordinates match the trusted ledger/);
   assert.match(distribution, /first report at or above N=25 is immutable/);
   assert.match(distribution, /no session\/exposure linkage and never establish a causal copy conversion rate/);
-  assert.equal(activationTemplate.experiment_id, "mcp-task-leading-descriptions-v1");
+  assert.equal(activationTemplate.experiment_id, "mcp-task-leading-descriptions-v2");
   assert.equal(activationTemplate.measurement_epoch_id, 0);
   assert.equal(activationTemplate.target_tools_list, 25);
 });

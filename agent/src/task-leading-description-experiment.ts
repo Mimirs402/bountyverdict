@@ -1,4 +1,4 @@
-export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v1";
+export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v2";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
@@ -333,6 +333,6 @@ export function updateTaskLeadingDescriptionExperiment(
     },
     causal_copy_claim: false,
     causality_limit: CAUSALITY_LIMIT,
-    measurement: "exact fresh active eligible epoch buyer-candidate aggregate events only; frozen zero prefix; audited drains, owner automation, registry, Glama release, and x402 observer channels are excluded; counts are not unique agents, purchases, or revenue",
+    measurement: "exact fresh active eligible epoch buyer-candidate aggregate events only; frozen zero prefix; audited drains, owner automation, registry, Glama release, x402 observer, and passive Smithery inspection are excluded; counts are not unique agents, purchases, or revenue",
   };
 }

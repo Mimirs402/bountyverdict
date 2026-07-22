@@ -159,7 +159,7 @@ const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
 const recoveryExperimentStateFile = process.env.RECOVERY_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-unknown-tool-recovery-epoch46-v1.json`;
 const taskLeadingDescriptionExperimentStateFile = process.env.TASK_LEADING_DESCRIPTION_EXPERIMENT_STATE_FILE ||
-  `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v1.json`;
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v2.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||

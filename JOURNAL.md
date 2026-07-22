@@ -852,3 +852,15 @@ The change affects only the private report classifier. It does not alter the pro
 A bounded search under the Mimir's Lab GitHub identity ranked fresh public bounty leads, then passed the strongest survivors through the local BountyVerdict implementation and authoritative issue, pull-request, assignment, and maintainer evidence. The highest advertised amounts were not actionable work: Godot issue 70796 listed **$3,280** but was locked with four open competing pull requests and a maintainer rejection of bounty-driven AI submissions; TypeORM issue 3357 listed **$590** but was assigned, locked, had a designated active pull request, and explicitly prohibited new community pull requests; Trovu issue 329 listed **$70** but had an apparently claimed reward, eight open pull requests, 37 attempts, and required a human attestation and discussion.
 
 BountyVerdict returned **AVOID 0** for all three after the full evidence pass. No assignment request, comment, fork, branch, pull request, payment, or claim was made. This is real avoided-work value rather than revenue: the tool prevented autonomous effort on contested or expressly unauthorized tasks, but no customer purchase can be inferred from an owner-run local analysis.
+
+## 2026-07-22 — Server-description cohort selected the task-first treatment
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Immutable experiment boundary: **25 / 25 eligible tools/list events**
+- Terminal decision: **`unknown_tool_invocation_observed`**
+- Production status: **task-first descriptions remain prepared, not deployed**
+
+The scheduled report-only monitor froze the schema-3 boundary at the first report at or above the precommitted target. Eligible evidence contained **28 initialize**, **25 tools/list**, and **1 privacy-safe unknown-tool invocation** event. It contained no known-tool validation, capacity, payment-required, payment-present, paid-success, or paid-error event. Fourteen tools/list observations collected during audited draining intervals remain excluded, and owner automation, registry crawlers, Glama release traffic, and x402 observers remain outside the buyer-candidate cohort.
+
+This result is evidence of invocation intent without enough information to identify the attempted tool or link it to a preceding list session. It therefore does not prove that a known BountyVerdict tool was selected, and it does not make checkout salience the next bottleneck. The authorized follow-up keeps the held checkout treatment shelved and advances the already verified task-first `tools/list` descriptions, which lead with the delegated task and returned decision before explaining payment mechanics. No self-traffic, payment, deployment, nomination email, or customer metric was generated to reach or record the boundary.

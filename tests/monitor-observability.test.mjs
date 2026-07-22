@@ -166,6 +166,7 @@ test("distribution monitoring treats Payan demand state as a funnel and receipts
 
 test("distribution monitoring measures the MCP selection-preview rollout from an immutable buyer-event baseline", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
+  const directory = await readFile(directoryMonitorUrl, "utf8");
   assert.match(distribution, /mcp-selection-preview-parity-v2/);
   assert.match(distribution, /release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99"/);
   assert.match(distribution, /initialize: 257/);
@@ -179,6 +180,10 @@ test("distribution monitoring measures the MCP selection-preview rollout from an
   assert.match(distribution, /invalid_call_share_percent/);
   assert.match(distribution, /payment_present_per_valid_call_percent/);
   assert.match(distribution, /audited draining intervals are excluded/);
+  assert.match(directory, /mcpMarketplaceStatus/);
+  assert.match(directory, /parseMcpMarketplaceListing/);
+  assert.match(distribution, /MCP Marketplace:/);
+  assert.match(distribution, /pricing_disclosure_state/);
   assert.match(distribution, /monitoredFetchWithNetworkRetry/);
   assert.match(distribution, /AbortSignal\.timeout\(timeoutMs\)/);
 });

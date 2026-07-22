@@ -60,6 +60,10 @@ import {
   AWESOME_SKILLS_URL,
   parseAwesomeSkillsPage,
 } from "../src/awesome-skills.ts";
+import {
+  MCP_MARKETPLACE_MAX_PAGE_BYTES,
+  parseMcpMarketplaceListing,
+} from "../src/mcp-marketplace.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
@@ -227,6 +231,9 @@ const gooseExtensionsCatalogUrl =
 const gooseExtensionsEndpoint = `${productionOrigin}/mcp?source=goose-extensions`;
 const officialMcpServerName = "io.github.Mimirs402/bountyverdict";
 const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
+const mcpMarketplaceSlug = "io-github-mimirs402-bountyverdict";
+const mcpMarketplaceUrl = `https://www.mcp-marketplace.io/server/${mcpMarketplaceSlug}`;
+const mcpMarketplaceEndpoint = `${productionOrigin}/mcp?source=mcp-registry`;
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
 const ardRepresentativeQueries = Object.freeze([
   "check whether a github bounty issue is still open claimed or worth coding",
@@ -3030,6 +3037,49 @@ async function ardCatalogStatus(
   }
 }
 
+async function mcpMarketplaceStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(mcpMarketplaceUrl, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error(`MCP Marketplace returned HTTP ${response.status}.`);
+    const parsed = parseMcpMarketplaceListing(
+      await readBoundedText(response, MCP_MARKETPLACE_MAX_PAGE_BYTES),
+      officialMcpServerName,
+      mcpMarketplaceSlug,
+      githubSkillReleaseTag.slice(1),
+      repository,
+      mcpMarketplaceEndpoint,
+      agentToolsCloudMcpTools,
+    );
+    return {
+      url: mcpMarketplaceUrl,
+      checked_at: observedAt,
+      first_listed_at: previousStatus.first_listed_at || observedAt,
+      ...parsed,
+      status: parsed.contract_verified ? "listed_contract_verified" : "listed_contract_drift",
+      measurement: "anonymous_marketplace_install_counter_and_registry_import_contract_not_unique_users_tool_calls_purchases_or_revenue",
+      pricing_note: parsed.pricing_disclosure_accurate
+        ? "Marketplace pricing disclosure is accurate."
+        : "Marketplace imported the Registry endpoint as free even though valid selected tool calls require disclosed per-call x402 USDC payment; ownership remains unclaimed while the catalog-copy experiment is frozen.",
+    };
+  } catch (error) {
+    return {
+      url: mcpMarketplaceUrl,
+      checked_at: observedAt,
+      listed: previousStatus.listed === true,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "anonymous_marketplace_install_counter_and_registry_import_contract_not_unique_users_tool_calls_purchases_or_revenue",
+    };
+  }
+}
+
 let previous: Record<string, any> = {};
 try {
   previous = JSON.parse(await readFile(stateFile, "utf8"));
@@ -3069,6 +3119,7 @@ const [
   geminiCliGallery,
   agentFinderCatalog,
   ardCatalog,
+  mcpMarketplace,
   agent402,
   x402scout,
   x402scan,
@@ -3116,6 +3167,7 @@ const [
   geminiCliGalleryStatus(previous.gemini_cli_gallery || {}, new Date().toISOString()),
   agentFinderCatalogStatus(previous.agent_finder_catalog || {}, new Date().toISOString()),
   ardCatalogStatus(previous.ard_catalog || {}, new Date().toISOString()),
+  mcpMarketplaceStatus(previous.mcp_marketplace || {}, new Date().toISOString()),
   agent402Status(),
   x402ScoutStatus(),
   x402ScanStatus(),
@@ -3359,6 +3411,7 @@ const state = {
   gemini_cli_gallery: geminiCliGallery,
   agent_finder_catalog: agentFinderCatalog,
   ard_catalog: ardCatalog,
+  mcp_marketplace: mcpMarketplace,
   agent402,
   x402scout,
   x402scan,

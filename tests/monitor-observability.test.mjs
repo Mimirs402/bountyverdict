@@ -115,8 +115,8 @@ test("directory monitoring verifies the anonymous Agent-Skills.md adapter withou
     readFile(distributionUrl, "utf8"),
   ]);
   assert.match(directory, /async function agentSkillsMdStatus/);
-  assert.match(directory, /agent-skills\.md\/skills\/cristianmoroaica\/bountyverdict-mcp-skill\/route-github-agent-decisions/);
-  assert.match(directory, /Repo captured\. cristianmoroaica\/bountyverdict-mcp-skill added with 1 skills\./);
+  assert.match(directory, /agent-skills\.md\/skills\/Mimirs402\/bountyverdict-mcp-skill\/route-github-agent-decisions/);
+  assert.match(directory, /Repo captured\. Mimirs402\/bountyverdict-mcp-skill added with 1 skills\./);
   assert.match(directory, /agent_skills_md: agentSkillsMd/);
   assert.match(directory, /anonymous_submission_and_exact_listing_presence_not_search_impressions_installs_tool_calls_purchases_or_revenue/);
   assert.match(distribution, /Agent-Skills\.md adapter/);

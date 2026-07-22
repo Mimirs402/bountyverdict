@@ -143,8 +143,8 @@ const askillDedicatedMonitor = Object.freeze({
     repository: "Mimirs402/bountyverdict-mcp-skill",
   },
 });
-const agentSkillsMdSubmissionRecordedAt = "2026-07-21T15:54:20Z";
-const agentSkillsMdListingUrl = "https://agent-skills.md/skills/cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions";
+const agentSkillsMdSubmissionRecordedAt = "2026-07-22T00:05:36Z";
+const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
 const githubSkillReleaseTag = "v1.1.5";
@@ -2577,6 +2577,11 @@ async function agentSkillsMdStatus(
   previousStatus: Record<string, any>,
   observedAt: string,
 ): Promise<Record<string, unknown>> {
+  const previousFirstListedAt = typeof previousStatus.first_listed_at === "string"
+    && previousStatus.listing_url === agentSkillsMdListingUrl
+    && Date.parse(previousStatus.first_listed_at) >= Date.parse(agentSkillsMdSubmissionRecordedAt)
+    ? previousStatus.first_listed_at
+    : null;
   try {
     const response = await fetch(agentSkillsMdListingUrl, {
       headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
@@ -2591,7 +2596,7 @@ async function agentSkillsMdStatus(
     const requiredMarkers = [
       "Route GitHub Agent Decisions Skill",
       agentSkillsMdTaskFirstDescription,
-      "cristianmoroaica/bountyverdict-mcp-skill/route-github-agent-decisions",
+      "Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions",
       "bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=agent-skills-marketplace",
       "check_github_bounty",
       "rank_github_bounties",
@@ -2599,27 +2604,27 @@ async function agentSkillsMdStatus(
       "diagnose_github_actions_run",
       "classify_github_actions_flake",
       "check_mcp_tool_drift",
-      "io.github.cristianmoroaica/bountyverdict/http-payment-handoff",
+      "io.github.Mimirs402/bountyverdict/http-payment-handoff",
     ];
     const listed = response.status === 200 && requiredMarkers.every((marker) => body.includes(marker));
     return {
       submission_recorded_at: agentSkillsMdSubmissionRecordedAt,
       submission_recorded: true,
-      submission_response_message: "Repo captured. cristianmoroaica/bountyverdict-mcp-skill added with 1 skills.",
+      submission_response_message: "Repo captured. Mimirs402/bountyverdict-mcp-skill added with 1 skills.",
       payment_status: "not_required",
       listing_url: agentSkillsMdListingUrl,
       listing_http_status: response.status,
       listed,
       contract_verified: listed,
       status: listed ? "catalog_contract_verified" : response.status === 404 ? "pending_publication" : "catalog_contract_drift",
-      first_listed_at: listed ? previousStatus.first_listed_at || observedAt : null,
+      first_listed_at: listed ? previousFirstListedAt || observedAt : null,
       measurement: "anonymous_submission_and_exact_listing_presence_not_search_impressions_installs_tool_calls_purchases_or_revenue",
     };
   } catch (error) {
     return {
       submission_recorded_at: agentSkillsMdSubmissionRecordedAt,
       submission_recorded: true,
-      submission_response_message: "Repo captured. cristianmoroaica/bountyverdict-mcp-skill added with 1 skills.",
+      submission_response_message: "Repo captured. Mimirs402/bountyverdict-mcp-skill added with 1 skills.",
       payment_status: "not_required",
       listing_url: agentSkillsMdListingUrl,
       listed: false,

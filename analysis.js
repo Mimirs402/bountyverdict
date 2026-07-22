@@ -36,13 +36,16 @@ const AI_POLICY_DISCLOSURE_PATTERNS = [
 
 const CLAIM_INTENT_TTL_DAYS = 30;
 const CLAIM_INTENT_PATTERNS = [
-  /\bplease\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
+  /\b(?:please|kindly)\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
   /\b(?:can|could|would)\s+you\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
-  /\bassign\s+me\s+(?:to\s+)?(?:this issue|this|it|the issue)\b/i,
+  /\bassign\s+me\b/i,
   /\bi(?:['’]m|\s+am)\s+(?:now\s+)?(?:working|starting(?:\s+work)?)\s+on\s+(?:this|it|the issue)\b/i,
   /\bi\s+(?:claim|am taking|will take|['’]ll take)\s+(?:this|it|the issue|this bounty|the bounty)\b/i,
-  /\b(?:let me|i(?:['’]d|\s+would)\s+like\s+to)\s+(?:fix|handle|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
-  /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\s+(?:for|to fix)\s+(?:this|it|the issue)\b/i,
+  /\b(?:(?:let|allow)\s+me|i(?:['’]d|\s+(?:would|will))\s+(?:like|love)\s+to)\s+(?:fix|handle|resolve|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
+  /\bi\s+can\s+(?:fix|handle|resolve|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
+  /\bi\s+(?:really\s+)?(?:want\s+to|wanna)\s+w(?:ork|ord)\s+on\s+(?:this|it|the issue)\b/i,
+  /\bcan\s+i\s+be\s+assigned(?:\s+(?:to\s+)?(?:this|it|the issue))?\b/i,
+  /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\b/i,
   /(?:^|\n)\s*taking\s+(?:this|it|the issue)\b/im,
 ];
 const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
@@ -478,7 +481,11 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   score = Math.max(0, Math.min(100, score));
   const hasHardStop = signals.some((item) => item.hardStop);
   const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated;
-  const verdict = hasHardStop || score < 45 ? "AVOID" : score < 75 || incompleteCoverage ? "CAUTION" : "VIABLE";
+  const verdict = hasHardStop || score < 45
+    ? "AVOID"
+    : claimantInterest.length || score < 75 || incompleteCoverage
+    ? "CAUTION"
+    : "VIABLE";
 
   return {
     verdict,

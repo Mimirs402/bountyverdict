@@ -253,6 +253,54 @@ test("recent natural-language claim intent makes a contested bounty cautionary",
   ));
 });
 
+test("passive assignment requests and explicit PR promises count as claimant intent", () => {
+  const comments = [{
+    body: "I have experience with Express.js and I will submit PR within 2 days max.",
+    created_at: "2026-07-21T23:25:26Z",
+    user: { login: "alice" },
+  }, {
+    body: "Hi maintainer, can I be assigned this issue please?",
+    created_at: "2026-07-22T00:23:10Z",
+    user: { login: "bob" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(output.claimantInterest.map(({ login }) => login).sort(), ["alice", "bob"]);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unconfirmed claimant interest" && item.impact === -20 && !item.hardStop
+  ));
+});
+
+test("one active natural-language claimant can never remain viable", () => {
+  const comments = [{
+    body: "I will like to work on this issue.",
+    created_at: "2026-07-19T12:00:00Z",
+    user: { login: "alice" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.ok(output.score >= 75);
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(output.claimantInterest.map(({ login }) => login), ["alice"]);
+});
+
+test("current claimant phrasing observed in live bounty cohorts is recognized", () => {
+  const phrases = [
+    "Allow me fix this asap.",
+    "I can take this brand asset kit if it is still open.",
+    "I would love to resolve this issue within a few hours.",
+    "Kindly assign this issue to me.",
+    "I really wanna word on this issue.",
+  ];
+  const comments = phrases.map((body, index) => ({
+    body,
+    created_at: `2026-07-19T12:0${index}:00Z`,
+    user: { login: `claimant-${index}` },
+  }));
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.claimantInterest.length, phrases.length);
+  assert.equal(output.verdict, "CAUTION");
+});
+
 test("a later withdrawal clears only that user's natural-language claim intent", () => {
   const comments = [{
     body: "I am working on this issue.",

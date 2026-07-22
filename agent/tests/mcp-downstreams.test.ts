@@ -26,7 +26,7 @@ import {
 } from "../src/mcp-downstreams.ts";
 
 const name = "io.github.cristianmoroaica/bountyverdict";
-const version = "1.1.6";
+const version = "1.1.7";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
 const clineEndpoint = `${endpoint}?source=cline-marketplace`;
 const kiloEndpoint = `${endpoint}?source=kilo-marketplace`;
@@ -565,7 +565,7 @@ test("recognizes exact active remote propagation into the Qt Creator mirror", ()
     ],
   }, name, version, endpoint);
   assert.equal(result.listed, true);
-  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.6"]);
+  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.7"]);
   assert.equal(result.server_count, 2);
 });
 
@@ -579,7 +579,7 @@ test("keeps pending and drifted Qt entries distinct from exact propagation", () 
     ],
   }, name, version, endpoint);
   assert.equal(result.listed, false);
-  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.6"]);
+  assert.deepEqual(result.observed_versions, ["1.0.0", "1.1.7"]);
 });
 
 test("rejects malformed or unbounded Qt mirrors", () => {

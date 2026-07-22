@@ -503,6 +503,212 @@ test("a mirrored bounty requires checking its external source issue", () => {
   ));
 });
 
+test("a nominal USD promise qualified as non-cash dockets is unverified and unsafe", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "[Bounty] [100$] Rewrite every comment",
+      body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\nPayment: The payment has been confirmed! 100USD (Unity-Station Dockets).\n\n### Real Reward\n$100\n\nComplete acceptance criteria and implementation scope are provided.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.state, "UNVERIFIED");
+  assert.equal(output.reward.verification, "UNVERIFIED");
+  assert.equal(output.reward.amount, null);
+  assert.equal(output.reward.currency, null);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
+  ));
+});
+
+test("a numeric coin denomination is also treated as non-cash", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Payment: $100 USD (125 coins). Complete implementation scope, reproducible behavior, tests, and acceptance criteria are provided.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.state, "UNVERIFIED");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
+  ));
+});
+
+test("non-cash denomination language is trusted only from repository authorities", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "Payment: $100 USD (125 coins).",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted",
+    }],
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Reward denomination is non-cash or ambiguous"));
+});
+
+test("parenthetical payment prose and benchmark points are not denominations", () => {
+  for (const body of [
+    "Payment: $100 USD (paid in USDC on Base). Complete implementation scope and acceptance criteria are provided.",
+    "Payment: $100 USD (credit card payout). Complete implementation scope and acceptance criteria are provided.",
+    "Bounty: $100 USD (estimated 10 points of effort). Complete implementation scope and acceptance criteria are provided.",
+    "Benchmark reward 0.00. (The related R-010 equal-points tie remains unresolved.) Complete implementation scope and acceptance criteria are provided.",
+  ]) {
+    const output = analyzeBounty({ issue: { ...healthyIssue, body }, repository: healthyRepo, now });
+    assert.ok(
+      !output.signals.some((item) => item.label === "Reward denomination is non-cash or ambiguous"),
+      body,
+    );
+  }
+});
+
+test("exact trusted platform evidence is preserved when issue wording conflicts", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Payment: $100 USD (125 coins). Complete implementation scope, reproducible behavior, tests, and acceptance criteria are provided.",
+    },
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "BountyHub",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 100,
+      secured_amount: 100,
+      promised_amount: 0,
+      currency: "USD",
+      evidence_url: "https://www.bountyhub.dev/en/bounty/view/verified",
+    },
+    now,
+  });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(output.reward.amount, 100);
+  assert.equal(output.reward.currency, "USD");
+  assert.ok(!output.signals.some((item) =>
+    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
+  ));
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward wording conflicts with trusted platform settlement" && !item.hardStop
+  ));
+});
+
+test("an inverted bounty cannot treat the contributor's outgoing tip as reward", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "BOUNTY: first external tip gets public backer credit",
+      body: [
+        "## BOUNTY: first non-factory external tip",
+        "### Pay (60s)",
+        "1. XRPL testnet faucet XRP",
+        "2. Send to `rBiU74q2wCPQ7ri9YD6J6LrQ2Y3jFd8pcN`",
+        "3. Destination Tag 1 ($1 tip) or 2 ($2 briefing)",
+        "4. Comment tx hash here",
+        "### Reward",
+        "Public backer credit + free Tag-2 briefing for first external wallet that tips Tag 1 and comments hash.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.score, 0);
+  assert.equal(output.reward.state, "UNVERIFIED");
+  assert.equal(output.reward.verification, "UNVERIFIED");
+  assert.equal(output.reward.amount, null);
+  assert.equal(output.reward.currency, null);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Contributor payment required" && item.hardStop
+  ));
+});
+
+test("an outgoing amount under a broad bounty heading is not cash reward evidence", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "First external tip gets public credit",
+      body: [
+        "## Bounty",
+        "Send $1 to the wallet address below.",
+        "Submit the transaction hash in a comment.",
+        "The first contributor receives public backer credit.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.amount, null);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Contributor payment required" && item.hardStop
+  ));
+});
+
+test("a real contributor payout is not mistaken for an inverted bounty", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: [
+        "## Reward",
+        "$100 paid to the contributor after an accepted merge.",
+        "## Acceptance test",
+        "1. Send $1 to the test merchant address.",
+        "2. Submit the transaction hash with the pull request.",
+        "The $1 test expense will be reimbursed.",
+      ].join("\n"),
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.amount, 100);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
+test("payment-flow implementation language alone is not contributor payment", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Reward: $100 paid to the contributor after merge. Expected behavior: users can send $1 to a merchant address and the transaction hash appears in the audit log. Implement the flow and add mocked tests.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.amount, 100);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
+test("an untrusted commenter cannot fabricate an inverted-bounty hard stop", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "1. Send $1 to my wallet address. 2. Submit the transaction hash here.",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted-payment",
+    }],
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
+});
+
 test("a same-repository source link is not treated as a mirror", () => {
   const output = analyzeBounty({
     issue: {
@@ -575,6 +781,29 @@ test("a verified Algora GitHub App comment establishes listing provenance only",
   assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
   assert.equal(output.reward.amount, 250);
   assert.equal(output.verdict, "VIABLE");
+});
+
+test("a trusted platform listing is not overridden by contributor-payment heuristics", () => {
+  const comments = [{
+    body: "## 💎 $250 bounty • acme\nReceive payment 2-5 days post-reward.",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-algora",
+    user: { login: "algora-pbc[bot]" },
+    performed_via_github_app: { slug: "algora-pbc" },
+  }];
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "1. Send $1 to the test merchant address. 2. Submit the transaction hash with the pull request. Complete acceptance criteria and implementation scope follow.",
+    },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_APP");
+  assert.equal(output.reward.amount, 250);
+  assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
 });
 
 test("an authenticated Algora listing aggregates concurrent sponsor bounties", () => {
@@ -1230,6 +1459,47 @@ test("one merged cross-referenced implementation is a hard stop on an open issue
   assert.ok(!output.signals.some((item) => item.label === "Closed-PR swarm"));
 });
 
+test("an unrelated repository cross-reference cannot impersonate a merged implementation", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Unrelated school backend change",
+        state: "closed",
+        user: { login: "solver" },
+        pull_request: {
+          html_url: "https://github.com/another/school-backend/pull/2",
+          merged_at: "2026-05-26T12:00:00Z",
+        },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.pullRequests.length, 0);
+  assert.ok(!output.signals.some((item) => item.label === "Merged implementation PR"));
+  assert.ok(output.signals.some((item) => item.label === "No linked open PR found"));
+});
+
+test("a same-owner coordination repository remains bounded pull-request evidence", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Coordinated mobile implementation",
+        state: "open",
+        user: { login: "solver" },
+        pull_request: { html_url: "https://github.com/acme/widget-mobile/pull/9" },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.pullRequests.length, 1);
+  assert.equal(output.pullRequests[0].state, "open");
+  assert.ok(output.signals.some((item) => item.label === "Competing open PR"));
+});
+
 test("Fluxer-style exact same-owner PR links in issue discussion become bounded competition evidence", () => {
   const issue = {
     ...healthyIssue,
@@ -1315,6 +1585,40 @@ test("official repository policy surfaces an AI disclosure requirement", () => {
   assert.equal(output.verdict, "VIABLE");
   assert.equal(output.aiPolicyRequirements.length, 1);
   assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
+});
+
+test("Gitea-style disclosed AI contributions are not blocked by a no-AI reply rule", () => {
+  const policyDocuments = [{
+    body: [
+      "## AI Contribution Policy",
+      "Contributions made with the assistance of AI tools are welcome, but contributors must use them responsibly and disclose that use clearly.",
+      "Disclose AI-assisted content clearly.",
+      "Do not use AI to reply to questions about your issue or pull request. The questions are for you, not an AI model.",
+      "AI may be used to help draft issues and pull requests, but contributors remain responsible for what they submit.",
+    ].join("\n"),
+    html_url: "https://github.com/go-gitea/gitea/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "VIABLE");
+  assert.equal(output.aiPolicyBlocks.length, 0);
+  assert.equal(output.aiPolicyRequirements.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
+});
+
+test("a scoped no-AI reply rule cannot hide a separate code prohibition", () => {
+  const policyDocuments = [{
+    body: [
+      "Do not use AI to reply to review questions.",
+      "AI-assisted code contributions are prohibited.",
+    ].join("\n"),
+    html_url: "https://github.com/acme/widget/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.aiPolicyBlocks.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "Repository AI policy blocks the work" && item.hardStop));
 });
 
 test("Memanto-style mandatory external execution prerequisites produce a bounded advisory", () => {

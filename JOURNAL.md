@@ -1198,3 +1198,110 @@ The misses identify a bounded copy-distribution opportunity: the two weak Bazaar
 An independent live browser verification found BountyVerdict already indexed at `https://mcpmarket.com/server/bountyverdict` under `Mimirs402`. Its rendered listing accurately describes seven paid, bounded decision APIs, per-call Base USDC through x402, free samples, and the canonical product page. The raw catalog stub alone is not used because it carries older generic copy. A bounded fail-closed parser and audited directory-monitor entry now verify the rendered business identity, paid x402 disclosure, canonical listing, and product link. MCP Market exposes no bounded public impression, install, or call counter on this listing, so the monitor records none and makes no demand claim.
 
 During the final verification window, epoch 55 observed one eligible privacy-safe buyer-candidate pair: one initialization and one tools/list response from an unknown client over a direct or hidden channel, followed by no tool invocation. A separate registry-or-directory pair remains distribution-crawler evidence and is excluded from the v7 buyer-candidate delta. The clean interpretation is therefore reach without selection, with **24** eligible tools/list events still required; neither pair is a purchase.
+
+## 2026-07-23 — Mirrored non-cash bounty false positive removed
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Fresh marketplace inventory: **no positive-risk-adjusted executable task**
+- Production treatment: **unchanged while v7 collects the immutable epoch-55 boundary**
+
+A real-world BountyVerdict pass found `zhangjiayang6835-cyber/bounty-plaza#668`, a mirror advertising an apparent **$100 USD** reward, while its explicit canonical source `Iamgoofball/-tg-station#221` was authored by an untrusted issuer, labeled against automated submissions, and described the consideration as **Unity-Station Dockets** under an NDA. The existing checker treated the mirror as CAUTION 53 and did not fetch the authoritative source, creating an avoidable false positive.
+
+The checker now treats a maintainer-authored nominal USD amount whose parenthetical structurally ends in dockets, points, credits, creds, or coins as non-cash and unverified. It does not confuse credit-card prose, effort points, or benchmark tie language with a denomination, and exact trusted platform evidence remains controlling while contradictory issue wording becomes a caution. It also follows exactly one explicit external GitHub source-issue link, returns that bounded source result in a structured `linked_source` object, and hard-stops a mirror when the source is AVOID or cannot be verified. Longer source chains remain depth-limited. The exact captured mirror/source regression now returns **AVOID**, score **0**, with no asserted cash amount or currency and both public evidence URLs preserved.
+
+The complete public suite passes **166 / 166**, the Worker and operations suite passes **502 / 502**, TypeScript checking passes, Bazaar declarations validate under the live 500-character description limit, and `git diff --check` passes. This correction is committed for review but deliberately not deployed until the active v7 boundary closes, so production treatment and clean selection attribution remain unchanged.
+
+The concurrent demand audit found 18 open Taskmarket tasks but no safe positive-EV execution: the nine tracked submissions remain eight pending and one completed without award, the 1.999999-USDC Flowise opportunity remains pending amid seven pitches, twelve insect tasks still omit their mandatory guide, and the CAPTCHA task has negative expected value before labor. Clawlancer remains unfunded and Payan exposes no relevant escrow-backed request. No claim, bid, payment, self-purchase, client contact, or fabricated demand occurred. Honest accounting remains **0** purchases, **$0.00** revenue, and **1.012 USDC** tracked costs.
+
+## 2026-07-23 — Unrelated cross-repository PRs no longer impersonate completed work
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v7 checkpoint: **4 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction remains on the held quality branch**
+
+A fresh funded-bounty pass found no executable work. `terrastruct/d2#1578` is officially listed for $50 but assigned and crowded by nine open pull requests and six claimant identities. `tailcallhq/forgecode#389` is closed, assigned, and already delivered by a merged pull request. Three additional Algora-surface candidates lacked current trusted reward evidence or had completed and competing implementations.
+
+The pass also found a distinct provenance false positive on `elysiajs/elysia#313`. GitHub's timeline includes a merged cross-reference from `hackden3618/schoolpulse_elysiajs#2`, an unrelated school-backend repository that merely mentioned the Elysia issue. Production-equivalent source counted all timeline cross-references and therefore emitted a false `Merged implementation PR` hard stop.
+
+Timeline pull-request evidence now uses the same repository boundary as exact PR links in issue discussion: the PR must belong to the current repository or a bounded same-owner coordination repository. Unrelated-owner cross-references are excluded before merged, open, closed, and coverage counts are computed. The existing same-owner Fluxer coordination behavior remains supported.
+
+Live replay proves the change precisely. The current production-equivalent source sees **11** linked PRs and a merged hard stop pointing at the unrelated SchoolPulse PR. The held correction sees **10** linked PRs, removes that hard stop, and retains the real open Elysia PR as competition evidence. The issue remains AVOID on its other cumulative risks, so the correction removes false evidence without manufacturing an actionable bounty.
+
+The two proven blind-search misses are now staged on this held branch as question-led resource descriptions. BountyVerdict begins with `Should I work on this GitHub issue?`; SkillVerdict begins with `Is this agent skill safe to install?`. Both remain below CDP's 500-character limit and are asserted in the actual unpaid x402 challenges and OpenAPI contract. They will be released only after v7 freezes its 25-event boundary, together with the quality fixes in one deployment and one excluded drain.
+
+The complete public suite passes **168 / 168**, the Worker and operations suite passes **504 / 504**, TypeScript checking passes, generated public documentation is synchronized, and `git diff --check` passes. No issue was claimed and no production, listing, payment, or funnel mutation occurred.
+
+## 2026-07-23 — Inverted bounties cannot charge the contributor
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v7 checkpoint at discovery: **6 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction remains on the held quality branch**
+
+A fresh search found `theCeramist/rsi-eaf#178`, an owner-authored open issue presented as a bounty. Its instructions require the agent to obtain testnet XRP, send it to the requester's address with a destination tag, and comment the transaction hash. The displayed `$1 tip` and `$2 briefing` are amounts the contributor sends; the stated consideration is public credit and a free briefing. Production-equivalent analysis incorrectly returned **VIABLE 93** and normalized the outgoing `$1` as a promised cash reward.
+
+The held analyzer now fails closed only when a trusted repository authority requires the contributor to send, pay, tip, transfer, or purchase, requires transaction proof or ties eligibility to that payment, and supplies no explicit cash payout, reimbursement, or authenticated platform reward. It clears the claimed amount and currency, returns **AVOID 0**, and emits an evidence-linked `Contributor payment required` hard stop. Untrusted comments cannot fabricate the stop, ordinary payment-flow implementation prose does not trigger it, genuine contributor payouts and reimbursed test expenses remain valid, and trusted Algora application or API evidence stays controlling. An outgoing amount under a generic `Bounty` heading is explicitly covered so it cannot bypass the guard.
+
+The exact live replay now returns **AVOID 0**, an unverified reward with no amount or currency, and the canonical issue URL as evidence. The public analysis suite passes **94 / 94** and the complete Worker and operations suite passes **507 / 507**. No bounty was claimed, no outgoing payment was authorized, and production and the v7 measurement coordinate remain unchanged.
+
+## 2026-07-23 — Scoped AI communication rules no longer become coding bans
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Latest clean v7 checkpoint: **8 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction is held behind v7**
+
+Gitea's current official `CONTRIBUTING.md` explicitly welcomes AI-assisted contributions when the contributor reviews, tests, understands, and discloses the work. One later rule says not to use AI to reply to review questions. The current checker matched that scoped communication rule as a repository-wide AI prohibition, converting an otherwise cautionary candidate into **AVOID 0** with a false `Repository AI policy blocks the work` hard stop.
+
+AI policy blocking is now evaluated clause by clause. A narrowly scoped prohibition on using AI to reply, respond, or answer review questions no longer blocks coding, while a separate prohibition on AI-assisted code in the same document still hard-stops the result. The existing disclosure detector remains active.
+
+A replay against Gitea's live contribution document changes only the disputed policy interpretation: the held branch reports zero AI-policy blocks, one `AI-use disclosure required` advisory, and no AI hard stop. The complete public suite passes **176 / 176**, the Worker and operations suite passes **509 / 509**, TypeScript checking passes, the public contract remains synchronized, and `git diff --check` passes. No issue was claimed, no repository was contacted, and production was not changed.
+
+## 2026-07-23 — Transferred repositories retain verified IssueHunt funding
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Held release identity: **v1.1.10**
+- Production treatment: **unchanged until the immutable v7 boundary closes**
+
+A real bounty replay exposed a provenance gap after GitHub repository transfers. `publicdomaincompany/scroll#30` now resolves to `breck7/scroll#30`, but IssueHunt still serves its funded record at the former repository route. Querying only the canonical route discarded a real **$30** deposit and returned no trusted reward evidence.
+
+BountyVerdict now checks the canonical IssueHunt route first, then a deduplicated bounded set containing the GitHub URL originally submitted by the caller and at most three exact same-issue IssueHunt routes present in the issue body or scanned comments. A legacy route is only accepted when IssueHunt's embedded repository and issue records both match the live canonical GitHub repository's immutable numeric ID, the exact route coordinates, the exact issue number, and the existing deposit aggregate checks. A wrong repository ID fails closed, and the original IssueHunt evidence URL is preserved.
+
+Live replay proves the whole path. Both `publicdomaincompany/scroll#30` and the current `breck7/scroll#30` now return the same trusted-platform **$30** record at `https://oss.issuehunt.io/r/publicdomaincompany/scroll/issues/30`. Both still return **AVOID** because the GitHub issue is closed, so better funding provenance does not weaken actionability safeguards.
+
+Because the held branch adds the structured `linked_source` output, its public plugin, MCP, Registry, Glama, ToolHive, monitoring, and nomination identities are staged consistently as **v1.1.10** rather than reusing the immutable v1.1.9 identity. Nomination documentation explicitly requires the Registry to verify v1.1.10 before any nomination can be sent.
+
+The complete public suite passes **174 / 174** and the Worker and operations suite passes **509 / 509**. TypeScript checking, synchronized public documentation, dry Worker deployment, Glama release verification, both dependency audits, and `git diff --check` all pass. No production deployment, listing mutation, bounty claim, bid, payment, client contact, or synthetic demand occurred.
+
+## 2026-07-23 — Anonymous IssueHunt deposits count without exposing funders
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Best fresh funded record: **$150, but closed and non-executable**
+- Production treatment: **unchanged; fix remains in held v1.1.10**
+
+The next funded-bounty field pass found `refined-github/refined-github#3686`, transferred from `sindresorhus/refined-github#3686`. IssueHunt's legacy route is live, securely matches the canonical repository's immutable GitHub ID `51769689`, reports **$150** deposited, and has no IssueHunt pull-request submission. BountyVerdict still discarded the record because **$40** of the total came through IssueHunt's bounded `anonymousDeposits` array.
+
+The strict parser now validates named and anonymous deposit records through the same exact 24-hex ID, positive integer-cent amount, cancellation, case-insensitive cross-array ID uniqueness, aggregate, and combined 20-record bounds. Only uncancelled cents contribute to the total that must equal IssueHunt's declared deposit amount. Anonymous user identity is not required, retained, or returned. Organization-balance entries remain rejected because they are not exact issue deposits.
+
+Live replay from both the former and current GitHub URLs now verifies the same trusted-platform **$150** record and preserves its legacy IssueHunt evidence URL. The verdict remains **AVOID** because the issue closed in 2024 and has three linked pull requests. This repairs funding provenance without making stale work actionable.
+
+The bounded sweep found no executable alternative: three other verified IssueHunt records were closed, one open issue was assigned and offered unverified non-USD XTR, and one listing's GitHub issue no longer exists. The complete public suite passes **174 / 174** and the Worker and operations suite passes **511 / 511**; typechecking, synchronized llms contracts, dry Worker deployment, Glama verification, dependency audit, and diff checking all pass. No claim, bid, payment, contact, deployment, or marketplace mutation occurred.
+
+## 2026-07-23 — Marketplace-originated BountyHub records no longer need GitHub backlinks
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Best fresh listing: **$100 promised, $0 prepaid, already implemented**
+- Production treatment: **unchanged; correction remains in held v1.1.10**
+
+A bounded BountyHub cohort exposed an acquisition-path false negative. `SPLURT-Station/S.P.L.U.R.T-tg#109` has an exact public BountyHub record promising **$100** when solved, but the GitHub issue and comments do not link back to the marketplace. Direct strict parsing verified the platform record; the normal product skipped the lookup and incorrectly reported no trusted platform or authorized issuer. Agents arriving from BountyHub therefore lost the very provenance they had discovered.
+
+BountyVerdict now performs the existing bounded, repository-filtered, fail-soft BountyHub lookup for every canonical issue instead of using an untrusted GitHub backlink as the network trigger. Collection and detail records must still match exact repository coordinates, issue number, canonical GitHub issue URL, UUID identities, pledge states, claims, and bounded pagination. If a submitted GitHub URL proves a repository transfer by resolving to different canonical coordinates, one exact pre-transfer lookup is permitted; otherwise no alias is trusted. A missing or unavailable BountyHub record remains a soft null and cannot fabricate funding.
+
+Live replay now returns `PROMISED`, trusted platform `BountyHub`, **$100 total / $0 prepaid**, preserves the exact listing URL, and removes the false issuer-authority hard stop. It still returns **AVOID 0** because `SPLURT-Station/S.P.L.U.R.T-tg#114` already merged the requested implementation. Four other cohort records were closed, claimed, assigned, or already implemented, so none was executable.
+
+The complete public suite passes **176 / 176** and the Worker and operations suite passes **512 / 512**. Typechecking, synchronized public contracts, dry Worker deployment, Glama release verification, zero-vulnerability dependency audit, and diff checking pass. No claim, bid, contact, payment, production deployment, or marketplace mutation occurred.

@@ -1,6 +1,6 @@
 import { BOUNTY_DISCOVERY_DESCRIPTION, outputSchema, portfolioOutputSchema } from "./discovery.ts";
 import { harnessOutputSchema } from "./harness-discovery.ts";
-import { skillOutputSchema } from "./skill-discovery.ts";
+import { SKILL_DISCOVERY_DESCRIPTION, skillOutputSchema } from "./skill-discovery.ts";
 import { runOutputSchema } from "./run-discovery.ts";
 import { FLAKE_SERVICE_REUSE, flakeOutputSchema } from "./flake-discovery.ts";
 import { SERVICE_REUSE } from "./reuse.ts";
@@ -60,7 +60,7 @@ export function createOpenApi(
     openapi: "3.1.0",
     info: {
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.9",
+      version: "1.1.10",
       description: "Seven bounded decision APIs for coding agents: evidence-linked GitHub due diligence and diagnostics plus deterministic MCP tool-catalog compatibility and security gates. Payment uses x402 v2 and Base USDC.",
       "x-guidance": "Choose the narrowest operation for the decision at hand, inspect its free sample and unpaid x402 challenge, then pay only when the challenge matches the documented price, Base USDC asset, and operation. Reuse a successful result only according to its service_reuse field.",
       license: { name: "MIT", identifier: "MIT" },
@@ -373,7 +373,7 @@ export function createOpenApi(
       "/api/skill": {
         get: {
           summary: "Audit a public agent skill before installation",
-          description: "Pins the repository default branch to a commit and statically scans the requested SKILL.md plus its bounded directory context without executing code. Returns redacted findings, capabilities, domains, coverage, and a LOW_RISK, REVIEW, or BLOCK verdict.",
+          description: SKILL_DISCOVERY_DESCRIPTION,
           operationId: "checkSkillVerdict",
           ...agentMetadata(origin, {
             tags: ["skill-security"],
@@ -742,7 +742,7 @@ ${nearMarketServices}
 
 ## Differentiation
 
-BountyVerdict checks the first and newest bounded comment windows, up to four bounded timeline pages, current Algora status tables, exact BountyHub records and pledge-level prepaid-versus-promised funding when an issue references that platform, rewarded labels, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. BountyHub creator approval remains required and platform-held funds are not a payout guarantee. The check reports truncation explicitly and never returns VIABLE from incomplete evidence. Important signals include public evidence URLs and coverage counts.
+BountyVerdict checks the first and newest bounded comment windows, up to four bounded timeline pages, current Algora status tables, exact BountyHub records and pledge-level prepaid-versus-promised funding when an issue references that platform, non-cash reward denomination drift, one explicitly linked external GitHub source issue, rewarded labels, competing and failed PRs, attempt swarms, issue locks, repository state, explicit maintainer rejection, reward-withdrawal language, and conventional contribution-document paths for AI-work bans or disclosure requirements. BountyHub creator approval remains required and platform-held funds are not a payout guarantee. The check reports truncation explicitly and never returns VIABLE from incomplete evidence. Important signals include public evidence URLs and coverage counts.
 
 The portfolio product runs the full check on every submitted candidate, ranks VIABLE before CAUTION before AVOID, recommends the strongest candidate, and reports partial upstream failures.
 

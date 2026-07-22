@@ -51,7 +51,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   });
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
-  assert.equal(body.result.serverInfo.version, "1.1.9");
+  assert.equal(body.result.serverInfo.version, "1.1.10");
   assert.equal(
     body.result.serverInfo.description,
     "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",

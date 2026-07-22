@@ -1,6 +1,10 @@
-import { analyzeBounty, parseIssueUrl } from "../../analysis.js";
-import { fetchBountyHubEvidence, hasBountyHubReference } from "./bountyhub.ts";
-import { fetchIssueHuntEvidence, hasIssueHuntReference } from "./issuehunt.ts";
+import { analyzeBounty, externalSourceIssue, parseIssueUrl } from "../../analysis.js";
+import { fetchBountyHubEvidence } from "./bountyhub.ts";
+import {
+  fetchIssueHuntEvidence,
+  hasIssueHuntReference,
+  issueHuntReferenceRoutes,
+} from "./issuehunt.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -42,6 +46,14 @@ export interface AgentVerdict {
     amount: number | null;
     currency: string | null;
     evidence_url: string | null;
+  };
+  linked_source: {
+    state: "NOT_APPLICABLE" | "CHECKED" | "UNAVAILABLE" | "DEPTH_LIMITED";
+    url: string | null;
+    verdict: AgentVerdict["verdict"] | null;
+    reward_state: AgentVerdict["reward"]["state"] | null;
+    reward_verification: AgentVerdict["reward"]["verification"] | null;
+    error_code: string | null;
   };
   coverage: {
     comments_scanned: number;
@@ -301,11 +313,90 @@ function summarize(verdict: AgentVerdict["verdict"], hasHardStop: boolean): stri
   return "A public hard stop or severe risk signal makes this issue an unsafe bounty target.";
 }
 
+async function fetchCanonicalIssueHuntEvidence(
+  issue: unknown,
+  comments: unknown[],
+  canonical: { owner: string; repo: string; number: number },
+  submitted: { owner: string; repo: string; number: number },
+  repositoryGithubId: unknown,
+  fetchImpl: FetchLike,
+) {
+  if (!hasIssueHuntReference(issue, comments) ||
+      typeof repositoryGithubId !== "number" || !Number.isSafeInteger(repositoryGithubId) ||
+      repositoryGithubId < 1) return null;
+
+  const candidates = [
+    canonical,
+    submitted,
+    ...issueHuntReferenceRoutes(issue, comments, canonical.number),
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const key = `${candidate.owner.toLowerCase()}/${candidate.repo.toLowerCase()}/${candidate.number}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    // IssueHunt records can retain a pre-transfer route. The submitted GitHub URL
+    // or exact issue-body reference supplies only a route candidate;
+    // parseIssueHuntPage must still bind it to the canonical repository's
+    // immutable GitHub ID and exact issue number before it becomes evidence.
+    const evidence = await fetchIssueHuntEvidence(
+      candidate.owner,
+      candidate.repo,
+      repositoryGithubId,
+      candidate.number,
+      fetchImpl,
+    );
+    if (evidence) return evidence;
+  }
+  return null;
+}
+
+async function fetchCanonicalBountyHubEvidence(
+  canonical: { owner: string; repo: string; number: number },
+  submitted: { owner: string; repo: string; number: number },
+  fetchImpl: FetchLike,
+) {
+  const canonicalEvidence = await fetchBountyHubEvidence(
+    canonical.owner,
+    canonical.repo,
+    canonical.number,
+    fetchImpl,
+  );
+  if (canonicalEvidence) return canonicalEvidence;
+
+  const transferred = canonical.owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+    canonical.repo.toLowerCase() !== submitted.repo.toLowerCase() ||
+    canonical.number !== submitted.number;
+  if (!transferred) return null;
+
+  // The submitted GitHub URL has already resolved to the canonical issue. That
+  // redirect proof permits one exact pre-transfer BountyHub lookup, while the
+  // platform parser still requires the old repository and issue coordinates to
+  // match every collection and detail record.
+  return fetchBountyHubEvidence(
+    submitted.owner,
+    submitted.repo,
+    submitted.number,
+    fetchImpl,
+  );
+}
+
 export async function checkGithubIssue(
   issueUrl: string,
   env: CheckEnvironment = {},
   fetchImpl: FetchLike = fetch,
   now = new Date(),
+): Promise<AgentVerdict> {
+  return checkGithubIssueInternal(issueUrl, env, fetchImpl, now, true);
+}
+
+async function checkGithubIssueInternal(
+  issueUrl: string,
+  env: CheckEnvironment,
+  fetchImpl: FetchLike,
+  now: Date,
+  inspectLinkedSource: boolean,
 ): Promise<AgentVerdict> {
   let parsed;
   try {
@@ -363,13 +454,15 @@ export async function checkGithubIssue(
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
   const [bountyHubEvidence, issueHuntEvidence] = await Promise.all([
-    hasBountyHubReference(issueResponse.data, comments)
-      ? fetchBountyHubEvidence(owner, repo, number, fetchImpl)
-      : null,
-    hasIssueHuntReference(issueResponse.data, comments) &&
-        Number.isSafeInteger(repoResponse.data?.id) && repoResponse.data.id > 0
-      ? fetchIssueHuntEvidence(owner, repo, repoResponse.data.id, number, fetchImpl)
-      : null,
+    fetchCanonicalBountyHubEvidence(canonical, submitted, fetchImpl),
+    fetchCanonicalIssueHuntEvidence(
+      issueResponse.data,
+      comments,
+      canonical,
+      submitted,
+      repoResponse.data?.id,
+      fetchImpl,
+    ),
   ]);
   const platformEvidence = issueHuntEvidence?.state === "REWARDED" ||
       issueHuntEvidence?.submitted_pull_requests.length
@@ -404,12 +497,53 @@ export async function checkGithubIssue(
     now,
   });
 
+  const linkedCoordinates = externalSourceIssue(issueResponse.data, repoResponse.data);
+  let linkedVerdict: AgentVerdict | null = null;
+  let linkedErrorCode: string | null = null;
+  if (linkedCoordinates && inspectLinkedSource) {
+    try {
+      linkedVerdict = await checkGithubIssueInternal(linkedCoordinates.url, env, fetchImpl, now, false);
+    } catch (error) {
+      linkedErrorCode = error instanceof CheckError ? error.code : "LINKED_SOURCE_CHECK_FAILED";
+    }
+  }
+  const linkedSourceHardStop = Boolean(linkedCoordinates) && inspectLinkedSource &&
+    (linkedErrorCode !== null || linkedVerdict?.verdict === "AVOID");
+  const finalVerdict: AgentVerdict["verdict"] = linkedSourceHardStop ? "AVOID" : analysis.verdict;
+  const signals: VerdictSignal[] = analysis.signals.map((item) => ({
+    label: item.label,
+    impact: item.impact,
+    detail: item.detail,
+    evidence_url: item.evidenceUrl,
+    hard_stop: item.hardStop,
+  }));
+  if (linkedSourceHardStop) {
+    signals.push({
+      label: linkedErrorCode ? "External source issue could not be verified" : "External source issue is not actionable",
+      impact: -100,
+      detail: linkedErrorCode
+        ? `The explicitly linked source issue could not be verified (${linkedErrorCode}). Do not start mirrored work without authoritative source evidence.`
+        : `The explicitly linked source issue returned ${linkedVerdict!.verdict}; authority or payment language in this mirror cannot override the source repository's hard stops.`,
+      evidence_url: linkedCoordinates!.url,
+      hard_stop: true,
+    });
+  } else if (linkedVerdict) {
+    signals.push({
+      label: "External source issue checked",
+      impact: 0,
+      detail: `The explicitly linked source issue returned ${linkedVerdict.verdict}. The mirror still requires separate acceptance and payout verification.`,
+      evidence_url: linkedCoordinates!.url,
+      hard_stop: false,
+    });
+  }
+  const finalScore = linkedSourceHardStop ? 0 : analysis.score;
+
   return {
     product: "BountyVerdict",
     version: "1.0",
-    verdict: analysis.verdict,
-    score: analysis.score,
-    summary: summarize(analysis.verdict, analysis.signals.some((item) => item.hardStop)),
+    verdict: finalVerdict,
+    score: finalScore,
+    summary: summarize(finalVerdict, signals.some((item) => item.hard_stop)),
     service_reuse: SERVICE_REUSE.single,
     issue: {
       url: issueResponse.data.html_url,
@@ -420,13 +554,7 @@ export async function checkGithubIssue(
       state: issueResponse.data.state,
       repository: repoResponse.data.full_name,
     },
-    signals: analysis.signals.map((item) => ({
-      label: item.label,
-      impact: item.impact,
-      detail: item.detail,
-      evidence_url: item.evidenceUrl,
-      hard_stop: item.hardStop,
-    })),
+    signals,
     contribution_policy: {
       ai_use: analysis.aiPolicyBlocks.length
         ? "BLOCKED"
@@ -446,6 +574,32 @@ export async function checkGithubIssue(
       currency: analysis.reward.currency,
       evidence_url: analysis.reward.evidenceUrl,
     },
+    linked_source: linkedCoordinates
+      ? inspectLinkedSource
+        ? {
+            state: linkedVerdict ? "CHECKED" : "UNAVAILABLE",
+            url: linkedCoordinates.url,
+            verdict: linkedVerdict?.verdict ?? null,
+            reward_state: linkedVerdict?.reward.state ?? null,
+            reward_verification: linkedVerdict?.reward.verification ?? null,
+            error_code: linkedErrorCode,
+          }
+        : {
+            state: "DEPTH_LIMITED",
+            url: linkedCoordinates.url,
+            verdict: null,
+            reward_state: null,
+            reward_verification: null,
+            error_code: null,
+          }
+      : {
+          state: "NOT_APPLICABLE",
+          url: null,
+          verdict: null,
+          reward_state: null,
+          reward_verification: null,
+          error_code: null,
+        },
     coverage: {
       comments_scanned: comments.length,
       comments_total: commentsTotal,
@@ -468,7 +622,7 @@ export async function checkGithubIssue(
       "A VIABLE verdict is permission to investigate, not a payout guarantee.",
       "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
       "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
-      "When a mirror or source issue is linked, this check does not fetch that second issue; inspect it separately before coding.",
+      "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
       "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",

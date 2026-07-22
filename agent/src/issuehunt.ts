@@ -4,6 +4,8 @@ const ISSUEHUNT_MAX_RECORDS = 20;
 const NEXT_DATA_START = "__NEXT_DATA__ = ";
 const NEXT_DATA_END = ";__NEXT_LOADED_PAGES__";
 const ISSUEHUNT_REFERENCE = /https:\/\/(?:oss\.)?issuehunt\.io\/(?:r\/[^\s/]+\/[^\s/]+\/issues\/\d+|repos\/\d+\/issues\/\d+)(?:\b|\/)/i;
+const ISSUEHUNT_ROUTE_REFERENCE = /https:\/\/(?:oss\.)?issuehunt\.io\/r\/([a-z0-9](?:[a-z0-9-]{0,38}))\/([a-z0-9._-]{1,100})\/issues\/([1-9]\d{0,9})(?:\b|\/)/gi;
+const ISSUEHUNT_MAX_REFERENCE_ROUTES = 3;
 
 type FetchLike = typeof fetch;
 
@@ -72,6 +74,34 @@ export function hasIssueHuntReference(issue: unknown, comments: unknown[]): bool
   );
 }
 
+export function issueHuntReferenceRoutes(
+  issue: unknown,
+  comments: unknown[],
+  issueNumber: number,
+): Array<{ owner: string; repo: string; number: number }> {
+  if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) return [];
+  const texts: string[] = [];
+  if (isRecord(issue) && typeof issue.body === "string") texts.push(issue.body);
+  for (const comment of comments) {
+    if (isRecord(comment) && typeof comment.body === "string") texts.push(comment.body);
+  }
+
+  const routes: Array<{ owner: string; repo: string; number: number }> = [];
+  const seen = new Set<string>();
+  for (const text of texts) {
+    for (const match of text.matchAll(ISSUEHUNT_ROUTE_REFERENCE)) {
+      const number = Number(match[3]);
+      if (number !== issueNumber) continue;
+      const key = `${match[1].toLowerCase()}/${match[2].toLowerCase()}/${number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      routes.push({ owner: match[1], repo: match[2], number });
+      if (routes.length === ISSUEHUNT_MAX_REFERENCE_ROUTES) return routes;
+    }
+  }
+  return routes;
+}
+
 export function parseIssueHuntPage(
   html: unknown,
   owner: string,
@@ -110,19 +140,21 @@ export function parseIssueHuntPage(
       String(issue.repositoryGithubId) !== String(repositoryGithubId) || issue.number !== number ||
       !new Set(["funded", "ready", "rewarded"]).has(String(issue.status)) ||
       !Number.isSafeInteger(issue.depositAmount) || Number(issue.depositAmount) <= 0 ||
-      !Array.isArray(page.deposits) || page.deposits.length < 1 || page.deposits.length > ISSUEHUNT_MAX_RECORDS ||
+      !Array.isArray(page.deposits) ||
+      !Array.isArray(page.anonymousDeposits) ||
+      page.deposits.length + page.anonymousDeposits.length < 1 ||
+      page.deposits.length + page.anonymousDeposits.length > ISSUEHUNT_MAX_RECORDS ||
       !Array.isArray(page.pullRequests) || page.pullRequests.length > ISSUEHUNT_MAX_RECORDS ||
-      !Array.isArray(page.anonymousDeposits) || page.anonymousDeposits.length > 0 ||
       !Array.isArray(page.organizationGithubIdBalanceAmountEntries) || page.organizationGithubIdBalanceAmountEntries.length > 0) {
     return null;
   }
 
   const seenDeposits = new Set<string>();
   let activeDepositCents = 0n;
-  for (const deposit of page.deposits) {
+  for (const deposit of [...page.deposits, ...page.anonymousDeposits]) {
     if (!isRecord(deposit) || typeof deposit._id !== "string" || !/^[0-9a-f]{24}$/i.test(deposit._id) ||
-        seenDeposits.has(deposit._id) || typeof deposit.cancelled !== "boolean") return null;
-    seenDeposits.add(deposit._id);
+        seenDeposits.has(deposit._id.toLowerCase()) || typeof deposit.cancelled !== "boolean") return null;
+    seenDeposits.add(deposit._id.toLowerCase());
     const cents = exactPositiveCents(deposit.amount);
     if (cents === null) return null;
     if (!deposit.cancelled) activeDepositCents += cents;

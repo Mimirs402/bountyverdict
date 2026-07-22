@@ -3,7 +3,7 @@ import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const BOUNTY_DISCOVERY_DESCRIPTION =
-  "GitHub bounty eligibility, reward provenance, and claimability preflight for one public issue. Checks canonical open or deleted state, whether already assigned or claimed, soft locks, trusted bounty-app competition, referenced BountyHub pledge funding, withdrawn or unverified rewards, linked and failed PRs, attempt crowding, and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, newest bounded evidence windows, and explicit truncation.";
+  "Should I work on this GitHub issue? GitHub bounty eligibility and claimability preflight for one public issue. Checks canonical state, whether already assigned or claimed, soft locks, trusted platform funding and competition, withdrawn, unverified, or non-cash rewards, one explicitly linked GitHub source issue, linked or failed PRs, attempt crowding, and AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, bounded newest windows, and truncation.";
 
 export const exampleVerdict = {
   product: "BountyVerdict",
@@ -102,6 +102,14 @@ export const exampleVerdict = {
     currency: null,
     evidence_url: "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437",
   },
+  linked_source: {
+    state: "NOT_APPLICABLE",
+    url: null,
+    verdict: null,
+    reward_state: null,
+    reward_verification: null,
+    error_code: null,
+  },
   coverage: {
     comments_scanned: 96,
     comments_total: 96,
@@ -120,6 +128,7 @@ export const exampleVerdict = {
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
     "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
+    "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
@@ -193,6 +202,18 @@ export const outputSchema = {
       },
       required: ["state", "verification", "platform", "amount", "currency", "evidence_url"],
     },
+    linked_source: {
+      type: "object",
+      properties: {
+        state: { type: "string", enum: ["NOT_APPLICABLE", "CHECKED", "UNAVAILABLE", "DEPTH_LIMITED"] },
+        url: { type: ["string", "null"] },
+        verdict: { type: ["string", "null"], enum: ["AVOID", "CAUTION", "VIABLE", null] },
+        reward_state: { type: ["string", "null"], enum: ["LISTED", "PROMISED", "UNVERIFIED", "NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED", null] },
+        reward_verification: { type: ["string", "null"], enum: ["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE", null] },
+        error_code: { type: ["string", "null"] },
+      },
+      required: ["state", "url", "verdict", "reward_state", "reward_verification", "error_code"],
+    },
     coverage: {
       type: "object",
       properties: {
@@ -236,6 +257,7 @@ export const outputSchema = {
     "signals",
     "contribution_policy",
     "reward",
+    "linked_source",
     "coverage",
     "checked_at",
     "limitations",
@@ -344,6 +366,14 @@ const portfolioAssignedVerdict = {
     currency: "USD",
     evidence_url: "https://github.com/tenstorrent/tt-metal/issues/50522",
   },
+  linked_source: {
+    state: "NOT_APPLICABLE",
+    url: null,
+    verdict: null,
+    reward_state: null,
+    reward_verification: null,
+    error_code: null,
+  },
   coverage: {
     comments_scanned: 3,
     comments_total: 3,
@@ -362,6 +392,7 @@ const portfolioAssignedVerdict = {
     "A VIABLE verdict is permission to investigate, not a payout guarantee.",
     "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
     "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
+    "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
@@ -421,6 +452,14 @@ export const portfolioDiscoveryExample = {
       amount: null,
       currency: null,
       evidence_url: "https://github.com/typeorm/typeorm/issues/3357#issuecomment-3845555437",
+    },
+    linked_source: {
+      state: "NOT_APPLICABLE",
+      url: null,
+      verdict: null,
+      reward_state: null,
+      reward_verification: null,
+      error_code: null,
     },
     coverage: {
       comments_scanned: 96,

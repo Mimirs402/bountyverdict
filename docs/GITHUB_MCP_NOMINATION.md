@@ -1,6 +1,6 @@
 # GitHub public MCP Registry nomination
 
-GitHub's official publication route requires one email to `partnerships@github.com` after the server is present in the OSS MCP Registry. `io.github.Mimirs402/bountyverdict@1.1.9` already satisfies that prerequisite.
+GitHub's official publication route requires one email to `partnerships@github.com` after the server is present in the OSS MCP Registry. The release gate must first verify `io.github.Mimirs402/bountyverdict@1.1.10` in that registry before this nomination is sent.
 
 The nomination sender is deliberately one-shot and fixed to:
 

@@ -13,13 +13,14 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     mcpdrift: "$0.02",
   });
   assert.match(spec.info.title, /Agent Decision APIs/);
-  assert.equal(spec.info.version, "1.1.9");
+  assert.equal(spec.info.version, "1.1.10");
   assert.match(spec.info.description, /Seven bounded/);
   assert.match(spec.info["x-guidance"], /service_reuse/);
   assert.equal(spec.tags.length, 7);
   assert.equal(new Set(spec.tags.map((tag) => tag.name)).size, 7);
   const operation = spec.paths["/api/bounty-preflight"].post;
   assert.match(operation.summary, /GitHub bounty eligibility and claimability/i);
+  assert.match(operation.description, /^Should I work on this GitHub issue\?/i);
   assert.match(operation.description, /already assigned or claimed/i);
   assert.equal(operation["x-x402"].price, "$0.05");
   assert.equal(operation["x-x402"].network, "eip155:8453");
@@ -75,6 +76,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   );
   assert.equal(spec.paths["/api/harness"].get.deprecated, true);
   assert.equal(spec.paths["/api/skill"].get["x-x402"].price, "$0.06");
+  assert.match(spec.paths["/api/skill"].get.description, /^Is this agent skill safe to install\?/i);
   assert.deepEqual(spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.name), ["repo_url", "skill_path"]);
   assert.deepEqual(
     spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.schema.example),

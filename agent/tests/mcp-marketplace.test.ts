@@ -4,7 +4,7 @@ import { parseMcpMarketplaceListing, parseMcpMarketplaceSearchResponse } from ".
 
 const name = "io.github.Mimirs402/bountyverdict";
 const slug = "io-github-mimirs402-bountyverdict";
-const version = "1.1.9";
+const version = "1.1.10";
 const repository = "https://github.com/Mimirs402/bountyverdict";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=mcp-registry";
 const tools = [

@@ -2,6 +2,9 @@ import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
+export const SKILL_DISCOVERY_DESCRIPTION =
+  "Is this agent skill safe to install? Pre-install security audit for a public agent SKILL.md bundle. Pins the repository to a commit, scans the whole skill directory without executing it, uses repository context to reduce false positives, and flags credential exfiltration, remote or encoded execution, destructive commands, persistence, privilege escalation, instruction evasion, hidden scripts, symlinks, submodules, hardcoded secrets, and undeclared capabilities.";
+
 export const skillExample = {
   product: "SkillVerdict",
   version: "1.0",

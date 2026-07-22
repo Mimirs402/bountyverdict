@@ -80,6 +80,38 @@ function policyRequestsSensitiveAgentContext(value) {
     /(?:do not truncate|exact content|full initialization|populate.{0,40}real values)/i.test(text);
 }
 
+const SENSITIVE_DISCLOSURE_ACTION = /\b(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)\b/i;
+const SENSITIVE_DISCLOSURE_GUARD = /\b(?:(?:do not|don['’]?t|never|must not)\s+(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)|(?:redact|omit|mask)\b|(?:placeholder|names? only|not (?:the )?values?))[^.\n]{0,120}\b(?:secrets?|credentials?|passwords?|tokens?|keys?|prompts?|instructions?|context|environment variables?)\b/i;
+const HIDDEN_AGENT_CONTEXT_PATTERNS = [
+  /\b(?:verbatim|exact|full|complete|unabridged|unredacted)\s+(?:copy\s+of\s+)?(?:all\s+)?(?:system|developer|hidden|initialization|agent|model|session)?[ -]?(?:instructions?|guidelines?|prompts?|context|messages?)\b/i,
+  /\b(?:instructions?|guidelines?|prompts?|context)\b[^.\n]{0,120}\b(?:before|prior to)\b[^.\n]{0,40}\b(?:first|initial)\b[^.\n]{0,24}\b(?:human|user)\s+message\b/i,
+  /\b(?:system|developer|hidden)\s+(?:prompts?|messages?|instructions?|context)\b/i,
+  /\b(?:init_context|initialization context|initialization text|tool_access|session_config|tool access|session configuration)\b/i,
+];
+const SECRET_VALUE_PATTERN = /\b(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variable values?)\b|(?:^|\s)\.env\s+(?:file|contents?)\b/i;
+const PRIVATE_MACHINE_PATH_PATTERN = /\b(?:absolute|exact|full|unredacted)\b[^.\n]{0,80}\b(?:home (?:path|directory)|working (?:path|directory)|current working directory|shell history|hostname|machine username)\b/i;
+
+function sensitiveTaskDisclosure(value) {
+  const chunks = String(value ?? "")
+    .split(/\r?\n|(?<=[.!?])\s+/u)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  for (const chunk of chunks) {
+    if (SENSITIVE_DISCLOSURE_GUARD.test(chunk)) continue;
+    const requestsDisclosure = SENSITIVE_DISCLOSURE_ACTION.test(chunk) || /\b(?:must|required to|required contributor comment)\b/i.test(chunk);
+    if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(chunk))) {
+      return "hidden agent instructions or context";
+    }
+    if (requestsDisclosure && SECRET_VALUE_PATTERN.test(chunk)) {
+      return "secret or credential values";
+    }
+    if (requestsDisclosure && PRIVATE_MACHINE_PATH_PATTERN.test(chunk)) {
+      return "private machine paths or state";
+    }
+  }
+  return null;
+}
+
 const CLAIM_INTENT_TTL_DAYS = 30;
 const CLAIM_INTENT_PATTERNS = [
   /\b(?:please|kindly)\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
@@ -686,6 +718,15 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const sensitivePolicyRequests = policyDocuments.filter((document) =>
     policyRequestsSensitiveAgentContext(document.body)
   );
+  const unsafeTaskInstructions = [
+    { body: issue.body, html_url: issue.html_url, source: "issue body" },
+    ...comments
+      .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association))
+      .map((comment) => ({ ...comment, source: "maintainer comment" })),
+  ].flatMap((source) => {
+    const category = sensitiveTaskDisclosure(source.body);
+    return category ? [{ ...source, category }] : [];
+  });
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
   let score = 50;
@@ -961,6 +1002,18 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   }
 
+  if (unsafeTaskInstructions.length) {
+    score -= 100;
+    const instruction = unsafeTaskInstructions[0];
+    signals.push(signal(
+      "Unsafe task instructions",
+      -100,
+      `The ${instruction.source} requests disclosure or publication of ${instruction.category}. Do not perform or reproduce that request.`,
+      instruction.html_url,
+      true,
+    ));
+  }
+
   if ((issue.body ?? "").trim().length < 120) {
     score -= 10;
     signals.push(signal("Thin specification", -10, "The issue body is too short to provide strong acceptance criteria.", issue.html_url));
@@ -1000,6 +1053,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     withdrawals,
     aiPolicyBlocks,
     aiPolicyRequirements,
+    unsafeTaskInstructions,
     reward,
     activeClaims,
     claimantInterest,

@@ -1082,3 +1082,21 @@ CI and GitHub Pages passed for the field-test release. The paid Worker deploymen
 That final MCP wording change means epoch 53 no longer represents one immutable selection treatment. Its five eligible initialize and tools/list pairs remain preserved with zero protocol errors, unknown tools, validation errors, capacity rejections, payment challenges, presented payments, paid successes, or paid errors, but the epoch was immediately marked ineligible rather than blending later traffic. Rotation `field-test-release-epoch-54` started at `2026-07-22T20:35:16.608Z` with the precommitted 900-second quiet period. The local report-only monitor is healthy, the automatic epoch and distribution timers are enabled, and v6 uses separate activation and checkpoint files so the v5 prefix cannot be rewritten or reused.
 
 No customer purchase, revenue, or paid-work settlement occurred during release. The honest commerce counters remain **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs.
+
+## 2026-07-22 — Autonomous v6 activation and post-release opportunity audit
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Fresh bounty candidates checked: **37; zero actionable**
+- Paid-market decision: **no positive-risk-adjusted new submission**
+- Distribution measurement: **epoch 54 draining; automatic fail-closed activation prepared**
+
+A parallel read-only audit checked 37 additional live-looking bounty candidates through the local production-equivalent checker and canonical GitHub evidence. None passed the start gate. The closest funded candidate remained Memanto's $200 account/data/video/social task; a pending AsyncAPI microgrant was not finalized; and `rc0/mairix#29` had been canceled, already resolved by merged PR `#42`, and disowned by the original sponsor despite a stale Algora listing. That last case exposed a conservative legacy-format gap: comments saying a named sponsor “is offering” a bounty are not recognized. Recognition is deliberately deferred until sponsor-authored cancellation and loss-of-listing-control semantics can be modeled together; adding the reward alone could create a dangerous false positive.
+
+Taskmarket exposed 18 open escrow-hash-backed tasks, but no exact existing-product match. The only new self-contained candidate would net at most **0.4525 USDC** after its required call and already had 61 submissions with zero awards, so no fee was spent. The Flowise pitch remains pending selection for **1.999999 USDC net potential**, the existing eight Taskmarket submissions remain **22.866 USDC potential**, and Clawlancer remains unfunded. None is revenue.
+
+Current placement evidence separates visibility from demand. Agent Tools Cloud still finds all six fixed buyer-like questions in positions one or two, while the frozen v5 prefix reached five catalog events and zero downstream calls. GitHub Agent Finder PR `#11` is the highest-leverage pending runtime placement, but it is less than 24 hours old and correctly awaits maintainer review without a nudge. APIHub was also evaluated as a new agent marketplace: its public external index is activity-ranked, while direct provider onboarding currently requires email/dashboard configuration and a 10% commission, so it does not beat the already-open runtime placement or justify human setup during this experiment.
+
+The first epoch-54 quiet window reset at `2026-07-22T20:46:38.438Z` when conversion-capable traffic changed the trusted boundary. The 900-second rule was preserved. A new fail-closed reconciler now derives v6 activation only when rotation `field-test-release-epoch-54` is activated, epoch 54 is still the exact active conversion-eligible epoch, and its private baseline matches the rotation timestamp. It atomically writes a mode-`0600` activation file, refuses drift or late activation, and otherwise exits without changing state. This removes the remaining manual handoff while preserving the immutable v5 checkpoint.
+
+All **159 / 159** public tests and **485 / 485** Worker and operations tests pass, along with TypeScript checking and `git diff --check`. No bid, claim, comment, pull request, client contact, payment, listing resubmission, or customer metric was fabricated during this audit.

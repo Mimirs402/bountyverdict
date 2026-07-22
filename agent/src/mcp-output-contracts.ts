@@ -28,6 +28,14 @@ const bountyVerdictOutputSchema = rankedBountySchema.extend({
   version: z.literal("1.0"),
   service_reuse: serviceReuseSchema,
   signals: evidenceObjectsSchema,
+  linked_source: z.object({
+    state: z.enum(["NOT_APPLICABLE", "CHECKED", "UNAVAILABLE", "DEPTH_LIMITED"]),
+    url: nullableStringSchema,
+    verdict: z.enum(["AVOID", "CAUTION", "VIABLE"]).nullable(),
+    reward_state: z.enum(["LISTED", "PROMISED", "UNVERIFIED", "NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED"]).nullable(),
+    reward_verification: z.enum(["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE"]).nullable(),
+    error_code: nullableStringSchema,
+  }).strict(),
   checked_at: checkedAtSchema,
 }).passthrough();
 

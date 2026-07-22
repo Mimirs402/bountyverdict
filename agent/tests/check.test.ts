@@ -63,6 +63,35 @@ function githubMock(
   };
 }
 
+function withLinkedSource(
+  base: typeof fetch,
+  sourceIssue: Record<string, unknown>,
+  sourceRepository: Record<string, unknown> = {
+    id: 987654,
+    archived: false,
+    pushed_at: "2026-07-19T12:00:00Z",
+    html_url: "https://github.com/upstream/project",
+    full_name: "upstream/project",
+  },
+): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/repos/upstream/project/issues/77") {
+      return Response.json({ ...sourceIssue, comments: 0 }, { headers: { "x-ratelimit-remaining": "4980" } });
+    }
+    if (url.pathname === "/repos/upstream/project") {
+      return Response.json(sourceRepository, { headers: { "x-ratelimit-remaining": "4980" } });
+    }
+    if (/^\/repos\/upstream\/project\/issues\/77\/(?:comments|timeline)/.test(url.pathname)) {
+      return Response.json([], { headers: { "x-ratelimit-remaining": "4980" } });
+    }
+    if (url.pathname.startsWith("/repos/upstream/project/contents/")) {
+      return Response.json({ message: "not found" }, { status: 404, headers: { "x-ratelimit-remaining": "4980" } });
+    }
+    return base(input, init);
+  };
+}
+
 function withBountyHub(base: typeof fetch, record: Record<string, unknown>): typeof fetch {
   return async (input, init) => {
     const url = new URL(String(input));
@@ -484,15 +513,112 @@ test("returns CAUTION when a maintainer-owned listing mirrors an external source
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
     {},
-    githubMock([], null, mirrored),
+    withLinkedSource(githubMock([], null, mirrored), {
+      ...issue,
+      html_url: "https://github.com/upstream/project/issues/77",
+      author_association: "OWNER",
+      comments: 0,
+    }),
     new Date("2026-07-20T12:00:00Z"),
   );
 
   assert.equal(result.reward.state, "PROMISED");
   assert.equal(result.verdict, "CAUTION");
+  assert.equal(result.linked_source.state, "CHECKED");
+  assert.equal(result.linked_source.verdict, "VIABLE");
   assert.ok(result.signals.some((signal) =>
     signal.label === "External source issue requires separate verification" &&
     signal.evidence_url === "https://github.com/upstream/project/issues/77"
+  ));
+  assert.ok(result.signals.some((signal) => signal.label === "External source issue checked"));
+});
+
+test("returns AVOID when an explicitly linked source has no authorized bounty issuer", async () => {
+  const mirrored = {
+    ...issue,
+    body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\nThis $500 bounty mirrors the external implementation target with complete acceptance criteria.",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLinkedSource(githubMock([], null, mirrored), {
+      ...issue,
+      html_url: "https://github.com/upstream/project/issues/77",
+      body: "A $500 bounty with complete implementation scope and acceptance criteria.",
+      author_association: "NONE",
+      comments: 0,
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.equal(result.linked_source.state, "CHECKED");
+  assert.equal(result.linked_source.verdict, "AVOID");
+  assert.equal(result.linked_source.reward_state, "UNVERIFIED");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External source issue is not actionable" && signal.hard_stop
+  ));
+});
+
+test("fails closed when an explicitly linked source cannot be fetched", async () => {
+  const mirrored = {
+    ...issue,
+    body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\nThis $500 bounty mirrors the external implementation target with complete acceptance criteria.",
+  };
+  const base = githubMock([], null, mirrored);
+  const unavailableSource = (async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/repos/upstream/project/issues/77") {
+      return Response.json(
+        { message: "not found" },
+        { status: 404, headers: { "x-ratelimit-remaining": "4980" } },
+      );
+    }
+    return base(input, init);
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    unavailableSource,
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.equal(result.linked_source.state, "UNAVAILABLE");
+  assert.equal(result.linked_source.error_code, "ISSUE_NOT_FOUND");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External source issue could not be verified" && signal.hard_stop
+  ));
+});
+
+test("does not normalize docket-qualified payment language into a USD promise", async () => {
+  const mirrored = {
+    ...issue,
+    title: "[Bounty] [100$] Rewrite every comment",
+    body: "### Source URL\nhttps://github.com/upstream/project/issues/77\n\nPayment: The payment has been confirmed! 100USD (Unity-Station Dockets).\n\n### Real Reward\n$100\n\nComplete acceptance criteria are provided.",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLinkedSource(githubMock([], null, mirrored), {
+      ...issue,
+      html_url: "https://github.com/upstream/project/issues/77",
+      body: "Payment: 100USD (Unity-Station Dockets). Complete implementation scope and acceptance criteria.",
+      author_association: "NONE",
+      comments: 0,
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.reward.state, "UNVERIFIED");
+  assert.equal(result.reward.amount, null);
+  assert.equal(result.reward.currency, null);
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Reward denomination is non-cash or ambiguous" && signal.hard_stop
   ));
 });
 

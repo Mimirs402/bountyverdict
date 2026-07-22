@@ -65,8 +65,17 @@ export const MCP_NON_BUYER_CHANNELS = Object.freeze([
 ] as const satisfies readonly FunnelChannel[]);
 const DISCOVERY_NON_BUYER_CHANNELS = new Set<FunnelChannel>([
   "owner_automation",
+  "smithery",
   "x402_observer",
   "registry_or_directory",
+]);
+const MCP_AMBIGUOUS_MARKETPLACE_INSPECTION_CHANNELS = new Set<FunnelChannel>([
+  "smithery",
+]);
+const MCP_MARKETPLACE_INSPECTION_STAGES = new Set<McpFunnelStage>([
+  "initialize",
+  "tools_list",
+  "protocol_error",
 ]);
 const AGENT402_HEALTH_SURFACES = new Set<FunnelDiscoverySurface>([
   "openapi",
@@ -355,6 +364,15 @@ export function mcpBuyerCandidateTotals(snapshot: FunnelSnapshot): McpFunnelCoun
   const keys = ["events", ...MCP_FUNNEL_STAGES] as const;
   for (const channel of FUNNEL_CHANNELS) {
     if (excluded.has(channel)) continue;
+    if (MCP_AMBIGUOUS_MARKETPLACE_INSPECTION_CHANNELS.has(channel)) {
+      for (const stage of MCP_FUNNEL_STAGES) {
+        if (MCP_MARKETPLACE_INSPECTION_STAGES.has(stage)) continue;
+        const count = snapshot.mcp_by_channel[channel][stage];
+        totals[stage] += count;
+        totals.events += count;
+      }
+      continue;
+    }
     for (const key of keys) totals[key] += snapshot.mcp_by_channel[channel][key];
   }
   return totals;

@@ -838,3 +838,13 @@ The immutable schema-3 boundary preserved one aggregate buyer-candidate event cl
 This isolated treatment improves only future, structurally valid unknown-tool responses. A fully validated JSON-RPC and MCP `tools/call` request for an unadvertised string name receives a payment-free MCP `InvalidParams` error that tells the agent to refresh `tools/list`, enumerates the six exact supported names with task routing, and warns against guessed aliases. The response and telemetry never echo or retain the requested name or arguments. Unsupported protocol and malformed JSON-RPC or MCP call traffic continue through the SDK's existing validation path, and all known-tool payment behavior is unchanged.
 
 The focused MCP suite passes **24 / 24**, the full Worker and operations suite passes **428 / 428**, and the public contract suite passes **146 / 146** on Node 22.23.1. TypeScript checking, `git diff --check`, the production dependency audit, and Cloudflare's production dry bundle also pass. The candidate remains local and has not generated production traffic.
+
+## 2026-07-22 — Smithery catalog traffic removed from buyer evidence
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Invalidated observation: **5 initialize / 5 tools/list / 0 tool calls**
+
+The first five apparent events in the task-leading-description epoch were all attributed to Smithery and stopped at passive MCP initialization and tool enumeration. That cadence is indistinguishable from marketplace catalog inspection, so it is not evidence that five agents considered buying a tool and will not be used as the experiment denominator.
+
+Buyer-candidate accounting now excludes Smithery initialization, tool listing, and protocol-only events while retaining actual Smithery-routed tool-selection and payment stages. Smithery discovery cohorts are also excluded from buyer discovery totals. The raw channel counters remain intact for distribution debugging, and no purchase or revenue inference changes. The correction passes all **456 / 456** Worker and operations tests, all **149 / 149** public contract tests, TypeScript checking, and `git diff --check`.

@@ -694,7 +694,7 @@ test("Glama release probes remain distribution evidence and never enter the buye
   assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 1);
 });
 
-test("direct editor and integration runtime channels remain buyer-candidate activity", () => {
+test("direct editor runtimes count while passive Smithery catalog inspection does not", () => {
   const snapshot = createFunnelSnapshot();
   for (const path of [
     "/mcp?source=cursor-deeplink",
@@ -721,7 +721,41 @@ test("direct editor and integration runtime channels remain buyer-candidate acti
   assert.equal(snapshot.mcp_by_channel.openhands_integrations.tools_list, 1);
   assert.equal(snapshot.mcp_by_channel.goose_extensions.tools_list, 1);
   assert.equal(snapshot.mcp_by_channel.smithery.tools_list, 1);
-  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 5);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 4);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).events, 4);
+});
+
+test("Smithery tool-selection stages remain buyer-candidate evidence", () => {
+  const snapshot = createFunnelSnapshot();
+  for (const stage of [
+    "initialize",
+    "tools_list",
+    "protocol_error",
+    "tool_not_found",
+    "validation_error",
+    "payment_required",
+  ] as const) {
+    recordMcpObservation(snapshot, {
+      observed_at: "2026-07-22T15:30:00.000Z",
+      stage,
+      product: stage === "validation_error" || stage === "payment_required" ? "single" : null,
+      source: "automated_client",
+      client_class: "agent_runtime",
+      client_family: "not_applicable",
+      validation_kind: stage === "validation_error" ? "missing_required" : "not_applicable",
+      channel: "smithery",
+    });
+  }
+
+  const buyerCandidate = mcpBuyerCandidateTotals(snapshot);
+  assert.equal(snapshot.mcp_by_channel.smithery.events, 6);
+  assert.equal(buyerCandidate.events, 3);
+  assert.equal(buyerCandidate.initialize, 0);
+  assert.equal(buyerCandidate.tools_list, 0);
+  assert.equal(buyerCandidate.protocol_error, 0);
+  assert.equal(buyerCandidate.tool_not_found, 1);
+  assert.equal(buyerCandidate.validation_error, 1);
+  assert.equal(buyerCandidate.payment_required, 1);
 });
 
 test("buyer-candidate discovery excludes directory health without hiding real acquisition channels", () => {
@@ -748,6 +782,7 @@ test("buyer-candidate discovery excludes directory health without hiding real ac
   assert.equal(isBuyerCandidateDiscoveryCohort("openapi|agent402|agent402|unspecified_or_other"), false);
   assert.equal(isBuyerCandidateDiscoveryCohort("well_known_x402_probe|agent402|agent402|unspecified_or_other"), false);
   assert.equal(isBuyerCandidateDiscoveryCohort("sample_single|agent402|agent402|unspecified_or_other"), true);
+  assert.equal(isBuyerCandidateDiscoveryCohort("openapi|smithery|agent_runtime|unspecified_or_other"), false);
   assert.equal(isBuyerCandidateDiscoveryCohort("openapi|github|unknown|unspecified_or_other"), true);
   assert.equal(isBuyerCandidateDiscoveryCohort("invalid|direct_or_hidden|unknown|json"), false);
 });

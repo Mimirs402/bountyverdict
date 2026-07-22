@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { unlinkSync } from "node:fs";
+import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { loadFunnelSnapshot } from "../src/funnel-telemetry.ts";
@@ -13,6 +14,7 @@ import {
 const funnelStateFile = process.env.FUNNEL_STATE_FILE || `${homedir()}/.local/state/bountyverdict/funnel-telemetry.json`;
 const baselineFile = process.env.TRUSTED_FUNNEL_BASELINE_FILE || `${homedir()}/.local/state/bountyverdict/funnel-trusted-baseline.json`;
 const historyFile = process.env.TRUSTED_FUNNEL_HISTORY_FILE || `${homedir()}/.local/state/bountyverdict/funnel-trusted-epochs.json`;
+const mutationLockFile = `${historyFile}.lock`;
 const reason = process.env.FUNNEL_EPOCH_REASON || "";
 const requestedRotationId = process.env.FUNNEL_ROTATION_ID || "";
 const automaticPoll = requestedRotationId === "AUTO";
@@ -25,6 +27,20 @@ const quietSeconds = Number(quietSecondsInput);
 if (!Number.isSafeInteger(quietSeconds) || quietSeconds < 60 || quietSeconds > 3_600) {
   throw new Error("QUIET_PERIOD_SECONDS must be between 60 and 3600.");
 }
+
+const mutationLock = await open(mutationLockFile, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
+  if (error.code === "EEXIST") throw new Error("Trusted funnel state is currently being mutated.");
+  throw error;
+});
+await mutationLock.writeFile(`${process.pid}\n`);
+await mutationLock.sync();
+process.once("exit", () => {
+  try {
+    unlinkSync(mutationLockFile);
+  } catch {
+    // A missing lock is already released; any other cleanup failure remains fail-closed for the next run.
+  }
+});
 
 async function atomicWrite(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -99,14 +115,15 @@ try {
 }
 if (ledger.rotation?.status === "activated") {
   const active = ledger.epochs.find((epoch) => epoch.id === ledger.active_epoch_id);
-  if (!active || active.status !== "active" || !active.conversion_eligible) {
+  const activeBaseline = active ? trustedFunnelBaseline(active.baseline) : null;
+  if (!active || active.status !== "active" || !active.conversion_eligible || !activeBaseline) {
     throw new Error("Activated funnel epoch is missing or ineligible.");
   }
   const baselineMatches = previous.epoch_id === active.id &&
-    trustedBoundaryFingerprint(previous) === trustedBoundaryFingerprint(active.baseline);
+    trustedBoundaryFingerprint(previous) === trustedBoundaryFingerprint(activeBaseline);
   if (!baselineMatches) {
-    await atomicWrite(baselineFile, `${JSON.stringify(active.baseline, null, 2)}\n`);
-    previous = active.baseline;
+    await atomicWrite(baselineFile, `${JSON.stringify(activeBaseline, null, 2)}\n`);
+    previous = activeBaseline;
   }
   if (automaticPoll) {
     console.log(JSON.stringify({
@@ -146,7 +163,11 @@ const targetEpochId = ledger.rotation?.status === "draining"
 const candidate = captureTrustedFunnelBaseline(state, observedAt, rotationReason, targetEpochId);
 if (!ledger.rotation) {
   const active = ledger.epochs.find((epoch) => epoch.id === ledger.active_epoch_id);
-  if (!active || active.status !== "active" || active.id !== previous.epoch_id) throw new Error("Active epoch does not match the baseline.");
+  const activeBaseline = active ? trustedFunnelBaseline(active.baseline) : null;
+  if (!active || active.status !== "active" || active.id !== previous.epoch_id || !activeBaseline ||
+      trustedBoundaryFingerprint(activeBaseline) !== trustedBoundaryFingerprint(previous)) {
+    throw new Error("Active epoch does not match the baseline.");
+  }
   active.status = "draining";
   active.conversion_eligible = false;
   active.classification = "excluded_unattributed_owner_triggered_downstream_probe";

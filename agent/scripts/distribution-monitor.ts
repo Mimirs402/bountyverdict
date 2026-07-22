@@ -67,6 +67,8 @@ const NETWORK = "eip155:8453";
 const TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
 const GITHUB_REPOSITORY = "Mimirs402/bountyverdict";
+const LEGACY_EXPERIMENT_SKILLS_REPOSITORY = "cristianmoroaica/bountyverdict";
+const LEGACY_EXPERIMENT_SKILLS_URL = `https://skills.sh/${LEGACY_EXPERIMENT_SKILLS_REPOSITORY}`;
 const MCP_REGISTRY_NAME = "io.github.Mimirs402/bountyverdict";
 const MCP_REGISTRY_VERSION = "1.1.9";
 const MCP_REGISTRY_TIMEOUT_MS = 45_000;
@@ -1602,6 +1604,7 @@ async function acquisitionStatus(): Promise<Record<string, unknown>> {
       checked_at: checkedAt,
       github_pr_monitoring: state.github_pr_monitoring || null,
       skills_sh: state.skills_sh || null,
+      skills_sh_legacy_experiment: state.skills_sh_legacy_experiment || null,
       skills_sh_dedicated: state.skills_sh_dedicated || null,
       awesome_skills: state.awesome_skills || null,
       agenttool: state.agenttool || null,
@@ -2090,6 +2093,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const dedicatedSkillsShSearch = dedicatedSkillsSh.search_index || {};
   const awesomeSkills = report.acquisition?.awesome_skills || {};
   const experiment = report.acquisition?.experiment || {};
+  const experimentInstallProvenance = experiment.measurement_provenance?.install_counters || {};
   const publicDemand = report.acquisition?.public_demand_watch || {};
   const moltDemand = publicDemand.moltjobs || {};
   const openDemand = publicDemand.openjobs || {};
@@ -2465,10 +2469,11 @@ The MCP product table is the exact active-epoch non-owner delta and remains zero
 - Experiment status: ${experiment.status || "unavailable"}
 - Experiment baseline: 8 total installs, 2 router installs, 1 SkillVerdict workflow install, 0 genuine purchases
 - Experiment delta: ${Number(experiment.delta?.installs?.total || 0)} total installs, ${Number(experiment.delta?.installs?.router || 0)} router installs, ${Number(experiment.delta?.installs?.skillverdict || 0)} SkillVerdict workflow installs, ${Number(experiment.delta?.genuine_purchases || 0)} genuine purchases
+- Experiment install provenance: ${experimentInstallProvenance.measurement_role || "unavailable"}; ${experimentInstallProvenance.retrieval || "unavailable"} from ${experimentInstallProvenance.source_url || "unavailable"}; search requests ${experimentInstallProvenance.search_requests ?? "unavailable"}; askill substitution ${experimentInstallProvenance.askill_substitution === false ? "forbidden" : "unavailable"}
 - Classified next action: ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
 - Terminal snapshot: scheduled for 2026-07-27T16:37:15Z; the first terminal result is persisted and cannot be rewritten by later cumulative counters
 
-skills.sh counts are anonymous CLI telemetry with unknown provenance. They are tracked as a funnel signal only and are never counted as purchases or revenue.
+The frozen experiment's legacy skills.sh counts are anonymous CLI telemetry with unknown user provenance. They are retained only as the original install-counter series, never current business distribution, purchases, or revenue.
 
 ## Revenue detail
 
@@ -2686,7 +2691,41 @@ if (reportOnly) {
 }
 
 try {
-  const installs = (acquisition.skills_sh as Record<string, any> | null)?.install_counts || {};
+  const legacyExperimentSkills = acquisition.skills_sh_legacy_experiment as Record<string, any> | null;
+  const legacyExperimentProvenance = legacyExperimentSkills?.provenance as Record<string, unknown> | null;
+  const legacyExperimentInstallSourceValid =
+    legacyExperimentSkills?.listed === true &&
+    legacyExperimentSkills?.status === "measured" &&
+    legacyExperimentSkills?.url === LEGACY_EXPERIMENT_SKILLS_URL &&
+    legacyExperimentProvenance?.measurement_role === "frozen_skillverdict_experiment_only" &&
+    legacyExperimentProvenance?.source_repository === LEGACY_EXPERIMENT_SKILLS_REPOSITORY &&
+    legacyExperimentProvenance?.source_url === LEGACY_EXPERIMENT_SKILLS_URL &&
+    legacyExperimentProvenance?.retrieval === "passive_exact_public_page_only" &&
+    legacyExperimentProvenance?.authenticated === false &&
+    legacyExperimentProvenance?.mutated === false &&
+    legacyExperimentProvenance?.search_requests === 0 &&
+    legacyExperimentProvenance?.canonical_business_distribution === false;
+  const installs = legacyExperimentInstallSourceValid ? legacyExperimentSkills.install_counts || {} : {};
+  const experimentMeasurementProvenance = {
+    install_counters: {
+      acquisition_field: "skills_sh_legacy_experiment",
+      measurement_role: "frozen_skillverdict_experiment_only",
+      source_repository: LEGACY_EXPERIMENT_SKILLS_REPOSITORY,
+      source_url: LEGACY_EXPERIMENT_SKILLS_URL,
+      retrieval: "passive_exact_public_page_only",
+      authenticated: false,
+      mutated: false,
+      search_requests: 0,
+      canonical_business_distribution: false,
+      askill_substitution: false,
+    },
+    registry_queries: {
+      acquisition_field: "x402scout",
+    },
+    purchases: {
+      source: "recognized_non_owner_onchain_settlements",
+    },
+  } as const;
   const scout = acquisition.x402scout as Record<string, unknown> | null;
   const recognizedPurchases = Array.isArray(revenue.recognized_transfers)
     ? (revenue.recognized_transfers as Array<Record<string, unknown>>).map((transfer) => ({
@@ -2703,23 +2742,28 @@ try {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  const evaluated = persisted.terminal_result || evaluateEarnedPlacementExperiment({
-    checked_at: checkedAt,
-    healthy: errors.length === 0,
-    persisted_started_at: typeof persisted.started_at === "string" ? persisted.started_at : undefined,
-    total_installs: optionalCount((acquisition.skills_sh as Record<string, unknown> | null)?.total_installs),
-    router_installs: optionalCount(installs["route-github-agent-checks"]),
-    skillverdict_installs: optionalCount(installs["preflight-agent-skills"]),
-    skillverdict_registry_queries: optionalCount(scout?.skillverdict_query_count),
-    non_target_registry_queries: optionalCount(scout?.non_target_query_count),
-    recognized_purchases: recognizedPurchases,
-    placements: [
-      acquisition.security_directory_pr as Record<string, unknown>,
-      acquisition.x402_directory_pr as Record<string, unknown>,
-      acquisition.agent_plugins_pr as Record<string, unknown>,
-      acquisition.x402scout as Record<string, unknown>,
-    ],
-  });
+  const evaluated = persisted.terminal_result || {
+    ...evaluateEarnedPlacementExperiment({
+      checked_at: checkedAt,
+      healthy: errors.length === 0,
+      persisted_started_at: typeof persisted.started_at === "string" ? persisted.started_at : undefined,
+      total_installs: legacyExperimentInstallSourceValid
+        ? optionalCount(legacyExperimentSkills.total_installs)
+        : undefined,
+      router_installs: optionalCount(installs["route-github-agent-checks"]),
+      skillverdict_installs: optionalCount(installs["preflight-agent-skills"]),
+      skillverdict_registry_queries: optionalCount(scout?.skillverdict_query_count),
+      non_target_registry_queries: optionalCount(scout?.non_target_query_count),
+      recognized_purchases: recognizedPurchases,
+      placements: [
+        acquisition.security_directory_pr as Record<string, unknown>,
+        acquisition.x402_directory_pr as Record<string, unknown>,
+        acquisition.agent_plugins_pr as Record<string, unknown>,
+        acquisition.x402scout as Record<string, unknown>,
+      ],
+    }),
+    measurement_provenance: experimentMeasurementProvenance,
+  };
   const terminalStatuses = new Set([
     "inconclusive_measurement",
     "target_purchase_success",
@@ -2737,6 +2781,7 @@ try {
     started_at: persisted.started_at || evaluated.started_at,
     ends_at: persisted.ends_at || evaluated.ends_at,
     baseline: persisted.baseline || evaluated.baseline,
+    measurement_provenance: persisted.measurement_provenance || experimentMeasurementProvenance,
     terminal_result: terminalResult,
   }, null, 2)}\n`);
   acquisition = {

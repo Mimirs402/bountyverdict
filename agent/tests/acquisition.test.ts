@@ -79,6 +79,35 @@ test("skills.sh acquisition parser fails closed on partial or malformed telemetr
   assert.throws(() => parseSkillsShInstallCounts(html), /route-github-agent-checks/);
 });
 
+test("frozen legacy skills.sh counters retain their original identity and experiment boundary", () => {
+  const html = PUBLISHED_SKILLS.map((skill) =>
+    `<a href="/cristianmoroaica/bountyverdict/${skill}"><span>${skill === "route-github-agent-checks" ? "2" : "1"}</span></a>`
+  ).join("");
+  const installs = parseSkillsShInstallCounts(html, "cristianmoroaica/bountyverdict");
+  assert.equal(installs.total, 8);
+  assert.equal(installs.by_skill["route-github-agent-checks"], 2);
+  assert.equal(installs.by_skill["preflight-agent-skills"], 1);
+
+  const result = evaluateEarnedPlacementExperiment({
+    checked_at: "2026-07-22T09:48:05.578Z",
+    healthy: true,
+    persisted_started_at: "2026-07-20T16:37:12.796345+00:00",
+    total_installs: installs.total,
+    router_installs: installs.by_skill["route-github-agent-checks"],
+    skillverdict_installs: installs.by_skill["preflight-agent-skills"],
+    skillverdict_registry_queries: 0,
+    non_target_registry_queries: 0,
+    recognized_purchases: [],
+    placements: [],
+  });
+  assert.equal(result.status, "running");
+  assert.equal(result.measurement_valid, true);
+  assert.equal(result.started_at, "2026-07-20T16:37:12.796345+00:00");
+  assert.equal(result.ends_at, "2026-07-27T16:37:12.796Z");
+  assert.deepEqual(result.delta.installs, { total: 0, router: 0, skillverdict: 0 });
+  assert.equal(result.next_action.code, "hold_experiment_constant");
+});
+
 const baselineExperiment = {
   checked_at: "2026-07-20T16:30:00.000Z",
   healthy: true,

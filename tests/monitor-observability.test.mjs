@@ -50,6 +50,49 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /github_skill: githubSkill/);
 });
 
+test("Skills.sh keeps canonical business discovery separate from the frozen legacy counter series", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  const canonicalStart = directory.indexOf("async function skillsShStatus");
+  const legacyStart = directory.indexOf("async function skillsShLegacyExperimentStatus");
+  const dedicatedStart = directory.indexOf("async function skillsShDedicatedStatus");
+  assert.ok(canonicalStart >= 0 && legacyStart > canonicalStart && dedicatedStart > legacyStart);
+  const canonical = directory.slice(canonicalStart, legacyStart);
+  const legacy = directory.slice(legacyStart, dedicatedStart);
+
+  assert.match(directory, /const skillsUrl = "https:\/\/skills\.sh\/Mimirs402\/bountyverdict"/);
+  assert.match(canonical, /url\.searchParams\.set\("owner", "Mimirs402"\)/);
+  assert.match(canonical, /`Mimirs402\/bountyverdict\/\$\{query\.skill\}`/);
+  assert.doesNotMatch(canonical, /cristianmoroaica/i);
+
+  assert.match(directory, /const legacyExperimentSkillsRepository = "cristianmoroaica\/bountyverdict"/);
+  assert.match(legacy, /parseSkillsShInstallCounts\(body, legacyExperimentSkillsRepository\)/);
+  assert.match(legacy, /passive_exact_public_page_only/);
+  assert.match(legacy, /search_requests: 0/);
+  assert.match(legacy, /authenticated: false/);
+  assert.match(legacy, /mutated: false/);
+  assert.equal((legacy.match(/\bfetch\(/g) || []).length, 1);
+  assert.doesNotMatch(legacy, /skills\.sh\/api\/search|searchQueries|url\.searchParams|execFileAsync|authorization|askill/i);
+  assert.match(directory, /skills_sh_legacy_experiment: legacyExperimentSkills/);
+
+  const wiringStart = distribution.indexOf(
+    "const legacyExperimentSkills = acquisition.skills_sh_legacy_experiment",
+  );
+  const wiringEnd = distribution.indexOf("const agentToolsCloud =", wiringStart);
+  assert.ok(wiringStart >= 0 && wiringEnd > wiringStart);
+  const wiring = distribution.slice(wiringStart, wiringEnd);
+  assert.match(wiring, /legacyExperimentInstallSourceValid/);
+  assert.match(wiring, /acquisition_field: "skills_sh_legacy_experiment"/);
+  assert.match(wiring, /askill_substitution: false/);
+  assert.match(wiring, /measurement_provenance: experimentMeasurementProvenance/);
+  assert.match(wiring, /persisted\.terminal_result \|\| \{/);
+  assert.match(wiring, /measurement_provenance: persisted\.measurement_provenance \|\| experimentMeasurementProvenance/);
+  assert.doesNotMatch(wiring, /acquisition\.skills_sh(?:\s|\.|\?)/);
+  assert.doesNotMatch(wiring, /acquisition\.askill/i);
+});
+
 test("directory monitoring tracks the dedicated Skills.sh adapter and indexing request", async () => {
   const [directory, distribution, parser] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),

@@ -73,6 +73,8 @@ if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
 const repository = "https://github.com/Mimirs402/bountyverdict";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
 const skillsUrl = "https://skills.sh/Mimirs402/bountyverdict";
+const legacyExperimentSkillsRepository = "cristianmoroaica/bountyverdict";
+const legacyExperimentSkillsUrl = `https://skills.sh/${legacyExperimentSkillsRepository}`;
 const skillsDedicatedUrl = "https://skills.sh/Mimirs402/bountyverdict-mcp-skill";
 const skillsDedicatedIssueUrl = "https://github.com/vercel-labs/skills/issues/1754";
 const skillsDedicatedIssueTitle = "Listing: Request indexing for Mimirs402/bountyverdict-mcp-skill";
@@ -298,6 +300,7 @@ const skillsShBuyerQueries = Object.freeze([
 ]);
 const stateFile = process.env.DIRECTORY_STATE_FILE || `${homedir()}/.local/state/bountyverdict/directories.json`;
 const timeoutMs = 30_000;
+const skillsShMaximumPageBytes = 2_000_000;
 const agentSkillRetryMs = 20 * 60 * 60 * 1000;
 const forceAgentSkillSubmission = process.env.AGENTSKILL_FORCE_SUBMIT === "YES";
 const execFileAsync = promisify(execFile);
@@ -350,7 +353,7 @@ async function skillsShStatus(): Promise<Record<string, unknown>> {
         const url = new URL("https://skills.sh/api/search");
         url.searchParams.set("q", query);
         url.searchParams.set("limit", "100");
-        url.searchParams.set("owner", "cristianmoroaica");
+        url.searchParams.set("owner", "Mimirs402");
         return fetch(url, {
           headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
           signal: AbortSignal.timeout(timeoutMs),
@@ -369,9 +372,9 @@ async function skillsShStatus(): Promise<Record<string, unknown>> {
         throw new Error("skills.sh search returned malformed telemetry.");
       }
       const query = searchQueries[index];
-      const expectedId = query.skill ? `cristianmoroaica/bountyverdict/${query.skill}` : null;
+      const expectedId = query.skill ? `Mimirs402/bountyverdict/${query.skill}` : null;
       const rank = expectedId === null
-        ? (payload.skills as Array<Record<string, unknown>>).findIndex(({ source }) => source === "cristianmoroaica/bountyverdict")
+        ? (payload.skills as Array<Record<string, unknown>>).findIndex(({ source }) => source === "Mimirs402/bountyverdict")
         : (payload.skills as Array<Record<string, unknown>>).findIndex(({ id }) => id === expectedId);
       return { ...query, found: rank >= 0, rank: rank >= 0 ? rank + 1 : null, returned_results: payload.skills.length };
     }));
@@ -409,6 +412,65 @@ async function skillsShStatus(): Promise<Record<string, unknown>> {
       listed: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function skillsShLegacyExperimentStatus(): Promise<Record<string, unknown>> {
+  const provenance = {
+    measurement_role: "frozen_skillverdict_experiment_only",
+    source_repository: legacyExperimentSkillsRepository,
+    source_url: legacyExperimentSkillsUrl,
+    retrieval: "passive_exact_public_page_only",
+    authenticated: false,
+    mutated: false,
+    search_requests: 0,
+    canonical_business_distribution: false,
+  } as const;
+  try {
+    const response = await fetch(legacyExperimentSkillsUrl, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      return {
+        url: legacyExperimentSkillsUrl,
+        http_status: response.status,
+        listed: false,
+        status: "measurement_unavailable",
+        provenance,
+      };
+    }
+    const body = await readBoundedText(response, skillsShMaximumPageBytes);
+    const listed = body.includes(legacyExperimentSkillsRepository) &&
+      !body.toLowerCase().includes("not found");
+    if (!listed) {
+      return {
+        url: legacyExperimentSkillsUrl,
+        http_status: response.status,
+        listed: false,
+        status: "measurement_unavailable",
+        provenance,
+      };
+    }
+    const installs = parseSkillsShInstallCounts(body, legacyExperimentSkillsRepository);
+    return {
+      url: legacyExperimentSkillsUrl,
+      http_status: response.status,
+      listed: true,
+      status: "measured",
+      total_installs: installs.total,
+      install_counts: installs.by_skill,
+      provenance,
+      measurement: "legacy_anonymous_cli_install_telemetry_for_frozen_experiment_only_not_current_business_distribution_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      url: legacyExperimentSkillsUrl,
+      listed: false,
+      status: "measurement_unavailable",
+      error: error instanceof Error ? error.message : String(error),
+      provenance,
     };
   }
 }
@@ -3175,6 +3237,7 @@ try {
 
 const [
   skills,
+  legacyExperimentSkills,
   skillsDedicated,
   awesomeSkills,
   agenttool,
@@ -3223,6 +3286,7 @@ const [
   agentSkillsMd,
 ] = await Promise.all([
   skillsShStatus(),
+  skillsShLegacyExperimentStatus(),
   skillsShDedicatedStatus(),
   awesomeSkillsStatus(),
   agentToolStatus(),
@@ -3459,6 +3523,7 @@ const state = {
   repository,
   github_pr_monitoring: githubPrMonitoring,
   skills_sh: skills,
+  skills_sh_legacy_experiment: legacyExperimentSkills,
   skills_sh_dedicated: skillsDedicated,
   awesome_skills: awesomeSkills,
   agenttool,

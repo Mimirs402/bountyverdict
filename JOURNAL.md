@@ -1183,3 +1183,18 @@ The combined quality release `3f0b7d046e06b9569302069476fb4553f3698bb2` is now l
 Rotation `agent_finder_contract_epoch_55` remained stable for **903 seconds** across five observations and activated epoch 55 at `2026-07-22T21:34:44.881Z`. Its active baseline carries the same epoch and timestamp and is conversion-eligible. The v7 reconciler wrote an owner-private mode-`0600` activation bound to production release `3f0b7d046e06b9569302069476fb4553f3698bb2`, manifest activation `22dbff80a09276098287249d5b8f992dec5cfa0e`, and the exact drain boundary.
 
 A concurrent publication handoff briefly generated a private activation with the correct release and timestamp but a non-existent manifest commit suffix. The monitor failed closed when that coordinate changed. Both invalid artifacts were retained as mode-`0600` audit backups, the activation was regenerated from the authoritative Git commit, and the stale field was removed from a preserved report copy. The subsequent report-only service completed successfully with `healthy: true`, no errors, a frozen all-zero v7 prefix, **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs. No owner request is counted as customer demand.
+
+## 2026-07-23 — Blind buyer searches expose the next distribution gap
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v7 checkpoint: **1 / 25 eligible tools/list; zero downstream calls**
+- New verified placement: **MCP Market**
+
+Four owner-run Coinbase Bazaar searches used unbranded questions an agent could plausibly ask. `check whether a GitHub bounty is still available` returned BountyVerdict at rank **1**; `why did my GitHub Actions workflow fail` returned RunVerdict at rank **1** and FlakeVerdict at rank **3**. The broader `should I work on this GitHub issue` query did not return BountyVerdict in the top ten, and `is this agent skill safe to install` did not return SkillVerdict in the four available results. These are fixed owner-run visibility probes, not marketplace query volume, impressions, buyers, calls, or purchases.
+
+The misses identify a bounded copy-distribution opportunity: the two weak Bazaar resource descriptions do not lead with those broad buyer questions, while the two strong results do. No production metadata was changed because a new deployment would move the exact production coordinate while v7 is collecting its clean sample. The copy improvement is held until that boundary closes.
+
+An independent live browser verification found BountyVerdict already indexed at `https://mcpmarket.com/server/bountyverdict` under `Mimirs402`. Its rendered listing accurately describes seven paid, bounded decision APIs, per-call Base USDC through x402, free samples, and the canonical product page. The raw catalog stub alone is not used because it carries older generic copy. A bounded fail-closed parser and audited directory-monitor entry now verify the rendered business identity, paid x402 disclosure, canonical listing, and product link. MCP Market exposes no bounded public impression, install, or call counter on this listing, so the monitor records none and makes no demand claim.
+
+During the final verification window, epoch 55 observed one eligible privacy-safe buyer-candidate pair: one initialization and one tools/list response from an unknown client over a direct or hidden channel, followed by no tool invocation. A separate registry-or-directory pair remains distribution-crawler evidence and is excluded from the v7 buyer-candidate delta. The clean interpretation is therefore reach without selection, with **24** eligible tools/list events still required; neither pair is a purchase.

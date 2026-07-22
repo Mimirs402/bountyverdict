@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -65,12 +65,18 @@ import {
   parseMcpMarketplaceListing,
   parseMcpMarketplaceSearchResponse,
 } from "../src/mcp-marketplace.ts";
+import {
+  MCP_MARKET_COM_MAX_PAGE_BYTES,
+  parseMcpMarketComListing,
+} from "../src/mcp-market-com.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
 }
 
 const repository = "https://github.com/Mimirs402/bountyverdict";
+const mcpMarketComUrl = "https://mcpmarket.com/server/bountyverdict";
+const publicProductUrl = "https://mimirs402.github.io/bountyverdict/";
 const agentToolUrl = "https://agenttool.sh/tools/bountyverdict-agent-decision-apis";
 const skillsUrl = "https://skills.sh/Mimirs402/bountyverdict";
 const legacyExperimentSkillsRepository = "cristianmoroaica/bountyverdict";
@@ -3294,6 +3300,56 @@ async function mcpMarketplaceStatus(
   }
 }
 
+async function mcpMarketComStatus(
+  previousStatus: Record<string, any>,
+  observedAt: string,
+): Promise<Record<string, unknown>> {
+  let profileDirectory: string | null = null;
+  try {
+    profileDirectory = await mkdtemp(`${tmpdir()}/bountyverdict-mcpmarket-`);
+    const { stdout } = await execFileAsync("chromium", [
+      "--headless",
+      "--no-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--disable-background-networking",
+      `--user-data-dir=${profileDirectory}`,
+      "--dump-dom",
+      mcpMarketComUrl,
+    ], {
+      timeout: 30_000,
+      maxBuffer: MCP_MARKET_COM_MAX_PAGE_BYTES * 2,
+    });
+    const parsed = parseMcpMarketComListing(
+      stdout,
+      mcpMarketComUrl,
+      repository,
+      publicProductUrl,
+    );
+    return {
+      url: mcpMarketComUrl,
+      checked_at: observedAt,
+      first_listed_at: previousStatus.first_listed_at || observedAt,
+      ...parsed,
+      status: parsed.contract_verified ? "listed_contract_verified" : "listed_contract_drift",
+      measurement: "public_listing_and_copy_contract_only_not_search_volume_impressions_installs_tool_calls_purchases_or_revenue",
+      usage_note: "MCP Market exposes no bounded public impression, install, or call counter on this listing; none is inferred.",
+    };
+  } catch (error) {
+    return {
+      url: mcpMarketComUrl,
+      checked_at: observedAt,
+      listed: previousStatus.listed === true,
+      contract_verified: false,
+      status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+      measurement: "public_listing_and_copy_contract_only_not_search_volume_impressions_installs_tool_calls_purchases_or_revenue",
+    };
+  } finally {
+    if (profileDirectory) await rm(profileDirectory, { recursive: true, force: true });
+  }
+}
+
 let previous: Record<string, any> = {};
 try {
   previous = JSON.parse(await readFile(stateFile, "utf8"));
@@ -3335,6 +3391,7 @@ const [
   agentFinderCatalog,
   ardCatalog,
   mcpMarketplace,
+  mcpMarketCom,
   agent402,
   x402scout,
   x402scan,
@@ -3384,6 +3441,7 @@ const [
   agentFinderCatalogStatus(previous.agent_finder_catalog || {}, new Date().toISOString()),
   ardCatalogStatus(previous.ard_catalog || {}, new Date().toISOString()),
   mcpMarketplaceStatus(previous.mcp_marketplace || {}, new Date().toISOString()),
+  mcpMarketComStatus(previous.mcp_market_com || {}, new Date().toISOString()),
   agent402Status(),
   x402ScoutStatus(),
   x402ScanStatus(),
@@ -3632,6 +3690,7 @@ const state = {
   agent_finder_catalog: agentFinderCatalog,
   ard_catalog: ardCatalog,
   mcp_marketplace: mcpMarketplace,
+  mcp_market_com: mcpMarketCom,
   agent402,
   x402scout,
   x402scan,

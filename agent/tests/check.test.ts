@@ -22,13 +22,32 @@ const repository = {
   full_name: "acme/widget",
 };
 
-function githubMock(comments: unknown[] = [], policy: string | null = null, issueOverride = issue): typeof fetch {
+function githubMock(
+  comments: unknown[] = [],
+  policy: string | null = null,
+  issueOverride = issue,
+  reportedComments: unknown = comments.length,
+): typeof fetch {
+  const servedComments = comments.map((comment, index) => {
+    if (typeof comment !== "object" || comment === null || Array.isArray(comment)) return comment;
+    return {
+      id: index + 1,
+      html_url: `https://github.com/acme/widget/issues/4#issuecomment-${index + 1}`,
+      created_at: "2026-07-20T10:00:00Z",
+      body: "",
+      author_association: "NONE",
+      user: null,
+      ...comment,
+    };
+  });
   return async (input) => {
     const url = String(input);
     const headers = { "x-ratelimit-remaining": "4990" };
-    if (/\/issues\/4$/.test(url)) return Response.json(issueOverride, { headers });
+    if (/\/issues\/4$/.test(url)) {
+      return Response.json({ ...issueOverride, comments: reportedComments }, { headers });
+    }
     if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
-    if (/\/comments\?/.test(url)) return Response.json(comments, { headers });
+    if (/\/comments\?/.test(url)) return Response.json(servedComments, { headers });
     if (/\/timeline\?/.test(url)) return Response.json([], { headers });
     if (policy && /\/contents\/CONTRIBUTING\.md$/.test(url)) {
       return Response.json({
@@ -455,9 +474,17 @@ test("large issues retain the first setup page and newest claim pages", async ()
     const headers = { "x-ratelimit-remaining": "4990" };
     if (/\/issues\/4$/.test(url)) return Response.json(largeIssue, { headers });
     if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
-    if (/\/comments\?.*page=1$/.test(url)) return Response.json([{ id: 1, body: "setup", user: { login: "maintainer" } }], { headers });
-    if (/\/comments\?.*page=18$/.test(url)) return Response.json([{ id: 1801, body: "/opire try", user: { login: "new-solver-a" } }], { headers });
-    if (/\/comments\?.*page=19$/.test(url)) return Response.json([{ id: 1901, body: "/opire try", user: { login: "new-solver-b" } }], { headers });
+    const comment = (id: number, body: string, login: string) => ({
+      id,
+      body,
+      user: { login },
+      author_association: "NONE",
+      created_at: "2026-07-20T10:00:00Z",
+      html_url: `https://github.com/acme/widget/issues/4#issuecomment-${id}`,
+    });
+    if (/\/comments\?.*page=1$/.test(url)) return Response.json([comment(1, "setup", "maintainer")], { headers });
+    if (/\/comments\?.*page=18$/.test(url)) return Response.json([comment(1801, "/opire try", "new-solver-a")], { headers });
+    if (/\/comments\?.*page=19$/.test(url)) return Response.json([comment(1901, "/opire try", "new-solver-b")], { headers });
     if (/\/timeline\?.*page=1$/.test(url)) {
       return Response.json([], { headers: { ...headers, link: '<https://api.github.com/repos/acme/widget/issues/4/timeline?per_page=100&page=5>; rel="last"' } });
     }
@@ -482,6 +509,131 @@ test("large issues retain the first setup page and newest claim pages", async ()
   assert.ok(requested.some((url) => /\/comments\?.*page=18$/.test(url)));
   assert.ok(requested.some((url) => /\/comments\?.*page=19$/.test(url)));
   assert.ok(!requested.some((url) => /\/comments\?.*page=(2|3)$/.test(url)));
+});
+
+test("a short GitHub comment page cannot claim complete evidence coverage", async () => {
+  const shortPageIssue = { ...issue, comments: 2 };
+  const oneComment = [{
+    id: 1,
+    body: "Here are the requested reproduction logs.",
+    author_association: "NONE",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-1",
+    user: { login: "candidate" },
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(oneComment, null, shortPageIssue, 2),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.coverage.comments_total, 2);
+  assert.equal(result.coverage.comments_scanned, 1);
+  assert.equal(result.coverage.comment_pages_scanned, 1);
+  assert.equal(result.coverage.comments_truncated, true);
+  assert.equal(result.verdict, "CAUTION");
+  assert.ok(result.signals.some((signal) => signal.label === "Evidence coverage is truncated"));
+
+  const overrun = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([
+      oneComment[0],
+      { ...oneComment[0], id: 2, html_url: "https://github.com/acme/widget/issues/4#issuecomment-2" },
+    ], null, issue, 1),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(overrun.coverage.comments_scanned, 2);
+  assert.equal(overrun.coverage.comments_total, 1);
+  assert.equal(overrun.coverage.comments_truncated, true);
+  assert.equal(overrun.verdict, "CAUTION");
+});
+
+test("invalid GitHub evidence counts and page shapes fail closed", async () => {
+  for (const reportedComments of [-1, "1", null]) {
+    const invalidCount = githubMock([], null, issue, reportedComments);
+    await assert.rejects(
+      () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, invalidCount),
+      (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+    );
+  }
+
+  const invalidPage = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: 1 }, { headers });
+    if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+    if (/\/comments\?/.test(url)) return Response.json({ message: "unexpected shape" }, { headers });
+    if (/\/timeline\?/.test(url)) return Response.json([], { headers });
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+  await assert.rejects(
+    () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, invalidPage),
+    (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+  );
+
+  for (const [invalidKind, invalidEntry] of [
+    ["comments", null],
+    ["comments", {}],
+    ["timeline", null],
+    ["timeline", { message: "unexpected shape" }],
+  ] as const) {
+    const invalidElement = (async (input: URL | RequestInfo) => {
+      const url = String(input);
+      const headers = { "x-ratelimit-remaining": "4990" };
+      if (/\/issues\/4$/.test(url)) {
+        return Response.json({ ...issue, comments: invalidKind === "comments" ? 1 : 0 }, { headers });
+      }
+      if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+      if (/\/comments\?/.test(url)) {
+        return Response.json(invalidKind === "comments" ? [invalidEntry] : [], { headers });
+      }
+      if (/\/timeline\?/.test(url)) {
+        return Response.json(invalidKind === "timeline" ? [invalidEntry] : [], { headers });
+      }
+      return Response.json({ message: "not found" }, { status: 404, headers });
+    }) as typeof fetch;
+    await assert.rejects(
+      () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, invalidElement),
+      (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+    );
+  }
+});
+
+test("a GitHub cross-reference timeline event remains valid evidence", async () => {
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: 0 }, { headers });
+    if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+    if (/\/comments\?/.test(url)) return Response.json([], { headers });
+    if (/\/timeline\?/.test(url)) {
+      return Response.json([{
+        event: "cross-referenced",
+        created_at: "2026-07-20T10:00:00Z",
+        source: {
+          issue: {
+            title: "Competing fix",
+            state: "open",
+            user: { login: "solver" },
+            pull_request: { html_url: "https://github.com/acme/widget/pull/9" },
+          },
+        },
+      }], { headers });
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.coverage.timeline_events_scanned, 1);
+  assert.equal(result.coverage.linked_pull_requests_found, 1);
+  assert.equal(result.verdict, "CAUTION");
 });
 
 test("a transferred issue uses only its canonical destination repository", async () => {

@@ -249,6 +249,28 @@ function deduplicateEvidence(items: any[]): any[] {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCommentEvidencePage(data: unknown): data is Array<Record<string, unknown>> {
+  return Array.isArray(data) && data.every((item) =>
+    isRecord(item) && typeof item.id === "number" && Number.isSafeInteger(item.id) && item.id > 0 &&
+    typeof item.html_url === "string" && item.html_url.length > 0 &&
+    typeof item.created_at === "string" && item.created_at.length > 0 &&
+    (typeof item.body === "string" || item.body === null) &&
+    typeof item.author_association === "string" &&
+    (item.user === null || isRecord(item.user))
+  );
+}
+
+function isTimelineEvidencePage(data: unknown): data is Array<Record<string, unknown>> {
+  return Array.isArray(data) && data.every((item) =>
+    isRecord(item) && typeof item.event === "string" && item.event.length > 0 &&
+    typeof item.created_at === "string" && item.created_at.length > 0
+  );
+}
+
 function summarize(verdict: AgentVerdict["verdict"]): string {
   if (verdict === "VIABLE") {
     return "No obvious public hard stop was found. Confirm reward terms and reproduce the issue before coding.";
@@ -287,7 +309,11 @@ export async function checkGithubIssue(
     throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
   }
 
-  const commentPageCount = Math.max(1, Math.ceil(issueResponse.data.comments / 100));
+  const commentsTotal = issueResponse.data.comments;
+  if (!Number.isSafeInteger(commentsTotal) || commentsTotal < 0) {
+    throw new CheckError("GitHub returned an invalid issue comment count.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  const commentPageCount = Math.max(1, Math.ceil(commentsTotal / 100));
   const commentPages = boundedEvidencePages(commentPageCount, 3);
   const [commentResponses, firstTimeline, policyResponses] = await Promise.all([
     Promise.all(
@@ -309,8 +335,13 @@ export async function checkGithubIssue(
     ),
   );
   const timelineResponses = [firstTimeline, ...additionalTimelineResponses];
+  if (commentResponses.some((response) => !isCommentEvidencePage(response.data)) ||
+      timelineResponses.some((response) => !isTimelineEvidencePage(response.data))) {
+    throw new CheckError("GitHub returned invalid issue evidence pages.", 502, "GITHUB_RESPONSE_INVALID");
+  }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
+  const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)
     .filter((document): document is PolicyDocument => document !== null);
@@ -332,7 +363,7 @@ export async function checkGithubIssue(
     timeline,
     policyDocuments,
     coverage: {
-      commentsTruncated: commentPageCount > commentPages.length,
+      commentsTruncated,
       timelineTruncated: timelineLastPage > timelinePages.length,
     },
     now,
@@ -382,9 +413,9 @@ export async function checkGithubIssue(
     },
     coverage: {
       comments_scanned: comments.length,
-      comments_total: Number(issueResponse.data.comments) || 0,
+      comments_total: commentsTotal,
       comment_pages_scanned: commentPages.length,
-      comments_truncated: commentPageCount > commentPages.length,
+      comments_truncated: commentsTruncated,
       timeline_events_scanned: timeline.length,
       timeline_events_total: timelineLastPage > 1
         ? (timelineLastPage - 1) * 100 + timelineResponses.at(-1)!.data.length

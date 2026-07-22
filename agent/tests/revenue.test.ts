@@ -5,6 +5,7 @@ import {
   HARNESS_PAYMENT_ATOMIC,
   FLAKE_PAYMENT_ATOMIC,
   OWNER_CONTROLLED_CANARY_PAYER,
+  revenueOwnerControlledPayers,
   SKILL_PAYMENT_ATOMIC,
   PORTFOLIO_PAYMENT_ATOMIC,
   SINGLE_PAYMENT_ATOMIC,
@@ -15,6 +16,26 @@ import {
 } from "../src/revenue.ts";
 
 const CUSTOMER_PAYER = "0x1111111111111111111111111111111111111111";
+
+test("mainnet revenue accounting fails closed without every owner-controlled payer", () => {
+  const provisionedBuyer = "0x3333333333333333333333333333333333333333";
+  assert.throws(
+    () => revenueOwnerControlledPayers("mainnet"),
+    /required for mainnet revenue accounting/,
+  );
+  assert.deepEqual(
+    revenueOwnerControlledPayers("mainnet", provisionedBuyer),
+    [OWNER_CONTROLLED_CANARY_PAYER, provisionedBuyer],
+  );
+  assert.deepEqual(
+    revenueOwnerControlledPayers("sepolia"),
+    [OWNER_CONTROLLED_CANARY_PAYER],
+  );
+  assert.throws(
+    () => revenueOwnerControlledPayers("mainnet", "not-an-address"),
+    /must be an EVM address/,
+  );
+});
 
 test("revenue summary recognizes only exact product settlements", () => {
   const summary = summarizeRevenue([

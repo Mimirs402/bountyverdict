@@ -203,12 +203,12 @@ const kiloMarketplaceDefinitionUrl = "https://raw.githubusercontent.com/Kilo-Org
 const kiloMarketplaceCatalogUrl = "https://raw.githubusercontent.com/Kilo-Org/kilo-marketplace/main/mcps/marketplace.yaml";
 const kiloMarketplaceEndpoint = `${productionOrigin}/mcp?source=kilo-marketplace`;
 const geminiCliGalleryUrl = "https://geminicli.com/extensions.json";
-const agentFinderPrNumber = 10;
+const agentFinderPrNumber = 11;
 const agentFinderPrUrl = `https://github.com/github/agentfinder-catalog/pull/${agentFinderPrNumber}`;
-const agentFinderCatalogEntryPath = "catalog/cristianmoroaica/bountyverdict.json";
+const agentFinderCatalogEntryPath = "catalog/Mimirs402/bountyverdict.json";
 const agentFinderCatalogEntryUrl = `https://raw.githubusercontent.com/github/agentfinder-catalog/main/${agentFinderCatalogEntryPath}`;
 const agentFinderSearchUrl = "https://github.com/agentfinder?search=bountyverdict";
-const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.cristianmoroaica:bountyverdict";
+const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.Mimirs402:bountyverdict";
 const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
@@ -1475,7 +1475,7 @@ async function geminiCliGalleryStatus(
     const entries = JSON.parse(body) as unknown;
     if (!Array.isArray(entries)) throw new Error("Gemini CLI Extensions Gallery returned a malformed catalog.");
     const matches = entries.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry) &&
-      String((entry as Record<string, unknown>).fullName || "").toLowerCase() === "cristianmoroaica/bountyverdict");
+      String((entry as Record<string, unknown>).fullName || "").toLowerCase() === "mimirs402/bountyverdict");
     if (matches.length > 1) throw new Error("Gemini CLI Extensions Gallery duplicated BountyVerdict.");
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
@@ -1550,7 +1550,7 @@ async function agentFinderCatalogStatus(
     }
     const prContractVerified = pr.number === agentFinderPrNumber && pr.html_url === agentFinderPrUrl &&
       pr.base?.repo?.full_name === "github/agentfinder-catalog" && pr.base?.ref === "main" &&
-      pr.head?.label === "cristianmoroaica:add-bountyverdict-agent-tools" && pr.changed_files === 1 &&
+      pr.head?.label === "Mimirs402:add-bountyverdict-canonical-mimirslab" && pr.changed_files === 1 &&
       prFiles.length === 1 && prFiles[0].filename === agentFinderCatalogEntryPath && prFiles[0].status === "added";
     const prStatus = prReview.status;
 

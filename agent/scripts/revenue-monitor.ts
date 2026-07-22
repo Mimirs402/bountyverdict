@@ -1,7 +1,7 @@
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { base, baseSepolia } from "viem/chains";
 import {
-  OWNER_CONTROLLED_CANARY_PAYER,
+  revenueOwnerControlledPayers,
   serializeRevenueSummary,
   summarizeRevenue,
   type SettlementTransfer,
@@ -23,9 +23,7 @@ if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
 if (!startBlockInput || !/^[0-9]+$/.test(startBlockInput)) {
   throw new Error("START_BLOCK must be the deployment block number; this keeps scans bounded.");
 }
-if (settlementBuyer && !/^0x[a-fA-F0-9]{40}$/.test(settlementBuyer)) {
-  throw new Error("SETTLEMENT_BUYER_ADDRESS must be an EVM address when configured.");
-}
+const ownerControlledPayers = revenueOwnerControlledPayers(network, settlementBuyer);
 
 const client = createPublicClient({ chain, transport: http(process.env.RPC_URL) });
 const latestBlock = await client.getBlockNumber();
@@ -68,9 +66,7 @@ for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSiz
 const summary = summarizeRevenue(
   transfers,
   undefined,
-  settlementBuyer
-    ? [OWNER_CONTROLLED_CANARY_PAYER, settlementBuyer]
-    : [OWNER_CONTROLLED_CANARY_PAYER],
+  ownerControlledPayers,
 );
 console.log(JSON.stringify({
   product: "BountyVerdict",

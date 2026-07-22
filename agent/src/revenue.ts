@@ -52,6 +52,23 @@ export interface RevenueSummary {
   excluded_transfers: SettlementTransfer[];
 }
 
+export function revenueOwnerControlledPayers(
+  network: "mainnet" | "sepolia",
+  settlementBuyer?: string,
+): readonly string[] {
+  if (settlementBuyer && !/^0x[a-fA-F0-9]{40}$/.test(settlementBuyer)) {
+    throw new Error("SETTLEMENT_BUYER_ADDRESS must be an EVM address when configured.");
+  }
+  if (network === "mainnet" && !settlementBuyer) {
+    throw new Error(
+      "SETTLEMENT_BUYER_ADDRESS is required for mainnet revenue accounting so owner-funded settlements cannot be counted as customer revenue.",
+    );
+  }
+  return settlementBuyer
+    ? [OWNER_CONTROLLED_CANARY_PAYER, settlementBuyer]
+    : [OWNER_CONTROLLED_CANARY_PAYER];
+}
+
 function serializeTransfer(transfer: SettlementTransfer) {
   const { amount, block_number, ...rest } = transfer;
   return {

@@ -472,6 +472,7 @@ test("directory monitoring tracks Gemini CLI gallery propagation without claimin
   ]);
   assert.match(directory, /const geminiCliGalleryUrl = "https:\/\/geminicli\.com\/extensions\.json"/);
   assert.match(directory, /async function geminiCliGalleryStatus/);
+  assert.match(directory, /mimirs402\/bountyverdict/);
   assert.match(directory, /entry\.hasMCP === true/);
   assert.match(directory, /gemini_cli_gallery: geminiCliGallery/);
   assert.match(directory, /exact_gemini_cli_gallery_presence_not_search_impressions_installs_tool_calls_purchases_or_revenue/);
@@ -485,9 +486,9 @@ test("directory monitoring tracks exact GitHub Agent Finder PR, catalog, Registr
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
-  assert.match(directory, /const agentFinderPrNumber = 10/);
+  assert.match(directory, /const agentFinderPrNumber = 11/);
   assert.match(directory, /github\/agentfinder-catalog\/pull\/\$\{agentFinderPrNumber\}/);
-  assert.match(directory, /catalog\/cristianmoroaica\/bountyverdict\.json/);
+  assert.match(directory, /catalog\/Mimirs402\/bountyverdict\.json/);
   assert.match(directory, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
   assert.match(directory, /https:\/\/github\.com\/agentfinder\?search=bountyverdict/);
   assert.match(directory, /async function agentFinderCatalogStatus/);

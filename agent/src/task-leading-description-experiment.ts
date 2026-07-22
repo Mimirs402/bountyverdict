@@ -1,5 +1,10 @@
 export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v2";
+export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v3";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
+
+export type DescriptionExperimentId =
+  | typeof TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
+  | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "initialize",
@@ -19,7 +24,7 @@ export type TaskLeadingDescriptionCounters = Record<TaskLeadingDescriptionCounte
 
 export type TaskLeadingDescriptionActivation = {
   schema_version: 1;
-  experiment_id: typeof TASK_LEADING_DESCRIPTION_EXPERIMENT_ID;
+  experiment_id: DescriptionExperimentId;
   release_commit: string;
   production_activation_commit: string;
   production_activated_at: string;
@@ -30,6 +35,7 @@ export type TaskLeadingDescriptionActivation = {
 };
 
 export type TaskLeadingDescriptionExperimentInput = {
+  experimentId?: DescriptionExperimentId;
   observedAt: string;
   activation: unknown;
   currentEpochId: number;
@@ -68,7 +74,10 @@ function canonicalTimestamp(value: unknown, label: string): string {
   return value;
 }
 
-export function parseTaskLeadingDescriptionActivation(value: unknown): TaskLeadingDescriptionActivation | null {
+export function parseTaskLeadingDescriptionActivation(
+  value: unknown,
+  expectedExperimentId: DescriptionExperimentId = TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+): TaskLeadingDescriptionActivation | null {
   if (value === null || value === undefined) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Task-leading description activation must be an object.");
@@ -79,7 +88,7 @@ export function parseTaskLeadingDescriptionActivation(value: unknown): TaskLeadi
   if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
     throw new Error("Task-leading description activation fields are invalid.");
   }
-  if (record.schema_version !== 1 || record.experiment_id !== TASK_LEADING_DESCRIPTION_EXPERIMENT_ID) {
+  if (record.schema_version !== 1 || record.experiment_id !== expectedExperimentId) {
     throw new Error("Task-leading description activation identity is invalid.");
   }
   if (typeof record.release_commit !== "string" || !COMMIT_PATTERN.test(record.release_commit) ||
@@ -122,10 +131,10 @@ function countersMonotonic(
   return TASK_LEADING_DESCRIPTION_COUNTER_KEYS.every((key) => current[key] >= previous[key]);
 }
 
-function validPrevious(value: unknown): Record<string, any> | null {
+function validPrevious(value: unknown, experimentId: DescriptionExperimentId): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
-  return record.id === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID && record.accounting_schema_version === 1
+  return record.id === experimentId && record.accounting_schema_version === 1
     ? record
     : null;
 }
@@ -190,10 +199,14 @@ function decisionFor(delta: TaskLeadingDescriptionCounters): { decision: string;
 
 const CAUSALITY_LIMIT = "Privacy-preserving aggregate counters have no session, exposure, or retry linkage. They cannot establish that one agent read a task-leading description and then selected or paid for that tool, so this experiment never reports a causal copy conversion rate.";
 
-function inactive(status: string, decision: string): Record<string, unknown> {
+function inactive(
+  status: string,
+  decision: string,
+  experimentId: DescriptionExperimentId,
+): Record<string, unknown> {
   const eligible = zeroTaskLeadingDescriptionCounters();
   return {
-    id: TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+    id: experimentId,
     accounting_schema_version: 1,
     status,
     decision,
@@ -215,14 +228,15 @@ function inactive(status: string, decision: string): Record<string, unknown> {
 export function updateTaskLeadingDescriptionExperiment(
   input: TaskLeadingDescriptionExperimentInput,
 ): Record<string, unknown> {
+  const experimentId = input.experimentId || TASK_LEADING_DESCRIPTION_EXPERIMENT_ID;
   if (!Number.isFinite(Date.parse(input.observedAt))) throw new Error("Task-leading description observation time is invalid.");
   if (!Number.isSafeInteger(input.currentEpochId) || input.currentEpochId < 1) {
     throw new Error("Task-leading description current epoch is invalid.");
   }
-  const previous = validPrevious(input.previous);
-  const suppliedActivation = parseTaskLeadingDescriptionActivation(input.activation);
+  const previous = validPrevious(input.previous, experimentId);
+  const suppliedActivation = parseTaskLeadingDescriptionActivation(input.activation, experimentId);
   const persistedActivation = previous?.activation
-    ? parseTaskLeadingDescriptionActivation(previous.activation)
+    ? parseTaskLeadingDescriptionActivation(previous.activation, experimentId)
     : null;
   if (suppliedActivation && persistedActivation && !sameActivation(suppliedActivation, persistedActivation)) {
     throw new Error("Task-leading description activation changed after measurement state was created.");
@@ -232,6 +246,7 @@ export function updateTaskLeadingDescriptionExperiment(
     return inactive(
       "awaiting_activation_coordinates",
       "supply_reviewed_release_activation_and_fresh_epoch_coordinates",
+      experimentId,
     );
   }
 
@@ -282,7 +297,9 @@ export function updateTaskLeadingDescriptionExperiment(
   const terminal = decisionFor(eligible);
   const boundary = previousBoundary || (activationVerified && reached ? {
     observed_at: input.observedAt,
-    observation_rule: "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events",
+    observation_rule: experimentId === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
+      ? "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events"
+      : "first_monitor_report_at_or_above_25_eligible_agent_question_description_tools_list_events",
     measurement_epoch_id: activation.measurement_epoch_id,
     eligible_prefix: zeroTaskLeadingDescriptionCounters(),
     eligible_delta: eligible,
@@ -310,7 +327,7 @@ export function updateTaskLeadingDescriptionExperiment(
     Math.max(0, eligible.capacity_rejected - eligible.payment_present);
 
   return {
-    id: TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+    id: experimentId,
     accounting_schema_version: 1,
     status,
     decision,

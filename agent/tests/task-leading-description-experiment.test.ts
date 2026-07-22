@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
   TASK_LEADING_DESCRIPTION_COUNTER_KEYS,
   TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
@@ -75,6 +76,40 @@ test("activation parser requires exact release, production, drain, epoch, and N=
     production_activated_at: "2026-07-22T16:00:00.000Z",
   }), /predates production activation/);
   assert.throws(() => parseTaskLeadingDescriptionActivation({ ...activation, unexpected: true }), /fields are invalid/);
+});
+
+test("a v3 question-shaped treatment is isolated from the completed v2 experiment", () => {
+  const questionActivation = {
+    ...activation,
+    experiment_id: AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+    drain_rotation_id: "mcp_agent_questions_v3_20260722",
+    measurement_epoch_id: 51,
+  } as const;
+  assert.deepEqual(
+    parseTaskLeadingDescriptionActivation(
+      questionActivation,
+      AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+    ),
+    questionActivation,
+  );
+  assert.throws(
+    () => parseTaskLeadingDescriptionActivation(questionActivation),
+    /activation identity is invalid/,
+  );
+  const result = updateTaskLeadingDescriptionExperiment({
+    experimentId: AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+    observedAt: "2026-07-22T16:00:00.000Z",
+    activation: null,
+    currentEpochId: 50,
+    measurementEligible: false,
+    cleanEpochDelta: clean({ tools_list: 25 }),
+    trustedBaselineInitializedAt: activation.epoch_activated_at,
+    trustedRotation: null,
+    previous: null,
+  });
+  assert.equal(result.id, AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID);
+  assert.equal(result.status, "awaiting_activation_coordinates");
+  assert.deepEqual(result.eligible_delta, clean());
 });
 
 test("review template cannot accidentally activate the experiment", async () => {

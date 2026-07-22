@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   AGENTMRR_PRODUCT,
+  AGENTMRR_PRODUCT_CONTRACT_SHA256,
   AGENTMRR_CODE_RELEASE_CONTRACT,
+  AGENTMRR_CODE_GATE_COMMIT,
   AGENTMRR_REQUIRED_RELEASE_COMMIT,
   AGENTMRR_REVIEWED_SOURCE_COMMIT,
   AGENTMRR_ROTATION_REASON,
@@ -19,6 +21,7 @@ import {
   readAgentMrrJsonResponse,
   solveAgentMrrChallenge,
   validateAgentMrrPublicationGate,
+  validateAgentMrrPublicationAttempt,
   validateAgentMrrCodeReleaseState,
 } from "../src/agentmrr.ts";
 import {
@@ -63,6 +66,21 @@ test("AgentMRR proof-of-work is bounded and satisfies the advertised challenge",
   assert.throws(() => parseAgentMrrChallenge({ nonce: "unsafe", difficulty: 2 }), /nonce/);
   assert.throws(() => parseAgentMrrChallenge({ nonce: "a".repeat(32), difficulty: 9 }), /difficulty/);
   assert.throws(() => solveAgentMrrChallenge(challenge, 0), /iteration bound/);
+});
+
+test("AgentMRR publication attempt binds agent, product, rotation, and code release", () => {
+  const attempt = {
+    schema_version: 1,
+    status: "posting",
+    created_at: "2026-07-22T07:00:00.000Z",
+    agent_id: ownerId,
+    rotation_id: "agentmrr-publish-mdfh1234-0123456789abcdef",
+    product_contract_sha256: AGENTMRR_PRODUCT_CONTRACT_SHA256,
+    code_release_commit: "a".repeat(40),
+  };
+  assert.equal(validateAgentMrrPublicationAttempt(attempt, 0o600, 1000, 1000, ownerId, "a".repeat(40)), attempt.rotation_id);
+  assert.throws(() => validateAgentMrrPublicationAttempt({ ...attempt, product_contract_sha256: "0".repeat(64) }, 0o600, 1000, 1000, ownerId, "a".repeat(40)), /attempt receipt/);
+  assert.throws(() => validateAgentMrrPublicationAttempt(attempt, 0o600, 1000, 1000, id, "a".repeat(40)), /attempt receipt/);
 });
 
 test("AgentMRR registration accepts only a bounded agent identity and secret", () => {
@@ -153,6 +171,7 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
     codeReleaseState: {
       schema_version: 1,
       status: "complete",
+      source_head: AGENTMRR_CODE_GATE_COMMIT,
       reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
       code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
       release_commit: "a".repeat(40),
@@ -248,16 +267,21 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
   assert.throws(() => validateAgentMrrPublicationGate({
     ...valid,
     now: new Date("2026-07-22T07:06:00.000Z"),
+    collectorState: {
+      ...valid.collectorState,
+      collector_heartbeat_at: "2026-07-22T07:06:00.000Z",
+      collector_capability_heartbeats: { agentmrr_source_attribution_v1: "2026-07-22T07:06:00.000Z" },
+    },
   }), /draining rotation/);
   assert.throws(() => validateAgentMrrPublicationGate({ ...valid, historyMode: 0o644 }), /reviewed release/);
   assert.throws(() => validateAgentMrrPublicationGate({
     ...valid,
     collectorState: { ...valid.collectorState, collector_capabilities: [] },
-  }), /draining rotation/);
+  }), /capable collector/);
   assert.throws(() => validateAgentMrrPublicationGate({
     ...valid,
     collectorState: { ...valid.collectorState, collector_heartbeat_at: "2026-07-22T06:58:00.000Z" },
-  }), /draining rotation/);
+  }), /capable collector/);
   assert.throws(() => validateAgentMrrPublicationGate({
     ...valid,
     collectorState: {
@@ -265,13 +289,14 @@ test("AgentMRR publication waits for the reviewed release and a draining funnel 
       collector_capability_heartbeats: { agentmrr_source_attribution_v1: "2026-07-22T06:58:00.000Z" },
       collector_heartbeat_at: now.toISOString(),
     },
-  }), /draining rotation/);
+  }), /capable collector/);
 });
 
 test("AgentMRR code release receipt binds the reviewed source and remote main", () => {
   const receipt = {
     schema_version: 1,
     status: "complete",
+    source_head: AGENTMRR_CODE_GATE_COMMIT,
     reviewed_source: AGENTMRR_REVIEWED_SOURCE_COMMIT,
     code_contract: AGENTMRR_CODE_RELEASE_CONTRACT,
     release_commit: "b".repeat(40),
@@ -280,6 +305,9 @@ test("AgentMRR code release receipt binds the reviewed source and remote main", 
   };
   assert.doesNotThrow(() => validateAgentMrrCodeReleaseState(receipt, 0o600, 1000, 1000));
   assert.throws(() => validateAgentMrrCodeReleaseState({ ...receipt, remote_main: "c".repeat(40) }, 0o600, 1000, 1000), /code release/);
+  assert.throws(() => validateAgentMrrCodeReleaseState({ ...receipt, source_head: "c".repeat(40) }, 0o600, 1000, 1000), /code release/);
+  const { source_head: _sourceHead, ...missingSource } = receipt;
+  assert.throws(() => validateAgentMrrCodeReleaseState(missingSource, 0o600, 1000, 1000), /code release/);
   assert.throws(() => validateAgentMrrCodeReleaseState(receipt, 0o644, 1000, 1000), /code release/);
 });
 
@@ -307,8 +335,10 @@ test("AgentMRR scripts keep credentials private and expose no self-promotion act
   assert.ok(registerScript.indexOf("Buffer.alloc(512)") < registerScript.indexOf('method: "POST"'));
   assert.doesNotMatch(registerScript, /AGENTMRR_SECRET_FILE|chmod\(/);
   assert.match(publishScript, /open\(path, constants\.O_RDONLY \| constants\.O_NOFOLLOW\)/);
-  assert.match(publishScript, /open\(publicationLockFile, "wx", 0o600\)/);
-  assert.match(publishScript, /open\(funnelLockFile, "wx", 0o600\)/);
+  assert.match(publishScript, /acquireExclusiveRun\(publicationLockFile\)/);
+  assert.match(publishScript, /acquireExclusiveRun\(funnelLockFile\)/);
+  assert.match(publishScript, /open\(publicationAttemptFile, "wx", 0o600\)/);
+  assert.match(publishScript, /validateAgentMrrPublicationAttempt/);
   assert.match(publishScript, /validateAgentMrrPublicationGate/);
   assert.doesNotMatch(`${registerScript}\n${publishScript}`, /\/vote|\/try|upvote|downvote/);
 });

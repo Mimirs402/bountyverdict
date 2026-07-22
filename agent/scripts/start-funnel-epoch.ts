@@ -1,8 +1,10 @@
-import { unlinkSync } from "node:fs";
-import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { loadFunnelSnapshot } from "../src/funnel-telemetry.ts";
+import { acquireExclusiveRun } from "../src/exclusive-run.ts";
 import {
   assertFreshFunnelCollector,
   captureTrustedFunnelBaseline,
@@ -19,6 +21,7 @@ const reason = process.env.FUNNEL_EPOCH_REASON || "";
 const requestedRotationId = process.env.FUNNEL_ROTATION_ID || "";
 const automaticPoll = requestedRotationId === "AUTO";
 const quietSecondsInput = process.env.QUIET_PERIOD_SECONDS || "900";
+const expectedUid = process.getuid?.() ?? -1;
 
 if (process.env.START_FUNNEL_EPOCH !== "YES") throw new Error("Set START_FUNNEL_EPOCH=YES to rotate the trusted funnel epoch.");
 if (!automaticPoll && !/^[a-z0-9][a-z0-9_-]{7,79}$/.test(requestedRotationId)) throw new Error("FUNNEL_ROTATION_ID is invalid.");
@@ -28,30 +31,43 @@ if (!Number.isSafeInteger(quietSeconds) || quietSeconds < 60 || quietSeconds > 3
   throw new Error("QUIET_PERIOD_SECONDS must be between 60 and 3600.");
 }
 
-const mutationLock = await open(mutationLockFile, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
-  if (error.code === "EEXIST") throw new Error("Trusted funnel state is currently being mutated.");
-  throw error;
-});
-await mutationLock.writeFile(`${process.pid}\n`);
-await mutationLock.sync();
-process.once("exit", () => {
+async function secureReadState(path: string, label: string): Promise<string> {
+  if (expectedUid < 0) throw new Error(`${label} requires a local Unix owner identity.`);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    unlinkSync(mutationLockFile);
-  } catch {
-    // A missing lock is already released; any other cleanup failure remains fail-closed for the next run.
+    const metadata = await handle.stat();
+    if (!metadata.isFile() || metadata.uid !== expectedUid || (metadata.mode & 0o777) !== 0o600 ||
+        metadata.size < 2 || metadata.size > 2_000_000) {
+      throw new Error(`${label} must be a bounded regular owner-owned file with mode 0600.`);
+    }
+    return await handle.readFile("utf8");
+  } finally {
+    await handle.close();
   }
-});
+}
 
 async function atomicWrite(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, contents, { mode: 0o600 });
+  const parent = await lstat(dirname(path));
+  if (!parent.isDirectory() || parent.isSymbolicLink() || parent.uid !== expectedUid ||
+      (parent.mode & 0o777) !== 0o700) {
+    throw new Error(`State parent ${dirname(path)} must be a private owner-owned directory.`);
+  }
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(contents);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await rename(temporary, path);
 }
 
-const state = loadFunnelSnapshot(JSON.parse(await readFile(funnelStateFile, "utf8")));
+async function rotateFunnelEpoch(): Promise<void> {
+const state = loadFunnelSnapshot(JSON.parse(await secureReadState(funnelStateFile, "Funnel collector state")));
 if (!state) throw new Error("Funnel telemetry state is malformed.");
-let previous = trustedFunnelBaseline(JSON.parse(await readFile(baselineFile, "utf8")));
+let previous = trustedFunnelBaseline(JSON.parse(await secureReadState(baselineFile, "Trusted funnel baseline")));
 if (!previous) throw new Error("Trusted funnel baseline is malformed.");
 const now = new Date();
 const observedAt = now.toISOString();
@@ -93,7 +109,7 @@ type Ledger = {
 };
 let ledger: Ledger;
 try {
-  const parsed = JSON.parse(await readFile(historyFile, "utf8")) as Ledger;
+  const parsed = JSON.parse(await secureReadState(historyFile, "Trusted funnel epoch ledger")) as Ledger;
   if (parsed.schema_version !== 2 || !Array.isArray(parsed.epochs) || !Number.isSafeInteger(parsed.active_epoch_id)) {
     throw new Error("Trusted funnel epoch ledger is malformed.");
   }
@@ -130,7 +146,7 @@ if (ledger.rotation?.status === "activated") {
       status: baselineMatches ? "idle_no_pending_rotation" : "activated_baseline_repaired",
       active_epoch: ledger.active_epoch_id,
     }, null, 2));
-    process.exit(0);
+    return;
   }
   if (ledger.rotation.id === requestedRotationId) {
     console.log(JSON.stringify({
@@ -138,7 +154,7 @@ if (ledger.rotation?.status === "activated") {
       rotation_id: requestedRotationId,
       active_epoch: ledger.active_epoch_id,
     }, null, 2));
-    process.exit(0);
+    return;
   }
   ledger.completed_rotations ||= [];
   ledger.completed_rotations.push({
@@ -153,7 +169,7 @@ if (ledger.rotation?.status === "activated") {
 }
 if (automaticPoll && !ledger.rotation) {
   console.log(JSON.stringify({ status: "idle_no_pending_rotation", active_epoch: ledger.active_epoch_id }, null, 2));
-  process.exit(0);
+  return;
 }
 const rotationId = automaticPoll ? ledger.rotation!.id : requestedRotationId;
 const rotationReason = automaticPoll ? ledger.rotation!.reason : reason;
@@ -184,7 +200,7 @@ if (!ledger.rotation) {
   };
   await atomicWrite(historyFile, `${JSON.stringify(ledger, null, 2)}\n`);
   console.log(JSON.stringify({ status: "draining_started", rotation_id: rotationId, stable_since: observedAt, required_quiet_seconds: quietSeconds }, null, 2));
-  process.exit(0);
+  return;
 }
 if (ledger.rotation.id !== rotationId || ledger.rotation.target_epoch_id !== previous.epoch_id + 1) {
   throw new Error("Funnel rotation identity or target epoch does not match.");
@@ -196,7 +212,7 @@ if (trustedBoundaryFingerprint(candidate) !== trustedBoundaryFingerprint(ledger.
   ledger.rotation.candidate = candidate;
   await atomicWrite(historyFile, `${JSON.stringify(ledger, null, 2)}\n`);
   console.log(JSON.stringify({ status: "draining_reset", rotation_id: rotationId, stable_since: observedAt }, null, 2));
-  process.exit(0);
+  return;
 }
 if (ledger.rotation.last_observed_at !== observedAt) ledger.rotation.observations += 1;
 ledger.rotation.last_observed_at = observedAt;
@@ -204,7 +220,7 @@ const stableSeconds = Math.floor((now.getTime() - Date.parse(ledger.rotation.sta
 if (stableSeconds < quietSeconds || ledger.rotation.observations < 2) {
   await atomicWrite(historyFile, `${JSON.stringify(ledger, null, 2)}\n`);
   console.log(JSON.stringify({ status: "draining", rotation_id: rotationId, stable_seconds: stableSeconds, observations: ledger.rotation.observations, required_quiet_seconds: quietSeconds }, null, 2));
-  process.exit(0);
+  return;
 }
 const active = ledger.epochs.find((epoch) => epoch.id === ledger.active_epoch_id);
 if (!active || active.status !== "draining") throw new Error("Draining epoch is missing.");
@@ -227,3 +243,11 @@ ledger.rotation.activated_at = observedAt;
 await atomicWrite(historyFile, `${JSON.stringify(ledger, null, 2)}\n`);
 await atomicWrite(baselineFile, `${JSON.stringify(boundary, null, 2)}\n`);
 console.log(JSON.stringify({ status: "activated", rotation_id: rotationId, previous_epoch: active.id, active_epoch: boundary.epoch_id, initialized_at: observedAt, stable_seconds: stableSeconds, observations: ledger.rotation.observations, counters: boundary.counters }, null, 2));
+}
+
+const releaseMutationLock = await acquireExclusiveRun(mutationLockFile);
+try {
+  await rotateFunnelEpoch();
+} finally {
+  await releaseMutationLock();
+}

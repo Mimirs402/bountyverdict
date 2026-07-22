@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { constants, type Stats } from "node:fs";
-import { lstat, mkdir, open, unlink } from "node:fs/promises";
+import { lstat, mkdir, open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
@@ -8,16 +8,20 @@ import {
   AGENTMRR_BASE_URL,
   AGENTMRR_CATALOG_LIMIT,
   AGENTMRR_PRODUCT,
+  AGENTMRR_PRODUCT_CONTRACT_SHA256,
   AGENTMRR_ROTATION_REASON,
   parseAgentMrrCatalog,
   parseAgentMrrPublishedProduct,
   parseAgentMrrSecret,
   readAgentMrrJsonResponse,
   validateAgentMrrPublicationGate,
+  validateAgentMrrPublicationAttempt,
   validateAgentMrrCodeReleaseState,
+  validateAgentMrrLiveCollector,
   validateAgentMrrReleaseState,
 } from "../src/agentmrr.ts";
 import { trustedFunnelBaseline } from "../src/funnel-epoch.ts";
+import { acquireExclusiveRun } from "../src/exclusive-run.ts";
 
 const execFileAsync = promisify(execFile);
 const enabled = process.env.AGENTMRR_PUBLISH === "YES";
@@ -30,6 +34,7 @@ const baselineFile = `${stateDirectory}/funnel-trusted-baseline.json`;
 const historyFile = `${stateDirectory}/funnel-trusted-epochs.json`;
 const collectorStateFile = `${stateDirectory}/funnel-telemetry.json`;
 const publicationLockFile = `${stateDirectory}/agentmrr-publication.lock`;
+const publicationAttemptFile = `${stateDirectory}/agentmrr-publication-attempt.json`;
 const funnelLockFile = `${historyFile}.lock`;
 const expectedUid = process.getuid?.() ?? -1;
 
@@ -37,8 +42,9 @@ async function secureReadFile(path: string, label: string): Promise<{ raw: strin
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const metadata = await handle.stat();
-    if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600 || metadata.uid !== expectedUid) {
-      throw new Error(`${label} must be a regular owner-owned file with mode 0600.`);
+    if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600 || metadata.uid !== expectedUid ||
+        metadata.size < 2 || metadata.size > 2_000_000) {
+      throw new Error(`${label} must be a bounded regular owner-owned file with mode 0600.`);
     }
     return { raw: await handle.readFile({ encoding: "utf8" }), metadata };
   } finally {
@@ -62,14 +68,16 @@ const existing = parseAgentMrrCatalog(
   await readAgentMrrJsonResponse(catalogResponse, "catalog"),
   AGENTMRR_CATALOG_LIMIT,
 );
-if (existing) {
-  const identity = await credentials();
-  if (!existing.exact || existing.submittedBy !== identity.agentId) {
-    throw new Error("Existing AgentMRR RunVerdict listing is drifted or owned by another agent.");
+if (!enabled) {
+  if (existing) {
+    const identity = await credentials();
+    if (!existing.exact || existing.submittedBy !== identity.agentId) {
+      throw new Error("Existing AgentMRR RunVerdict listing is drifted or owned by another agent.");
+    }
+    console.log(JSON.stringify({ action: "existing", product_id: existing.id, name: existing.name }, null, 2));
+  } else {
+    console.log(JSON.stringify({ action: "armed_not_published", product: AGENTMRR_PRODUCT }, null, 2));
   }
-  console.log(JSON.stringify({ action: "existing", product_id: existing.id, name: existing.name }, null, 2));
-} else if (!enabled) {
-  console.log(JSON.stringify({ action: "armed_not_published", product: AGENTMRR_PRODUCT }, null, 2));
 } else {
   if (expectedUid < 0) throw new Error("AgentMRR publication requires a local Unix owner identity.");
   await mkdir(stateDirectory, { recursive: true, mode: 0o700 });
@@ -78,13 +86,8 @@ if (existing) {
       stateDirectoryStat.uid !== expectedUid || (stateDirectoryStat.mode & 0o077) !== 0) {
     throw new Error("BountyVerdict state directory must be owner-owned and private.");
   }
-  const publicationLock = await open(publicationLockFile, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "EEXIST") throw new Error("Another AgentMRR publication is already in progress.");
-    throw error;
-  });
+  const releasePublicationLock = await acquireExclusiveRun(publicationLockFile);
   try {
-    await publicationLock.writeFile(`${process.pid}\n`);
-    await publicationLock.sync();
     const identity = await credentials();
     const release = await secureReadFile(releaseStateFile, "AgentMRR release receipt");
     const releaseState = JSON.parse(release.raw);
@@ -102,10 +105,35 @@ if (existing) {
       codeRelease.metadata.uid,
       expectedUid,
     );
+    const parsedCodeRelease = JSON.parse(codeRelease.raw) as { release_commit?: unknown };
+    const codeReleaseCommit = String(parsedCodeRelease.release_commit || "");
+    const collector = await secureReadFile(collectorStateFile, "Funnel collector state");
+    validateAgentMrrLiveCollector(
+      JSON.parse(collector.raw),
+      collector.metadata.mode & 0o777,
+      collector.metadata.uid,
+      expectedUid,
+      new Date(),
+    );
 
-    const rotationId = `agentmrr-publish-${Date.now().toString(36)}-${randomBytes(8).toString("hex")}`;
-    const rotationScript = new URL("./start-funnel-epoch.ts", import.meta.url);
-    const rotation = await execFileAsync(
+    if (existing) {
+      if (!existing.exact || existing.submittedBy !== identity.agentId) {
+        throw new Error("Existing AgentMRR RunVerdict listing is drifted or owned by another agent.");
+      }
+      const attempt = await secureReadFile(publicationAttemptFile, "AgentMRR publication attempt receipt");
+      validateAgentMrrPublicationAttempt(
+        JSON.parse(attempt.raw),
+        attempt.metadata.mode & 0o777,
+        attempt.metadata.uid,
+        expectedUid,
+        identity.agentId,
+        codeReleaseCommit,
+      );
+      console.log(JSON.stringify({ action: "existing", product_id: existing.id, name: existing.name }, null, 2));
+    } else {
+      const rotationId = `agentmrr-publish-${Date.now().toString(36)}-${randomBytes(8).toString("hex")}`;
+      const rotationScript = new URL("./start-funnel-epoch.ts", import.meta.url);
+      const rotation = await execFileAsync(
       process.execPath,
       ["--experimental-strip-types", rotationScript.pathname],
       {
@@ -120,29 +148,24 @@ if (existing) {
         maxBuffer: 1_000_000,
         encoding: "utf8",
       },
-    );
-    if (!/"status": "draining_started"/.test(rotation.stdout)) {
-      throw new Error(`AgentMRR publication could not establish a fresh drain: ${rotation.stdout.trim()}`);
-    }
+      );
+      if (!/"status": "draining_started"/.test(rotation.stdout)) {
+        throw new Error(`AgentMRR publication could not establish a fresh drain: ${rotation.stdout.trim()}`);
+      }
 
-    const funnelLock = await open(funnelLockFile, "wx", 0o600).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "EEXIST") throw new Error("Trusted funnel state is currently being mutated.");
-      throw error;
-    });
-    try {
-      await funnelLock.writeFile(`${process.pid}\n`);
-      await funnelLock.sync();
-      const [freshRelease, freshCodeRelease, baselineFileState, historyFileState, collectorFileState] =
-        await Promise.all([
+      const releaseFunnelLock = await acquireExclusiveRun(funnelLockFile);
+      try {
+        const [freshRelease, freshCodeRelease, baselineFileState, historyFileState, collectorFileState] =
+          await Promise.all([
           secureReadFile(releaseStateFile, "AgentMRR release receipt"),
           secureReadFile(codeReleaseStateFile, "AgentMRR code release receipt"),
           secureReadFile(baselineFile, "Trusted funnel baseline"),
           secureReadFile(historyFile, "Trusted funnel history"),
           secureReadFile(collectorStateFile, "Funnel collector state"),
-        ]);
-      const baseline = trustedFunnelBaseline(JSON.parse(baselineFileState.raw));
-      if (!baseline) throw new Error("Trusted funnel baseline is malformed; refusing AgentMRR publication.");
-      validateAgentMrrPublicationGate({
+          ]);
+        const baseline = trustedFunnelBaseline(JSON.parse(baselineFileState.raw));
+        if (!baseline) throw new Error("Trusted funnel baseline is malformed; refusing AgentMRR publication.");
+        validateAgentMrrPublicationGate({
         releaseState: JSON.parse(freshRelease.raw),
         releaseMode: freshRelease.metadata.mode & 0o777,
         releaseOwnerUid: freshRelease.metadata.uid,
@@ -162,8 +185,29 @@ if (existing) {
         funnelLedger: JSON.parse(historyFileState.raw),
         expectedRotationId: rotationId,
         now: new Date(),
-      });
-      const publishResponse = await fetch(`${AGENTMRR_BASE_URL}/api/products`, {
+        });
+        const attemptHandle = await open(publicationAttemptFile, "wx", 0o600)
+          .catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "EEXIST") {
+              throw new Error("An AgentMRR publication attempt already exists without a reconciled listing.");
+            }
+            throw error;
+          });
+        try {
+          await attemptHandle.writeFile(`${JSON.stringify({
+          schema_version: 1,
+          status: "posting",
+          created_at: new Date().toISOString(),
+          agent_id: identity.agentId,
+          rotation_id: rotationId,
+          product_contract_sha256: AGENTMRR_PRODUCT_CONTRACT_SHA256,
+          code_release_commit: codeReleaseCommit,
+          }, null, 2)}\n`);
+          await attemptHandle.sync();
+        } finally {
+          await attemptHandle.close();
+        }
+        const publishResponse = await fetch(`${AGENTMRR_BASE_URL}/api/products`, {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -174,18 +218,17 @@ if (existing) {
         body: JSON.stringify(AGENTMRR_PRODUCT),
         redirect: "error",
         signal: AbortSignal.timeout(15_000),
-      });
-      const published = parseAgentMrrPublishedProduct(
-        await readAgentMrrJsonResponse(publishResponse, "publication"),
-        identity.agentId,
-      );
-      console.log(JSON.stringify({ action: "published", product_id: published.id, name: published.name }, null, 2));
-    } finally {
-      await funnelLock.close();
-      await unlink(funnelLockFile).catch(() => undefined);
+        });
+        const published = parseAgentMrrPublishedProduct(
+          await readAgentMrrJsonResponse(publishResponse, "publication"),
+          identity.agentId,
+        );
+        console.log(JSON.stringify({ action: "published", product_id: published.id, name: published.name }, null, 2));
+      } finally {
+        await releaseFunnelLock();
+      }
     }
   } finally {
-    await publicationLock.close();
-    await unlink(publicationLockFile).catch(() => undefined);
+    await releasePublicationLock();
   }
 }

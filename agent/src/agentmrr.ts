@@ -8,6 +8,7 @@ import {
 export const AGENTMRR_BASE_URL = "https://agentmrr.ai";
 export const AGENTMRR_REQUIRED_RELEASE_COMMIT = "eaa4c2481ac0ccc15a931790f490b950e623e291";
 export const AGENTMRR_REVIEWED_SOURCE_COMMIT = "f23f043142f356584393992f399f6b11e560920d";
+export const AGENTMRR_CODE_GATE_COMMIT = "ec1b7f827015408efc54c6c2e34e17ccbd573bda";
 export const AGENTMRR_CODE_RELEASE_CONTRACT = "agentmrr-attribution-v1";
 export const AGENTMRR_AGENT_NAME = "BountyVerdict";
 export const AGENTMRR_CATALOG_LIMIT = 1_000;
@@ -32,6 +33,9 @@ export const AGENTMRR_PRODUCT = Object.freeze({
   pricing_model: "paid",
   tags: ["github-actions", "ci-cd", "debugging", "coding-agents", "x402", "mcp"],
 });
+export const AGENTMRR_PRODUCT_CONTRACT_SHA256 = createHash("sha256")
+  .update(JSON.stringify(AGENTMRR_PRODUCT))
+  .digest("hex");
 
 export interface AgentMrrChallenge {
   nonce: string;
@@ -253,6 +257,7 @@ export function validateAgentMrrCodeReleaseState(
   const release = record(codeReleaseState);
   if (codeReleaseMode !== 0o600 || codeReleaseOwnerUid !== expectedUid || expectedUid < 0 ||
       release.schema_version !== 1 || release.status !== "complete" ||
+      release.source_head !== AGENTMRR_CODE_GATE_COMMIT ||
       release.reviewed_source !== AGENTMRR_REVIEWED_SOURCE_COMMIT ||
       release.code_contract !== AGENTMRR_CODE_RELEASE_CONTRACT ||
       typeof release.release_commit !== "string" || !/^[a-f0-9]{40}$/.test(release.release_commit) ||
@@ -260,6 +265,54 @@ export function validateAgentMrrCodeReleaseState(
       typeof release.completed_at !== "string" || !Number.isFinite(Date.parse(release.completed_at))) {
     throw new Error("AgentMRR publication requires the exact completed code release.");
   }
+}
+
+export function validateAgentMrrLiveCollector(
+  collectorState: unknown,
+  collectorMode: number,
+  collectorOwnerUid: number,
+  expectedUid: number,
+  now: Date,
+): void {
+  const collector = isFunnelSnapshot(collectorState) ? collectorState : null;
+  const collectorHeartbeat = collector ? Date.parse(collector.collector_heartbeat_at) : NaN;
+  const collectorAgeMs = now instanceof Date ? now.getTime() - collectorHeartbeat : NaN;
+  const capabilityHeartbeats = collector
+    ? FUNNEL_COLLECTOR_CAPABILITIES.map((capability) =>
+      Date.parse(collector.collector_capability_heartbeats[capability] || ""))
+    : [];
+  if (collectorMode !== 0o600 || collectorOwnerUid !== expectedUid || expectedUid < 0 ||
+      !(now instanceof Date) || !Number.isFinite(now.getTime()) || !collector ||
+      !FUNNEL_COLLECTOR_CAPABILITIES.every((capability) =>
+        collector.collector_capabilities.includes(capability)) ||
+      !Number.isFinite(collectorHeartbeat) || collectorAgeMs < -5_000 || collectorAgeMs > 60_000 ||
+      capabilityHeartbeats.length !== FUNNEL_COLLECTOR_CAPABILITIES.length ||
+      capabilityHeartbeats.some((heartbeat) => !Number.isFinite(heartbeat) ||
+        now.getTime() - heartbeat < -5_000 || now.getTime() - heartbeat > 60_000)) {
+    throw new Error("AgentMRR publication requires a fresh capable collector lease.");
+  }
+}
+
+export function validateAgentMrrPublicationAttempt(
+  value: unknown,
+  mode: number,
+  ownerUid: number,
+  expectedUid: number,
+  expectedAgentId: string,
+  expectedCodeReleaseCommit: string,
+): string {
+  const attempt = record(value);
+  if (mode !== 0o600 || ownerUid !== expectedUid || expectedUid < 0 || !isAgentMrrUuid(expectedAgentId) ||
+      !/^[a-f0-9]{40}$/.test(expectedCodeReleaseCommit) || attempt.schema_version !== 1 ||
+      attempt.status !== "posting" || attempt.agent_id !== expectedAgentId ||
+      attempt.product_contract_sha256 !== AGENTMRR_PRODUCT_CONTRACT_SHA256 ||
+      attempt.code_release_commit !== expectedCodeReleaseCommit ||
+      typeof attempt.rotation_id !== "string" ||
+      !/^agentmrr-publish-[a-z0-9]{6,24}-[a-f0-9]{16}$/.test(attempt.rotation_id) ||
+      typeof attempt.created_at !== "string" || !Number.isFinite(Date.parse(attempt.created_at))) {
+    throw new Error("AgentMRR existing listing requires the exact publication attempt receipt.");
+  }
+  return attempt.rotation_id;
 }
 
 export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateInput): void {
@@ -272,6 +325,13 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
     input.codeReleaseMode,
     input.codeReleaseOwnerUid,
     input.expectedUid,
+  );
+  validateAgentMrrLiveCollector(
+    input.collectorState,
+    input.collectorMode,
+    input.collectorOwnerUid,
+    input.expectedUid,
+    input.now,
   );
   if (input.baselineMode !== 0o600 || input.baselineOwnerUid !== input.expectedUid ||
       input.historyMode !== 0o600 || input.historyOwnerUid !== input.expectedUid ||
@@ -295,13 +355,6 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
   const requestedAt = typeof rotation.requested_at === "string" ? Date.parse(rotation.requested_at) : NaN;
   const observedAt = typeof rotation.last_observed_at === "string" ? Date.parse(rotation.last_observed_at) : NaN;
   const ageMs = input.now.getTime() - requestedAt;
-  const collector = isFunnelSnapshot(input.collectorState) ? input.collectorState : null;
-  const collectorHeartbeat = collector ? Date.parse(collector.collector_heartbeat_at) : NaN;
-  const collectorAgeMs = input.now.getTime() - collectorHeartbeat;
-  const capabilityHeartbeats = collector
-    ? FUNNEL_COLLECTOR_CAPABILITIES.map((capability) =>
-      Date.parse(collector.collector_capability_heartbeats[capability] || ""))
-    : [];
   if (!Number.isSafeInteger(input.baselineEpochId) || input.baselineEpochId < 1 ||
       ledger.schema_version !== 2 || ledger.active_epoch_id !== input.baselineEpochId ||
       rotation.status !== "draining" || rotation.id !== input.expectedRotationId ||
@@ -313,14 +366,7 @@ export function validateAgentMrrPublicationGate(input: AgentMrrPublicationGateIn
       !baseline || baseline.epoch_id !== input.baselineEpochId ||
       !activeBaseline || activeBaseline.epoch_id !== input.baselineEpochId ||
       trustedBoundaryFingerprint(activeBaseline) !== trustedBoundaryFingerprint(baseline) ||
-      !candidate || candidate.epoch_id !== input.baselineEpochId + 1 ||
-      !collector ||
-      !FUNNEL_COLLECTOR_CAPABILITIES.every((capability) =>
-        collector.collector_capabilities.includes(capability)) ||
-      !Number.isFinite(collectorHeartbeat) || collectorAgeMs < -5_000 || collectorAgeMs > 60_000 ||
-      capabilityHeartbeats.length !== FUNNEL_COLLECTOR_CAPABILITIES.length ||
-      capabilityHeartbeats.some((heartbeat) => !Number.isFinite(heartbeat) ||
-        input.now.getTime() - heartbeat < -5_000 || input.now.getTime() - heartbeat > 60_000)) {
+      !candidate || candidate.epoch_id !== input.baselineEpochId + 1) {
     throw new Error("AgentMRR publication requires an active trusted-funnel draining rotation.");
   }
 }

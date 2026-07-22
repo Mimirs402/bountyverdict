@@ -355,8 +355,8 @@ test("epoch rotation closes and opens at one boundary and repairs a partial base
     "Initial trusted conversion epoch used by the rotation test.",
     1,
   );
-  await writeFile(stateFile, `${JSON.stringify(state)}\n`);
-  await writeFile(baselineFile, `${JSON.stringify(initial)}\n`);
+  await writeFile(stateFile, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+  await writeFile(baselineFile, `${JSON.stringify(initial)}\n`, { mode: 0o600 });
   const env = {
     ...process.env,
     START_FUNNEL_EPOCH: "YES",

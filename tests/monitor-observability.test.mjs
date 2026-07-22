@@ -170,10 +170,15 @@ test("distribution monitoring measures the MCP selection-preview rollout from an
   assert.match(distribution, /release_commit: "0734bec44f4f96ff3bb56f6e362911c884509c99"/);
   assert.match(distribution, /initialize: 257/);
   assert.match(distribution, /tools_list: 208/);
+  assert.match(distribution, /target_tools_list: 150/);
+  assert.match(distribution, /eligible_prefix_observed_at: "2026-07-22T02:25:24.870Z"/);
+  assert.match(distribution, /resume_epoch_id: 37/);
+  assert.match(distribution, /updateSelectionPreviewExperiment/);
+  assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment/);
   assert.match(distribution, /valid_call_per_tools_list_percent/);
   assert.match(distribution, /invalid_call_share_percent/);
   assert.match(distribution, /payment_present_per_valid_call_percent/);
-  assert.match(distribution, /aggregate event deltas, not unique agents or purchase proof/);
+  assert.match(distribution, /audited draining intervals are excluded/);
   assert.match(distribution, /monitoredFetchWithNetworkRetry/);
   assert.match(distribution, /AbortSignal\.timeout\(timeoutMs\)/);
 });

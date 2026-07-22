@@ -57,6 +57,7 @@ import {
   SMITHERY_BUYER_QUERIES,
   SMITHERY_QUALIFIED_NAME,
 } from "../src/smithery.ts";
+import { updateSelectionPreviewExperiment } from "../src/selection-experiment.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const AGENTIC_MARKET_SERVICE =
@@ -89,6 +90,18 @@ const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
     payment_present: 0,
     paid_success: 0,
   }),
+  target_tools_list: 150,
+  eligible_prefix_observed_at: "2026-07-22T02:25:24.870Z",
+  eligible_prefix_before_audited_drain: Object.freeze({
+    initialize: 110,
+    tools_list: 109,
+    validation_error: 6,
+    capacity_rejected: 0,
+    payment_required: 0,
+    payment_present: 0,
+    paid_success: 0,
+  }),
+  resume_epoch_id: 37,
 });
 
 const configuration = loadDistributionMonitorConfiguration(process.env);
@@ -1697,7 +1710,7 @@ async function smitheryStatus(checkedAt: string): Promise<Record<string, unknown
   };
 }
 
-async function funnelStatus(): Promise<Record<string, unknown>> {
+async function funnelStatus(previousPreviewExperiment: unknown): Promise<Record<string, unknown>> {
   try {
     const monotonicDelta = (current: unknown, baseline: unknown, label: string): number => {
       const currentValue = Number(current || 0);
@@ -1754,24 +1767,6 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
         `MCP selection-preview rollout ${stage}`,
       ),
     ]));
-    const previewCallOpportunities = Number(mcpPreviewCopyDelta.validation_error || 0) + Number(mcpPreviewCopyDelta.payment_required || 0);
-    const mcpPreviewCopyExperiment = {
-      ...MCP_PREVIEW_COPY_ROLLOUT,
-      status: "running",
-      delta: mcpPreviewCopyDelta,
-      event_ratios: {
-        valid_call_per_tools_list_percent: Number(mcpPreviewCopyDelta.tools_list || 0) > 0
-          ? Math.round(Number(mcpPreviewCopyDelta.payment_required || 0) / Number(mcpPreviewCopyDelta.tools_list) * 1_000) / 10
-          : null,
-        invalid_call_share_percent: previewCallOpportunities > 0
-          ? Math.round(Number(mcpPreviewCopyDelta.validation_error || 0) / previewCallOpportunities * 1_000) / 10
-          : null,
-        payment_present_per_valid_call_percent: Number(mcpPreviewCopyDelta.payment_required || 0) > 0
-          ? Math.round(Number(mcpPreviewCopyDelta.payment_present || 0) / Number(mcpPreviewCopyDelta.payment_required) * 1_000) / 10
-          : null,
-      },
-      measurement: "aggregate_events_excluding_owner_registry_glama_and_x402_observer_channels_not_unique_users_or_purchases",
-    };
     const externalMcpByProduct = Object.fromEntries(MCP_PRODUCTS.map((product) => {
       const sources = state.mcp_by_product_source[product];
       return [product, Object.fromEntries(Object.keys(state.mcp_totals).map((stage) => [
@@ -1899,6 +1894,24 @@ async function funnelStatus(): Promise<Record<string, unknown>> {
     const effectiveByDiscoveryCohort = measurementEligible ? trustedByDiscoveryCohort : {};
     const trustedMcp = trustedBaseline.mcp ? trustedMcpDelta(state, trustedBaseline.mcp) : null;
     const effectiveTrustedMcp = measurementEligible ? trustedMcp : null;
+    const attributableRuntimeToolsList = (["cursor_deeplink", "openhands_integrations", "goose_extensions"] as const)
+      .reduce((sum, channel) => sum + Number(effectiveTrustedMcp?.by_channel?.[channel]?.tools_list || 0), 0);
+    const mcpPreviewCopyExperiment = {
+      ...MCP_PREVIEW_COPY_ROLLOUT,
+      ...updateSelectionPreviewExperiment({
+        id: MCP_PREVIEW_COPY_ROLLOUT.id,
+        observedAt: new Date().toISOString(),
+        targetToolsList: MCP_PREVIEW_COPY_ROLLOUT.target_tools_list,
+        resumeEpochId: MCP_PREVIEW_COPY_ROLLOUT.resume_epoch_id,
+        eligiblePrefix: MCP_PREVIEW_COPY_ROLLOUT.eligible_prefix_before_audited_drain,
+        rawDelta: mcpPreviewCopyDelta,
+        currentEpochId: Number(trustedBaseline.epoch_id || 1),
+        measurementEligible,
+        cleanEpochDelta: effectiveTrustedMcp?.buyer_candidate_totals || null,
+        attributableRuntimeToolsList,
+        previous: previousPreviewExperiment,
+      }),
+    };
     const trustedBuyerCandidateDiscovery = trustedBuyerCandidateDiscoveryDelta(state, trustedBaseline);
     const effectiveBuyerCandidateDiscovery = measurementEligible
       ? trustedBuyerCandidateDiscovery
@@ -2208,7 +2221,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Agent edge funnel:** ${funnel.available ? `${Number(funnel.trusted_buyer_candidate_discovery_requests || 0)} trusted buyer-candidate discovery hits; ${Number(funnel.trusted_external_discovery_requests || 0)} raw external discovery/health hits; ${Number(funnel.trusted_external_402_challenges || 0)} trusted 402 challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts; ${Number(funnel.trusted_successful_signed_responses || 0)} signed successes in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}` : `capture unavailable (${funnel.error || "not started"})`}
 - **Latest privacy-safe buyer-candidate learning:** discovery ${externalDiscoveryCohorts.length ? externalDiscoveryCohorts.join("; ") : "none since the clean boundary"}; paid-route attempts ${externalPaidRouteCohorts.length ? externalPaidRouteCohorts.join("; ") : "none since the clean boundary"} (Agent402 OpenAPI/x402 health, owner automation, x402 observer, and registry crawlers remain visible as raw reach but are excluded here; bounded aggregate categories only; no arguments, URLs, payloads, identities, IPs, or raw user agents retained)
 - **MCP buyer-candidate funnel:** ${funnel.available ? `${Number(mcpBuyerCandidate.initialize || 0)} initializations; ${Number(mcpBuyerCandidate.tools_list || 0)} tool-list requests; ${Number(mcpBuyerCandidate.protocol_error || 0)} protocol errors; ${Number(mcpBuyerCandidate.capacity_rejected || 0)} capacity rejections; ${Number(mcpBuyerCandidate.payment_required || 0)} valid unpaid tool calls; ${Number(mcpBuyerCandidate.payment_present || 0)} payment presentations; ${Number(mcpBuyerCandidate.paid_success || 0)} paid successes` : "unavailable"} (${funnel.mcp_learning_stage || "not started"}; owner, registry, Glama release, and x402 observer channels excluded)
-- **MCP selection-preview rollout:** ${funnel.available ? `${mcpPreviewCopyExperiment.status || "unavailable"} since ${mcpPreviewCopyExperiment.started_at || "unknown"} at ${String(mcpPreviewCopyExperiment.release_commit || "unknown").slice(0, 7)}; delta ${Number(mcpPreviewCopyDelta.initialize || 0)} initialize / ${Number(mcpPreviewCopyDelta.tools_list || 0)} tools/list / ${Number(mcpPreviewCopyDelta.validation_error || 0)} invalid / ${Number(mcpPreviewCopyDelta.payment_required || 0)} valid unpaid / ${Number(mcpPreviewCopyDelta.payment_present || 0)} payment presented / ${Number(mcpPreviewCopyDelta.paid_success || 0)} paid success; list-to-valid ${ratio(mcpPreviewCopyRatios.valid_call_per_tools_list_percent)}, invalid share ${ratio(mcpPreviewCopyRatios.invalid_call_share_percent)}, valid-to-payment ${ratio(mcpPreviewCopyRatios.payment_present_per_valid_call_percent)}` : "unavailable"} (aggregate event deltas, not unique agents or purchase proof)
+- **MCP selection-preview rollout:** ${funnel.available ? `${mcpPreviewCopyExperiment.status || "unavailable"} since ${mcpPreviewCopyExperiment.started_at || "unknown"} at ${String(mcpPreviewCopyExperiment.release_commit || "unknown").slice(0, 7)}; eligible delta ${Number(mcpPreviewCopyDelta.initialize || 0)} initialize / ${Number(mcpPreviewCopyDelta.tools_list || 0)} tools/list / ${Number(mcpPreviewCopyDelta.validation_error || 0)} invalid / ${Number(mcpPreviewCopyDelta.payment_required || 0)} valid unpaid / ${Number(mcpPreviewCopyDelta.payment_present || 0)} payment presented / ${Number(mcpPreviewCopyDelta.paid_success || 0)} paid success; ${Number(mcpPreviewCopyExperiment.remaining_eligible_tools_list || 0)} eligible lists remaining; decision ${mcpPreviewCopyExperiment.decision || "pending"}; list-to-valid ${ratio(mcpPreviewCopyRatios.valid_call_per_tools_list_percent)}, invalid share ${ratio(mcpPreviewCopyRatios.invalid_call_share_percent)}, valid-to-payment ${ratio(mcpPreviewCopyRatios.payment_present_per_valid_call_percent)}` : "unavailable"} (audited draining intervals are excluded; eligible aggregate event deltas are not unique agents or purchase proof)
 - **MCP invalid-call learning:** ${funnel.available ? mcpValidationSummary : "unavailable"} (coarse categories only; no arguments, URLs, payloads, identities, or raw client names retained; pre-upgrade events remain legacy-unclassified)
 - **MCP directory-crawler activity:** ${funnel.available ? `${Number(mcpRegistryCrawler.initialize || 0)} initializations; ${Number(mcpRegistryCrawler.tools_list || 0)} tool-list requests; ${Number(mcpRegistryCrawler.payment_required || 0)} valid unpaid tool calls` : "unavailable"} (retained separately for distribution propagation, never treated as buyer intent)
 - **Kiro Power package:** repository contract published; registry submission not made because publisher terms require explicit acceptance; ${funnel.available ? `${Number(mcpKiroPower.initialize || 0)} declared-source initializations, ${Number(mcpKiroPower.tools_list || 0)} tool-list requests, ${Number(mcpKiroPower.payment_required || 0)} valid unpaid calls, ${Number(mcpKiroPower.payment_present || 0)} payment presentations` : "funnel unavailable"} (source marker is aggregate attribution, not proof of install, identity, or purchase)
@@ -2806,7 +2819,7 @@ if (clawlancer.available === true &&
   errors.push(`Clawlancer release verification: ${String((clawlancer.onchain_evidence as Record<string, unknown>)?.reason || "release is not onchain verified")}`);
 }
 
-funnel = await funnelStatus();
+funnel = await funnelStatus(previousReport.funnel?.mcp_preview_copy_experiment || null);
 
 const taskmarketCommerce = (
   (acquisition.public_demand_watch as Record<string, any> | undefined)?.taskmarket?.tracked_worker || {}

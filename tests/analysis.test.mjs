@@ -757,6 +757,78 @@ test("current claimant phrasing observed in live bounty cohorts is recognized", 
   assert.equal(output.verdict, "CAUTION");
 });
 
+test("Fluxer-style slash claims and generic first-person implementation intent are competition", () => {
+  const comments = [{
+    body: "/claim #1842",
+    created_at: "2026-07-18T09:00:00Z",
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842#issuecomment-claim",
+    author_association: "NONE",
+    user: { login: "slash-claimant" },
+  }, {
+    body: "/attempt\n\nI have started reproducing this on Linux.",
+    created_at: "2026-07-18T10:00:00Z",
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842#issuecomment-attempt",
+    author_association: "NONE",
+    user: { login: "slash-attempt" },
+  }, {
+    body: "I will implement the missing desktop notification route and add regression tests.",
+    created_at: "2026-07-18T11:00:00Z",
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842#issuecomment-implementation",
+    author_association: "NONE",
+    user: { login: "implementation-author" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(
+    output.claimantInterest.map(({ login }) => login).sort(),
+    ["implementation-author", "slash-attempt", "slash-claimant"],
+  );
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unconfirmed claimant interest" && item.impact === -30 && !item.hardStop
+  ));
+});
+
+test("quoted commands, code examples, and maintainer implementation language do not forge claimant intent", () => {
+  const comments = [{
+    body: "> /claim\n> I will implement this.\n\nHas this claimant withdrawn?",
+    created_at: "2026-07-18T09:00:00Z",
+    author_association: "NONE",
+    user: { login: "quote-reviewer" },
+  }, {
+    body: "Use `/attempt` to enter the queue.\n\n```text\nI will fix this\n```",
+    created_at: "2026-07-18T10:00:00Z",
+    author_association: "NONE",
+    user: { login: "documentation-reader" },
+  }, {
+    body: "/claim\n\nI will implement the maintainer-side release after reviewing proposals.",
+    created_at: "2026-07-18T11:00:00Z",
+    author_association: "MEMBER",
+    user: { login: "fluxer-maintainer" },
+  }, {
+    body: "/claim",
+    created_at: "2026-07-18T12:00:00Z",
+    author_association: "NONE",
+    user: { login: "withdrawn-solver" },
+  }, {
+    body: "Withdrawing my claim; I will not continue working on this issue.",
+    created_at: "2026-07-19T12:00:00Z",
+    author_association: "NONE",
+    user: { login: "withdrawn-solver" },
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, body: `${healthyIssue.body}\nComment to claim a soft lock, 7 days.` },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.verdict, "VIABLE");
+  assert.deepEqual(output.claimantInterest, []);
+  assert.deepEqual(output.activeClaims, []);
+  assert.ok(!output.signals.some((item) => item.label === "Unconfirmed claimant interest"));
+});
+
 test("a later withdrawal clears only that user's natural-language claim intent", () => {
   const comments = [{
     body: "I am working on this issue.",
@@ -1131,6 +1203,71 @@ test("linked competing PR reduces the verdict", () => {
   assert.equal(output.pullRequests.length, 1);
 });
 
+test("Fluxer-style exact same-owner PR links in issue discussion become bounded competition evidence", () => {
+  const issue = {
+    ...healthyIssue,
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842",
+    body: `${healthyIssue.body}\n\nProposed implementation: https://github.com/FluxerApp/fluxer/pull/932.`,
+  };
+  const repository = {
+    ...healthyRepo,
+    html_url: "https://github.com/fluxerapp/fluxer",
+    full_name: "fluxerapp/fluxer",
+  };
+  const comments = [{
+    body: [
+      "The desktop patch is at https://github.com/fluxerapp/fluxer/pull/932",
+      "The mobile patch is at https://github.com/FluxerApp/fluxer-mobile/pull/933",
+      "Unrelated reference: https://github.com/another/project/pull/17",
+      "A files view is not an exact PR URL: https://github.com/fluxerapp/fluxer/pull/999/files",
+    ].join("\n"),
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842#issuecomment-pr",
+    user: { login: "fluxer-contributor" },
+  }];
+  const output = analyzeBounty({ issue, repository, comments, now });
+
+  assert.equal(output.verdict, "CAUTION");
+  assert.equal(output.pullRequests.length, 2);
+  assert.equal(output.pullRequests[0].state, "referenced");
+  assert.match(output.pullRequests[0].url, /github\.com\/FluxerApp\/fluxer\/pull\/932/i);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Referenced competing PR" && item.impact === -30 &&
+    item.evidenceUrl === comments[0].html_url
+  ));
+  assert.ok(!output.signals.some((item) => item.label === "No linked open PR found"));
+});
+
+test("discussion PR links deduplicate with authoritative timeline PR state", () => {
+  const issue = {
+    ...healthyIssue,
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842",
+    body: `${healthyIssue.body}\nTracking https://github.com/fluxerapp/fluxer/pull/932`,
+  };
+  const repository = { ...healthyRepo, full_name: "FluxerApp/Fluxer" };
+  const comments = [{
+    body: "Implementation is also linked at https://github.com/FluxerApp/Fluxer/pull/932.",
+    html_url: "https://github.com/fluxerapp/fluxer/issues/1842#issuecomment-duplicate-pr",
+    user: { login: "solver" },
+  }];
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Implement desktop notification routing",
+        state: "open",
+        user: { login: "solver" },
+        pull_request: { html_url: "https://github.com/fluxerapp/fluxer/pull/932" },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue, repository, comments, timeline, now });
+
+  assert.equal(output.pullRequests.length, 1);
+  assert.equal(output.pullRequests[0].state, "open");
+  assert.ok(output.signals.some((item) => item.label === "Competing open PR"));
+  assert.ok(!output.signals.some((item) => item.label === "Referenced competing PR"));
+});
+
 test("official repository policy can block AI-assisted bounty work", () => {
   const policyDocuments = [{
     body: "We do not accept contributions generated or assisted by AI or an LLM.",
@@ -1151,6 +1288,59 @@ test("official repository policy surfaces an AI disclosure requirement", () => {
   assert.equal(output.verdict, "VIABLE");
   assert.equal(output.aiPolicyRequirements.length, 1);
   assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
+});
+
+test("Memanto-style mandatory external execution prerequisites produce a bounded advisory", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+### Prerequisites
+- Grab your free Moorcheh API key and use provider-backed migration data from an actual run of the source tool.
+- Create your BountyHub account: sign up and register for the bounty.
+
+### Implementation Guidelines
+- Demo Video Required: record a demo video walking through the live migration end to end.
+- You must publish your demo on X and tag the official account so public engagement can be scored.
+- Run the reproducibility benchmark on a dedicated NVIDIA CUDA GPU.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+  const advisory = output.signals.find((item) => item.label === "Mandatory external prerequisites");
+
+  assert.deepEqual(output.externalPrerequisites, [
+    "account or registration",
+    "API key or provider data",
+    "demo video",
+    "public social posting or engagement",
+    "specialized hardware",
+  ]);
+  assert.equal(advisory?.impact, -15);
+  assert.equal(advisory?.hardStop, false);
+  assert.equal(advisory?.evidenceUrl, issue.html_url);
+  for (const category of output.externalPrerequisites) {
+    assert.match(advisory.detail, new RegExp(category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+});
+
+test("generic and optional external prerequisite mentions do not produce the advisory", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+### References
+- API key documentation: https://example.com/api-key-guide
+- An account registration guide and a demo video example are linked for context.
+- The CUDA GPU hardware guide explains benchmark history.
+
+The API key is optional if you want to exercise provider data.
+You may record a demo video if helpful.
+No public social post or engagement is required.
+Specialized hardware is not required.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.deepEqual(output.externalPrerequisites, []);
+  assert.ok(!output.signals.some((item) => item.label === "Mandatory external prerequisites"));
 });
 
 test("official repository policy blocks symbolic bounties and sensitive agent-context demands", () => {

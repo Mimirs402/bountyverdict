@@ -25,10 +25,10 @@ export const PRODUCT_SELECTION_PREVIEWS = Object.freeze({
   portfolio: Object.freeze({
     product: "BountyVerdict Portfolio",
     description: "Pay once to rank up to ten bounty candidates with full evidence-linked verdicts.",
-    useWhen: "When choosing among two to ten public GitHub bounty candidates.",
+    useWhen: "When choosing among eight to ten candidates, or when one ranked partial-failure-aware response is worth the premium for two to seven.",
     notFor: "One candidate, duplicate issue URLs, or private issues.",
     decisionReturned: ["ranked_verdicts", "best_candidate", "counts", "partial_failures"],
-    whyPay: "One call performs two to ten full audits; at ten candidates the fixed price is $0.04 per candidate.",
+    whyPay: "One call performs two to ten full audits and ranks partial successes; repeated $0.05 singles cost less for two to seven when ranked orchestration is unnecessary, while eight to ten are at or below the single-check unit price.",
     samplePath: "/api/portfolio/sample",
     skillName: "preflight-github-bounties",
   }),

@@ -112,8 +112,66 @@ function sensitiveTaskDisclosure(value) {
   return null;
 }
 
+const EXTERNAL_PREREQUISITE_CATEGORIES = [
+  {
+    category: "account or registration",
+    pattern: /\b(?:account|registration|register(?:ed|ing)?|sign[ -]?up|workspace id)\b/i,
+  },
+  {
+    category: "API key or provider data",
+    pattern: /\b(?:api[ -]?keys?|provider(?:-backed)? data|provider (?:credentials?|access)|real (?:provider|source) data|actual run of (?:the )?source tool|genuine exported archive)\b/i,
+  },
+  {
+    category: "demo video",
+    pattern: /\b(?:demo(?:nstration)? video|video (?:demo|walkthrough|showcase|showing|proof)|screen(?:cast| recording)|record(?:ed|ing)? (?:a |the )?(?:demo|video))\b/i,
+  },
+  {
+    category: "public social posting or engagement",
+    pattern: /\b(?:public(?:ly)? (?:post|share|publish)|social (?:post|showcase|engagement|amplification)|post (?:it|the result|about|on) (?:x|twitter|youtube|linkedin)|publish (?:it|the result|your demo|your showcase) on|tag (?:the )?(?:official|\@)|bookmarks?|retweets?|reposts?|linkedin reactions?|youtube views?)\b/i,
+  },
+  {
+    category: "specialized hardware",
+    pattern: /\b(?:(?:specialized|dedicated|qualifying|physical) hardware|nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device)\b/i,
+  },
+];
+
+const EXTERNAL_PREREQUISITE_REQUIREMENT = /\b(?:must|required|mandatory|prerequisites?|need(?:ed)? to|needs? (?:an?|the|your)|have to|has to|shall)\b/i;
+const EXTERNAL_PREREQUISITE_DIRECTIVE = /^(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b|:\s*(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b/i;
+const EXTERNAL_PREREQUISITE_OPT_OUT = /\b(?:optional(?:ly)?|not required|isn['’]?t required|aren['’]?t required|not mandatory|if (?:available|desired|helpful|you (?:want|wish|have))|nice to have|may (?:include|use|provide|record|post|publish|run)|can optionally)\b|\bno\b.{0,60}\b(?:required|mandatory)\b/i;
+const EXTERNAL_PREREQUISITE_SECTION = /\b(?:prerequisites?|requirements?|implementation guidelines?|submission instructions?|steps? to participate)\b/i;
+const EXTERNAL_PREREQUISITE_REFERENCE_ONLY = /^(?:see|read|reference|docs?|documentation|guide|example|learn more)\b/i;
+
+function mandatoryExternalPrerequisites(value) {
+  const categories = new Set();
+  let requiredSection = false;
+  for (const rawLine of String(value ?? "").split(/\r?\n/)) {
+    const markdownHeading = rawLine.match(/^\s{0,3}#{1,6}\s+(.+)$/)?.[1];
+    if (markdownHeading) {
+      requiredSection = EXTERNAL_PREREQUISITE_SECTION.test(markdownHeading);
+    }
+    const line = rawLine
+      .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, "")
+      .replace(/[*_`#]+/g, "")
+      .trim();
+    if (!line || EXTERNAL_PREREQUISITE_OPT_OUT.test(line)) continue;
+
+    const matched = EXTERNAL_PREREQUISITE_CATEGORIES.filter(({ pattern }) => pattern.test(line));
+    if (!matched.length) continue;
+    const directive = EXTERNAL_PREREQUISITE_REQUIREMENT.test(line) ||
+      EXTERNAL_PREREQUISITE_DIRECTIVE.test(line) ||
+      (requiredSection && !EXTERNAL_PREREQUISITE_REFERENCE_ONLY.test(line));
+    if (!directive) continue;
+    for (const { category } of matched) categories.add(category);
+  }
+  return EXTERNAL_PREREQUISITE_CATEGORIES
+    .map(({ category }) => category)
+    .filter((category) => categories.has(category));
+}
+
 const CLAIM_INTENT_TTL_DAYS = 30;
+const CLAIM_INTENT_COMMAND_PATTERN = /(?:^|\n)\s*\/(?:claim|attempt)\b/im;
 const CLAIM_INTENT_PATTERNS = [
+  CLAIM_INTENT_COMMAND_PATTERN,
   /\b(?:please|kindly)\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
   /\b(?:can|could|would)\s+you\s+assign\s+(?:(?:this issue|this|it|the issue)\s+)?to\s+me\b/i,
   /\bassign\s+me\b/i,
@@ -124,15 +182,35 @@ const CLAIM_INTENT_PATTERNS = [
   /\bi\s+(?:really\s+)?(?:want\s+to|wanna)\s+w(?:ork|ord)\s+on\s+(?:this|it|the issue)\b/i,
   /\bcan\s+i\s+be\s+assigned(?:\s+(?:to\s+)?(?:this|it|the issue))?\b/i,
   /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\b/i,
+  /\bi(?:['’]ll|\s+will|\s+am\s+going\s+to|\s+plan\s+to|\s+intend\s+to)\s+(?:start\s+)?(?:implement(?:ing)?|fix(?:ing)?|handle|resolve|address|work\s+on|take\s+on)\b/i,
+  /\bi(?:['’]m|\s+am)\s+(?:(?:currently|already|now)\s+)?(?:implementing|fixing|handling|resolving|addressing|working\s+on)\b/i,
+  /\bi\s+(?:can|will)\s+do\s+(?:this|it)\b/i,
   /(?:^|\n)\s*taking\s+(?:this|it|the issue)\b/im,
 ];
 const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
-  /\bwithdraw(?:ing)?\s+(?:my\s+)?(?:claim|interest|attempt)\b/i,
+  /\bwithdraw(?:ing)?\s+(?:(?:my|this|the)\s+)?(?:claim|interest|attempt)\b/i,
   /\bno longer\s+(?:working|claiming|interested)\b/i,
   /\b(?:can['’]?t|cannot|won['’]?t|will not)\s+(?:continue\s+)?work(?:ing)?\s+on\s+(?:this|it|the issue)\b/i,
   /\b(?:please\s+)?unassign\s+me\b/i,
   /\b(?:dropping|giving up)\s+(?:this|it|the issue|my claim)\b/i,
 ];
+
+function unquotedClaimText(value) {
+  const withoutHtmlQuotes = String(value ?? "")
+    .replace(/<blockquote\b[^>]*>[\s\S]*?<\/blockquote>/gi, " ");
+  const retained = [];
+  let fence = null;
+  for (const line of withoutHtmlQuotes.split(/\r?\n/)) {
+    const marker = line.match(/^\s*(```|~~~)/)?.[1] ?? null;
+    if (marker) {
+      fence = fence === null ? marker : fence === marker ? null : fence;
+      continue;
+    }
+    if (fence !== null || /^\s*>/.test(line)) continue;
+    retained.push(line.replace(/`[^`\n]*`/g, " "));
+  }
+  return retained.join("\n");
+}
 
 const TERMINAL_MAINTAINER_PATTERNS = [
   /\b(?:we|i)\s+(?:have\s+)?paid\s+(?:the|an?|one|all)\s+(?:accepted\s+)?(?:claim|bounty|reward|payout)s?\b/i,
@@ -225,17 +303,63 @@ function daysSince(value, now) {
   return Math.max(0, Math.floor((now.getTime() - new Date(value).getTime()) / 86_400_000));
 }
 
-function uniquePullRequests(timeline = []) {
+const EXACT_GITHUB_PULL_URL_PATTERN = /\bhttps:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)(?=$|[\s<>"'`()\[\]{},.!;:])/gi;
+
+function canonicalPullRequestUrl(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)\/?$/i);
+  return match ? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}` : null;
+}
+
+function bodyPullRequests(issue, comments, repository) {
+  const relevantRepository = typeof repository?.full_name === "string"
+    ? repository.full_name.toLowerCase()
+    : null;
+  if (!relevantRepository) return [];
+  const relevantOwner = relevantRepository.split("/")[0];
+  const sources = [
+    { body: issue?.body, evidenceUrl: issue?.html_url, author: issue?.user?.login ?? "issue-author", source: "issue body" },
+    ...comments.map((comment) => ({
+      body: comment?.body,
+      evidenceUrl: comment?.html_url,
+      author: comment?.user?.login ?? "unknown",
+      source: "issue comment",
+    })),
+  ];
   const pulls = new Map();
+  for (const source of sources) {
+    if (typeof source.body !== "string") continue;
+    for (const match of source.body.matchAll(EXACT_GITHUB_PULL_URL_PATTERN)) {
+      const referencedRepository = `${match[1]}/${match[2]}`.toLowerCase();
+      if (referencedRepository !== relevantRepository && match[1].toLowerCase() !== relevantOwner) continue;
+      const url = `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}`;
+      pulls.set(url.toLowerCase(), {
+        url,
+        state: "referenced",
+        title: `Pull request referenced in ${source.source}`,
+        author: source.author,
+        evidenceUrl: source.evidenceUrl ?? url,
+      });
+    }
+  }
+  return [...pulls.values()];
+}
+
+function uniquePullRequests(timeline = [], issue = null, comments = [], repository = null) {
+  const pulls = new Map();
+  for (const pull of bodyPullRequests(issue, comments, repository)) {
+    pulls.set(pull.url.toLowerCase(), pull);
+  }
   for (const event of timeline) {
     const item = event.event === "cross-referenced" ? event.source?.issue : null;
-    const url = item?.pull_request?.html_url;
+    const url = canonicalPullRequestUrl(item?.pull_request?.html_url);
     if (!url) continue;
-    pulls.set(url, {
+    pulls.set(url.toLowerCase(), {
       url,
       state: item.state,
       title: item.title,
-      author: item.user?.login ?? "unknown"
+      author: item.user?.login ?? "unknown",
+      evidenceUrl: url,
     });
   }
   return [...pulls.values()];
@@ -655,8 +779,9 @@ function activeSoftLockClaims(issue, comments, now) {
   const ordered = [...comments].sort((left, right) => commentTime(left) - commentTime(right));
   for (const comment of ordered) {
     const login = comment.user?.login;
-    if (!login) continue;
-    const body = comment.body ?? "";
+    if (!login || MAINTAINER_ASSOCIATIONS.has(comment.author_association) ||
+        TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug)) continue;
+    const body = unquotedClaimText(comment.body);
     if (/(?:withdraw(?:ing)?|cancel(?:l?ing)?).{0,40}(?:attempt|claim)|no longer (?:working|claiming)/i.test(body)) {
       states.delete(login);
       continue;
@@ -671,22 +796,30 @@ function activeSoftLockClaims(issue, comments, now) {
   );
 }
 
-function activeClaimIntent(comments, now) {
+function activeClaimIntent(issue, comments, now) {
   const states = new Map();
+  const softLockTtl = String(issue?.body ?? "").match(/soft[ -]?lock.{0,40}?([1-9]\d?)\s*days?/i);
   const ordered = [...comments].sort((left, right) => commentTime(left) - commentTime(right));
   for (const comment of ordered) {
     const login = comment.user?.login;
-    if (!login || TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug)) continue;
-    const body = comment.body ?? "";
+    if (!login || MAINTAINER_ASSOCIATIONS.has(comment.author_association) ||
+        TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug)) continue;
+    const body = unquotedClaimText(comment.body);
     if (CLAIM_INTENT_WITHDRAWAL_PATTERNS.some((pattern) => pattern.test(body))) {
       states.delete(login);
       continue;
     }
-    if (CLAIM_INTENT_PATTERNS.some((pattern) => pattern.test(body))) states.set(login, comment);
+    if (CLAIM_INTENT_PATTERNS.some((pattern) => pattern.test(body))) {
+      states.set(login, {
+        comment,
+        ttlDays: CLAIM_INTENT_COMMAND_PATTERN.test(body) && softLockTtl
+          ? Number(softLockTtl[1])
+          : CLAIM_INTENT_TTL_DAYS,
+      });
+    }
   }
-  const cutoff = now.getTime() - CLAIM_INTENT_TTL_DAYS * 86_400_000;
-  return [...states.entries()].flatMap(([login, comment]) =>
-    commentTime(comment) >= cutoff ? [{ login, comment }] : []
+  return [...states.entries()].flatMap(([login, { comment, ttlDays }]) =>
+    commentTime(comment) >= now.getTime() - ttlDays * 86_400_000 ? [{ login, comment }] : []
   );
 }
 
@@ -695,15 +828,20 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const assignees = Array.isArray(issue.assignees)
     ? issue.assignees.filter((assignee) => typeof assignee?.login === "string" && assignee.login.trim())
     : [];
-  const pulls = uniquePullRequests(timeline);
+  const pulls = uniquePullRequests(timeline, issue, comments, repository);
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
+  const referencedPulls = pulls.filter((pull) => pull.state === "referenced");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
   const terminalLabelCandidates = issueLabelNames(issue).filter(isTerminalBountyLabel);
   const opire = opireRewardState(comments);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
-  const claimantInterest = activeClaimIntent(comments, now);
-  const attempts = comments.filter((comment) => /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(comment.body ?? ""));
+  const claimantInterest = activeClaimIntent(issue, comments, now);
+  const attempts = comments.filter((comment) =>
+    !MAINTAINER_ASSOCIATIONS.has(comment.author_association) &&
+    !TRUSTED_BOUNTY_APPS.has(comment.performed_via_github_app?.slug) &&
+    /^\s*\/(?:(?:try|attempt|claim)\b|opire\s+(?:try|claim)\b)/im.test(unquotedClaimText(comment.body))
+  );
   const attemptUsers = [...new Set(attempts.map((comment) => comment.user?.login).filter(Boolean))];
   const maintainerWarnings = matchingComments([issue, ...comments], NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
@@ -773,6 +911,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     const category = sensitiveTaskDisclosure(source.body);
     return category ? [{ ...source, category }] : [];
   });
+  const externalPrerequisites = mandatoryExternalPrerequisites(issue.body);
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
   let score = 50;
@@ -955,7 +1094,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Issue is stale", -12, `The issue has not changed for ${issueAge} days.`, issue.html_url));
   }
 
-  if (openPulls.length === 0 && !coverage.timelineTruncated) {
+  if (openPulls.length === 0 && referencedPulls.length === 0 && !coverage.timelineTruncated) {
     score += 10;
     signals.push(signal("No linked open PR found", 10, "No open pull request appeared in the complete scanned timeline."));
   } else {
@@ -964,6 +1103,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       score += impact;
       signals.push(signal("Competing open PR", impact, `${openPulls.length} linked pull request${openPulls.length === 1 ? " is" : "s are"} still open.`, openPulls[0].url));
     }
+  }
+
+  if (referencedPulls.length) {
+    const impact = -Math.min(30, referencedPulls.length * 15);
+    score += impact;
+    signals.push(signal(
+      "Referenced competing PR",
+      impact,
+      `${referencedPulls.length} exact same-owner pull request URL${referencedPulls.length === 1 ? " appears" : "s appear"} in the issue discussion but not in the bounded timeline evidence; confirm relevance and current PR status before starting parallel work.`,
+      referencedPulls[0].evidenceUrl ?? referencedPulls[0].url,
+    ));
   }
 
   if (closedPulls.length >= 3) {
@@ -1050,6 +1200,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   }
 
+  if (externalPrerequisites.length) {
+    const impact = -Math.min(15, externalPrerequisites.length * 3);
+    score += impact;
+    signals.push(signal(
+      "Mandatory external prerequisites",
+      impact,
+      `The issue explicitly requires external execution prerequisites: ${externalPrerequisites.join(", ")}. Confirm access and willingness to complete them before investing implementation time.`,
+      issue.html_url,
+    ));
+  }
+
   if (unsafeTaskInstructions.length) {
     score -= 100;
     const instruction = unsafeTaskInstructions[0];
@@ -1101,6 +1262,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     withdrawals,
     aiPolicyBlocks,
     aiPolicyRequirements,
+    externalPrerequisites,
     unsafeTaskInstructions,
     reward,
     activeClaims,

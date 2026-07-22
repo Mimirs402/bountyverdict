@@ -30,7 +30,7 @@ Then ask, for example:
 | Decision | Product | Price | Guarded skill |
 |---|---|---:|---|
 | Is one public GitHub bounty still worth pursuing? | BountyVerdict | $0.05 | [`preflight-github-bounties`](skills/preflight-github-bounties/SKILL.md) |
-| Which of 2–10 bounties is the best candidate? | Portfolio | $0.40 | [`preflight-github-bounties`](skills/preflight-github-bounties/SKILL.md) |
+| Which of 8–10 bounties is best, or do I need one ranked response for 2–7? | Portfolio | $0.40 | [`preflight-github-bounties`](skills/preflight-github-bounties/SKILL.md) |
 | Are repository agent instructions reliable? | HarnessVerdict | $0.03 | [`audit-agent-harness`](skills/audit-agent-harness/SKILL.md) |
 | Is a third-party SKILL.md safe to install? | SkillVerdict | $0.06 | [`preflight-agent-skills`](skills/preflight-agent-skills/SKILL.md) |
 | Why did this workflow run fail? | RunVerdict | $0.04 | [`diagnose-github-actions`](skills/diagnose-github-actions/SKILL.md) |
@@ -60,6 +60,8 @@ For the broad CI use case, the crawlable [GitHub Actions Failure Diagnosis MCP S
 Every product has a free sample, a machine-readable OpenAPI contract, a declared price, and a successful-result `service_reuse` rule. Invalid inputs and upstream failures are not settled. Start with the [agent page](https://mimirs402.github.io/bountyverdict/agents.html), [`agent-manifest.json`](agent-manifest.json), the production [`openapi.json`](https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json), or the remote MCP server above.
 
 The bounty samples are captured from real public issues rather than invented fixtures: the [single-check sample](samples/verdict.json) rejects an assigned, withdrawn, and maintainer-rejected TypeORM bounty, while the [portfolio sample](samples/portfolio.json) refuses to recommend either it or an open but already-assigned Tenstorrent `$1,500` bounty. Use the `$0.05` single check for one candidate; the fixed `$0.40` portfolio is economical for 8–10 candidates or when one ranked, partial-failure-aware response materially simplifies the workflow.
+
+The [2026-07-22 owner-run field test](docs/FIELD_TEST_2026-07-22.md) evaluated 24 live-looking bounties and found no safe immediate start. Its initial 21 AVOID / 3 CAUTION result exposed missed slash-claim and comment-linked-PR competition signals; after the tested fix, the same set closed at 23 AVOID / 1 CAUTION / 0 VIABLE. This benchmark proves avoided duplicate work, not customer demand, purchase conversion, or payout success; a positive `VIABLE → accepted → paid` case remains an explicit evidence gap.
 
 The seven contracts are continuously checked in production. Coinbase Bazaar currently merchant-indexes six resources. Six existing non-SkillVerdict products are also available through exact-schema the402 listings, either per call or through a $1.05 monthly bundle of up to 20 combined requests. Owner-funded proofs are excluded from customer revenue.
 

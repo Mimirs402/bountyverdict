@@ -38,6 +38,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "kilo_marketplace",
   "cursor_deeplink",
   "openhands_integrations",
+  "goose_extensions",
   "glama",
   "github",
   "web_search",
@@ -693,6 +694,8 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
             ? "cursor_deeplink"
             : declaredSource === "openhands-integrations"
               ? "openhands_integrations"
+              : declaredSource === "goose-extensions"
+                ? "goose_extensions"
               : declaredSource === "glama-release"
                 ? "glama"
                 : declaredSource === "mcp-registry"

@@ -517,6 +517,12 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(openhandsIntegrations.length, 1);
   assert.equal(openhandsIntegrations[0].channel, "openhands_integrations");
 
+  const goose = event("/mcp?source=goose-extensions", 200, { "user-agent": "Goose/1.0" }, "POST");
+  Object.assign(goose, { logs: kiro.logs });
+  const gooseExtensions = classifyMcpTailEvents(goose);
+  assert.equal(gooseExtensions.length, 1);
+  assert.equal(gooseExtensions[0].channel, "goose_extensions");
+
   const glama = event("/mcp?source=glama-release", 200, { "user-agent": "Glama/1.0" }, "POST");
   Object.assign(glama, { logs: kiro.logs });
   const glamaObservations = classifyMcpTailEvents(glama);
@@ -557,6 +563,8 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     "/mcp?source=cursor-deeplink&source=cursor-deeplink",
     "/mcp?source=openhands-integrations&private=discard",
     "/mcp?source=openhands-integrations&source=openhands-integrations",
+    "/mcp?source=goose-extensions&private=discard",
+    "/mcp?source=goose-extensions&source=goose-extensions",
   ]) {
     const ambiguous = event(path, 200, { "user-agent": "Codex/1.0" }, "POST");
     Object.assign(ambiguous, { logs: kiro.logs });
@@ -578,12 +586,13 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...kiloMarketplace,
       ...cursorDeeplink,
       ...openhandsIntegrations,
+      ...gooseExtensions,
       ...registryObservations,
       ...ownerMarker,
       ...rejected,
       ...unknownMarker,
     ]),
-    /private|discard|kiro-power|cline-marketplace|kilo-marketplace|cursor-deeplink|openhands-integrations|campaign/i,
+    /private|discard|kiro-power|cline-marketplace|kilo-marketplace|cursor-deeplink|openhands-integrations|goose-extensions|campaign/i,
   );
 });
 
@@ -610,11 +619,12 @@ test("Glama release probes remain distribution evidence and never enter the buye
   assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 1);
 });
 
-test("direct Cursor and OpenHands runtime channels remain buyer-candidate activity", () => {
+test("direct Cursor, OpenHands, and Goose runtime channels remain buyer-candidate activity", () => {
   const snapshot = createFunnelSnapshot();
   for (const path of [
     "/mcp?source=cursor-deeplink",
     "/mcp?source=openhands-integrations",
+    "/mcp?source=goose-extensions",
   ]) {
     const request = event(path, 200, { "user-agent": "OpenHands/1.0" }, "POST");
     Object.assign(request, { logs: [{ message: [JSON.stringify({
@@ -631,7 +641,8 @@ test("direct Cursor and OpenHands runtime channels remain buyer-candidate activi
 
   assert.equal(snapshot.mcp_by_channel.cursor_deeplink.tools_list, 1);
   assert.equal(snapshot.mcp_by_channel.openhands_integrations.tools_list, 1);
-  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 2);
+  assert.equal(snapshot.mcp_by_channel.goose_extensions.tools_list, 1);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 3);
 });
 
 test("buyer-candidate discovery excludes directory health without hiding real acquisition channels", () => {

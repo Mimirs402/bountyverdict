@@ -1587,6 +1587,40 @@ test("official repository policy surfaces an AI disclosure requirement", () => {
   assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
 });
 
+test("Gitea-style disclosed AI contributions are not blocked by a no-AI reply rule", () => {
+  const policyDocuments = [{
+    body: [
+      "## AI Contribution Policy",
+      "Contributions made with the assistance of AI tools are welcome, but contributors must use them responsibly and disclose that use clearly.",
+      "Disclose AI-assisted content clearly.",
+      "Do not use AI to reply to questions about your issue or pull request. The questions are for you, not an AI model.",
+      "AI may be used to help draft issues and pull requests, but contributors remain responsible for what they submit.",
+    ].join("\n"),
+    html_url: "https://github.com/go-gitea/gitea/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "VIABLE");
+  assert.equal(output.aiPolicyBlocks.length, 0);
+  assert.equal(output.aiPolicyRequirements.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
+});
+
+test("a scoped no-AI reply rule cannot hide a separate code prohibition", () => {
+  const policyDocuments = [{
+    body: [
+      "Do not use AI to reply to review questions.",
+      "AI-assisted code contributions are prohibited.",
+    ].join("\n"),
+    html_url: "https://github.com/acme/widget/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.aiPolicyBlocks.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "Repository AI policy blocks the work" && item.hardStop));
+});
+
 test("Memanto-style mandatory external execution prerequisites produce a bounded advisory", () => {
   const issue = {
     ...healthyIssue,

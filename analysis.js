@@ -62,6 +62,21 @@ const AI_POLICY_BLOCK_PATTERNS = [
   /(?:contributions?|pull requests?|patches?|code).{0,80}(?:generated|written|assisted) by (?:ai|an? llm|chatgpt).{0,60}(?:not accepted|not allowed|prohibited|forbidden|will be (?:closed|rejected))/i
 ];
 
+const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
+  /(?:do not|don['’]?t|must not|may not)\s+use\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+to\s+(?:reply|respond|answer)\s+(?:to\s+)?(?:questions?|comments?|review feedback)\b/i,
+];
+
+function policyBlocksAiContributions(value) {
+  return String(value ?? "")
+    .split(/\r?\n+|(?<=[.!?])\s+/u)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+    .some((clause) =>
+      !AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS.some((pattern) => pattern.test(clause)) &&
+      AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(clause))
+    );
+}
+
 const AI_POLICY_DISCLOSURE_PATTERNS = [
   /(?:must|required to|please)\s+(?:clearly\s+)?(?:disclose|declare|label).{0,60}(?:ai|llm|chatgpt|generative)/i,
   /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i
@@ -1023,9 +1038,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.evidenceUrl = contributorPayment.evidenceUrl;
   }
   const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward, platformEvidence);
-  const aiPolicyBlocks = policyDocuments.filter((document) =>
-    AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
-  );
+  const aiPolicyBlocks = policyDocuments.filter((document) => policyBlocksAiContributions(document.body));
   const aiPolicyRequirements = policyDocuments.filter((document) =>
     AI_POLICY_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );

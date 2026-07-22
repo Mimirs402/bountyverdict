@@ -1246,6 +1246,19 @@ The held analyzer now fails closed only when a trusted repository authority requ
 
 The exact live replay now returns **AVOID 0**, an unverified reward with no amount or currency, and the canonical issue URL as evidence. The public analysis suite passes **94 / 94** and the complete Worker and operations suite passes **507 / 507**. No bounty was claimed, no outgoing payment was authorized, and production and the v7 measurement coordinate remain unchanged.
 
+## 2026-07-23 — Scoped AI communication rules no longer become coding bans
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Latest clean v7 checkpoint: **8 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction is held behind v7**
+
+Gitea's current official `CONTRIBUTING.md` explicitly welcomes AI-assisted contributions when the contributor reviews, tests, understands, and discloses the work. One later rule says not to use AI to reply to review questions. The current checker matched that scoped communication rule as a repository-wide AI prohibition, converting an otherwise cautionary candidate into **AVOID 0** with a false `Repository AI policy blocks the work` hard stop.
+
+AI policy blocking is now evaluated clause by clause. A narrowly scoped prohibition on using AI to reply, respond, or answer review questions no longer blocks coding, while a separate prohibition on AI-assisted code in the same document still hard-stops the result. The existing disclosure detector remains active.
+
+A replay against Gitea's live contribution document changes only the disputed policy interpretation: the held branch reports zero AI-policy blocks, one `AI-use disclosure required` advisory, and no AI hard stop. The complete public suite passes **176 / 176**, the Worker and operations suite passes **509 / 509**, TypeScript checking passes, the public contract remains synchronized, and `git diff --check` passes. No issue was claimed, no repository was contacted, and production was not changed.
+
 ## 2026-07-23 — Transferred repositories retain verified IssueHunt funding
 
 - Genuine external purchases: **0 / 10**

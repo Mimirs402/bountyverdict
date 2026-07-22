@@ -82,6 +82,10 @@ Then run `MCP: List Servers` and inspect BountyVerdict's six tools.
 
 ### Cursor
 
+One-click install:
+
+[Add BountyVerdict to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bountyverdict&config=eyJ1cmwiOiJodHRwczovL2JvdW50eXZlcmRpY3QtYWdlbnQtcHJvZHVjdGlvbi5taW1pcnNsYWIud29ya2Vycy5kZXYvbWNwP3NvdXJjZT1jdXJzb3ItZGVlcGxpbmsifQ==)
+
 Add this to `.cursor/mcp.json` or the global Cursor MCP configuration:
 
 ```json

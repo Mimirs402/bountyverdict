@@ -36,6 +36,8 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "agent_skills_marketplace",
   "cline_marketplace",
   "kilo_marketplace",
+  "cursor_deeplink",
+  "openhands_integrations",
   "glama",
   "github",
   "web_search",
@@ -687,11 +689,15 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
         ? "cline_marketplace"
         : declaredSource === "kilo-marketplace"
           ? "kilo_marketplace"
-          : declaredSource === "glama-release"
-            ? "glama"
-            : declaredSource === "mcp-registry"
-              ? "registry_or_directory"
-            : null;
+          : declaredSource === "cursor-deeplink"
+            ? "cursor_deeplink"
+            : declaredSource === "openhands-integrations"
+              ? "openhands_integrations"
+              : declaredSource === "glama-release"
+                ? "glama"
+                : declaredSource === "mcp-registry"
+                  ? "registry_or_directory"
+                  : null;
   const observations: McpFunnelObservation[] = [];
   for (const message of mcpLogMessages(tail.logs)) {
     let parsed: unknown;

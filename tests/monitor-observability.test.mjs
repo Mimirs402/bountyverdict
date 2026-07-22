@@ -530,9 +530,13 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(funnel, /declaredSource === "agent-skills-marketplace"/);
   assert.match(funnel, /declaredSource === "cline-marketplace"/);
   assert.match(funnel, /declaredSource === "kilo-marketplace"/);
+  assert.match(funnel, /declaredSource === "cursor-deeplink"/);
+  assert.match(funnel, /declaredSource === "openhands-integrations"/);
   assert.match(funnel, /\? "agent_skills_marketplace"/);
   assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);
+  assert.match(distribution, /Cursor direct MCP workflow/);
+  assert.match(distribution, /OpenHands integrations registry/);
   assert.match(distribution, /source marker is aggregate attribution, not proof of install, identity, or purchase/);
 });
 

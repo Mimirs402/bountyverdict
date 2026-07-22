@@ -505,6 +505,18 @@ test("attributes only exact allowlisted MCP source markers without retaining que
   assert.equal(kiloMarketplace.length, 1);
   assert.equal(kiloMarketplace[0].channel, "kilo_marketplace");
 
+  const cursorLink = event("/mcp?source=cursor-deeplink", 200, { "user-agent": "Cursor/1.0" }, "POST");
+  Object.assign(cursorLink, { logs: kiro.logs });
+  const cursorDeeplink = classifyMcpTailEvents(cursorLink);
+  assert.equal(cursorDeeplink.length, 1);
+  assert.equal(cursorDeeplink[0].channel, "cursor_deeplink");
+
+  const openhands = event("/mcp?source=openhands-integrations", 200, { "user-agent": "OpenHands/1.0" }, "POST");
+  Object.assign(openhands, { logs: kiro.logs });
+  const openhandsIntegrations = classifyMcpTailEvents(openhands);
+  assert.equal(openhandsIntegrations.length, 1);
+  assert.equal(openhandsIntegrations[0].channel, "openhands_integrations");
+
   const glama = event("/mcp?source=glama-release", 200, { "user-agent": "Glama/1.0" }, "POST");
   Object.assign(glama, { logs: kiro.logs });
   const glamaObservations = classifyMcpTailEvents(glama);
@@ -541,6 +553,10 @@ test("attributes only exact allowlisted MCP source markers without retaining que
     "/mcp?source=cline-marketplace&source=cline-marketplace",
     "/mcp?source=kilo-marketplace&private=discard",
     "/mcp?source=kilo-marketplace&source=kilo-marketplace",
+    "/mcp?source=cursor-deeplink&private=discard",
+    "/mcp?source=cursor-deeplink&source=cursor-deeplink",
+    "/mcp?source=openhands-integrations&private=discard",
+    "/mcp?source=openhands-integrations&source=openhands-integrations",
   ]) {
     const ambiguous = event(path, 200, { "user-agent": "Codex/1.0" }, "POST");
     Object.assign(ambiguous, { logs: kiro.logs });
@@ -560,12 +576,14 @@ test("attributes only exact allowlisted MCP source markers without retaining que
       ...marketplace,
       ...clineMarketplace,
       ...kiloMarketplace,
+      ...cursorDeeplink,
+      ...openhandsIntegrations,
       ...registryObservations,
       ...ownerMarker,
       ...rejected,
       ...unknownMarker,
     ]),
-    /private|discard|kiro-power|cline-marketplace|kilo-marketplace|campaign/i,
+    /private|discard|kiro-power|cline-marketplace|kilo-marketplace|cursor-deeplink|openhands-integrations|campaign/i,
   );
 });
 
@@ -590,6 +608,30 @@ test("Glama release probes remain distribution evidence and never enter the buye
   assert.equal(snapshot.mcp_by_channel.glama.tools_list, 1);
   assert.equal(snapshot.mcp_totals.tools_list, 2);
   assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 1);
+});
+
+test("direct Cursor and OpenHands runtime channels remain buyer-candidate activity", () => {
+  const snapshot = createFunnelSnapshot();
+  for (const path of [
+    "/mcp?source=cursor-deeplink",
+    "/mcp?source=openhands-integrations",
+  ]) {
+    const request = event(path, 200, { "user-agent": "OpenHands/1.0" }, "POST");
+    Object.assign(request, { logs: [{ message: [JSON.stringify({
+      type: "bountyverdict_mcp_funnel",
+      schema_version: 3,
+      stage: "tools_list",
+      product: null,
+      source: "external",
+      client_family: "not_applicable",
+      validation_kind: "not_applicable",
+    })] }] });
+    for (const observation of classifyMcpTailEvents(request)) recordMcpObservation(snapshot, observation);
+  }
+
+  assert.equal(snapshot.mcp_by_channel.cursor_deeplink.tools_list, 1);
+  assert.equal(snapshot.mcp_by_channel.openhands_integrations.tools_list, 1);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).tools_list, 2);
 });
 
 test("buyer-candidate discovery excludes directory health without hiding real acquisition channels", () => {

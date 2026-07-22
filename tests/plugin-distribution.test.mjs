@@ -32,6 +32,24 @@ test("plugin manifests expose the existing engineering gates without changing Sk
   }
 });
 
+test("Cursor one-click install decodes to the exact source-marked production remote", async () => {
+  const guide = await readFile(new URL("../llms-install.md", import.meta.url), "utf8");
+  const match = guide.match(/\[Add BountyVerdict to Cursor\]\((cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?[^)]+)\)/);
+  assert.ok(match, "missing official Cursor MCP install deeplink");
+  const url = new URL(match[1]);
+  assert.equal(url.protocol, "cursor:");
+  assert.equal(url.hostname, "anysphere.cursor-deeplink");
+  assert.equal(url.pathname, "/mcp/install");
+  assert.equal(url.searchParams.get("name"), "bountyverdict");
+  assert.deepEqual(
+    JSON.parse(Buffer.from(url.searchParams.get("config"), "base64").toString("utf8")),
+    {
+      url: "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=cursor-deeplink",
+    },
+  );
+  assert.deepEqual([...url.searchParams.keys()].sort(), ["config", "name"]);
+});
+
 test("Glama release packaging bridges only the existing hosted MCP without secrets", async () => {
   const [dockerfile, dockerignore, glama, packageJson, packageLock, smoke, workflow] = await Promise.all([
     readFile(new URL("../Dockerfile", import.meta.url), "utf8"),

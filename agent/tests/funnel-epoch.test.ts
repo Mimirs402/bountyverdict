@@ -73,6 +73,36 @@ test("captures an immutable epoch baseline while excluding owner automation", ()
   assert.deepEqual(trustedFunnelBaseline(baseline), baseline);
 });
 
+test("loads a pre-channel-addition baseline by adding only zero counters", () => {
+  const state = createFunnelSnapshot("2026-07-22T01:40:00Z");
+  const baseline = captureTrustedFunnelBaseline(
+    state,
+    "2026-07-22T01:42:23Z",
+    "A sufficiently descriptive baseline before new runtime channels existed.",
+    36,
+  );
+  const legacy = structuredClone(baseline);
+  delete (legacy.by_channel as Partial<typeof legacy.by_channel>).cursor_deeplink;
+  delete (legacy.by_channel as Partial<typeof legacy.by_channel>).openhands_integrations;
+  delete (legacy.by_discovery_channel as Partial<typeof legacy.by_discovery_channel>).cursor_deeplink;
+  delete (legacy.by_discovery_channel as Partial<typeof legacy.by_discovery_channel>).openhands_integrations;
+  delete (legacy.mcp!.by_channel as Partial<typeof legacy.mcp.by_channel>).cursor_deeplink;
+  delete (legacy.mcp!.by_channel as Partial<typeof legacy.mcp.by_channel>).openhands_integrations;
+
+  const migrated = trustedFunnelBaseline(legacy);
+  assert.ok(migrated);
+  assert.equal(migrated.epoch_id, 36);
+  assert.equal(migrated.initialized_at, baseline.initialized_at);
+  assert.deepEqual(migrated.by_channel.cursor_deeplink, baseline.by_channel.cursor_deeplink);
+  assert.deepEqual(migrated.by_channel.openhands_integrations, baseline.by_channel.openhands_integrations);
+  assert.deepEqual(migrated.mcp!.by_channel.cursor_deeplink, baseline.mcp!.by_channel.cursor_deeplink);
+  assert.deepEqual(migrated.mcp!.by_channel.openhands_integrations, baseline.mcp!.by_channel.openhands_integrations);
+
+  const unknown = structuredClone(legacy) as Record<string, any>;
+  unknown.mcp.by_channel.untrusted_campaign = baseline.mcp!.by_channel.github;
+  assert.equal(trustedFunnelBaseline(unknown), null);
+});
+
 test("trusted buyer-candidate discovery deltas preserve acquisition while excluding health refreshes", () => {
   const state = createFunnelSnapshot("2026-07-21T17:00:00Z");
   const baseline = captureTrustedFunnelBaseline(

@@ -188,20 +188,45 @@ function keyedMcpCountersValid(value: unknown, keys: readonly string[]): boolean
   return Object.keys(record).length === keys.length && keys.every((key) => mcpCountersValid(record[key]));
 }
 
-function trustedMcpBaselineValid(value: unknown): value is TrustedMcpBaseline {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+function migrateMcpChannelCounters(value: unknown): FunnelSnapshot["mcp_by_channel"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((key) => !FUNNEL_CHANNELS.includes(key as typeof FUNNEL_CHANNELS[number])) ||
+    !Object.values(record).every(mcpCountersValid)) return null;
+  return Object.fromEntries(FUNNEL_CHANNELS.map((channel) => [
+    channel,
+    record[channel] ? structuredClone(record[channel]) : emptyMcpCounters(),
+  ])) as FunnelSnapshot["mcp_by_channel"];
+}
+
+function migrateFunnelChannelCounters(value: unknown): FunnelSnapshot["by_channel"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((key) => !FUNNEL_CHANNELS.includes(key as typeof FUNNEL_CHANNELS[number])) ||
+    !Object.values(record).every(funnelCountersValid)) return null;
+  const empty = (): FunnelCounters => Object.fromEntries(FUNNEL_COUNTER_KEYS.map((key) => [key, 0])) as FunnelCounters;
+  return Object.fromEntries(FUNNEL_CHANNELS.map((channel) => [
+    channel,
+    record[channel] ? structuredClone(record[channel]) : empty(),
+  ])) as FunnelSnapshot["by_channel"];
+}
+
+function normalizeTrustedMcpBaseline(value: unknown): TrustedMcpBaseline | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const baseline = value as Partial<TrustedMcpBaseline>;
   if (Object.keys(value).length !== TRUSTED_MCP_BASELINE_KEYS.length ||
     !TRUSTED_MCP_BASELINE_KEYS.every((key) => key in value) ||
     !mcpCountersValid(baseline.external_totals) || !mcpCountersValid(baseline.buyer_candidate_totals) ||
     !keyedMcpCountersValid(baseline.external_by_product, MCP_PRODUCTS) ||
-    !keyedMcpCountersValid(baseline.by_channel, FUNNEL_CHANNELS) ||
     !keyedMcpCountersValid(baseline.by_client_class, FUNNEL_CLIENT_CLASSES) ||
     !keyedMcpCountersValid(baseline.by_client_family, MCP_CLIENT_FAMILIES) ||
-    !baseline.validation_kinds || typeof baseline.validation_kinds !== "object" || Array.isArray(baseline.validation_kinds)) return false;
+    !baseline.validation_kinds || typeof baseline.validation_kinds !== "object" || Array.isArray(baseline.validation_kinds)) return null;
+  const byChannel = migrateMcpChannelCounters(baseline.by_channel);
+  if (!byChannel) return null;
   const validationKinds = baseline.validation_kinds as Record<string, unknown>;
-  return Object.keys(validationKinds).length === MCP_VALIDATION_KINDS.length &&
-    MCP_VALIDATION_KINDS.every((kind) => Number.isSafeInteger(validationKinds[kind]) && Number(validationKinds[kind]) >= 0);
+  if (Object.keys(validationKinds).length !== MCP_VALIDATION_KINDS.length ||
+    !MCP_VALIDATION_KINDS.every((kind) => Number.isSafeInteger(validationKinds[kind]) && Number(validationKinds[kind]) >= 0)) return null;
+  return { ...baseline, by_channel: byChannel } as TrustedMcpBaseline;
 }
 
 export function captureTrustedFunnelBaseline(
@@ -289,12 +314,20 @@ export function trustedFunnelBaseline(value: unknown): TrustedFunnelBaseline | n
     typeof baseline.initialized_at !== "string" || !Number.isFinite(Date.parse(baseline.initialized_at)) ||
     typeof baseline.reason !== "string" || !baseline.counters || !baseline.external_by_product ||
     !baseline.by_channel || !baseline.by_client_class || !baseline.external_discovery_by_surface) return null;
-  if (baseline.mcp !== undefined && !trustedMcpBaselineValid(baseline.mcp)) return null;
+  const normalizedMcp = baseline.mcp === undefined ? undefined : normalizeTrustedMcpBaseline(baseline.mcp);
+  if (baseline.mcp !== undefined && !normalizedMcp) return null;
+  const normalizedByChannel = migrateFunnelChannelCounters(baseline.by_channel);
+  if (!normalizedByChannel) return null;
+  const normalizedDiscoveryByChannel = baseline.by_discovery_channel === undefined
+    ? undefined
+    : migrateFunnelChannelCounters(baseline.by_discovery_channel);
+  if (baseline.by_discovery_channel !== undefined && !normalizedDiscoveryByChannel) return null;
   if (baseline.buyer_candidate_discovery_totals !== undefined &&
     !funnelCountersValid(baseline.buyer_candidate_discovery_totals)) return null;
   return {
     ...baseline,
     epoch_id: Number(epochId),
+    mcp: normalizedMcp,
     funnel_capture_started_at: typeof baseline.funnel_capture_started_at === "string"
       ? baseline.funnel_capture_started_at
       : "legacy_unknown",
@@ -309,7 +342,8 @@ export function trustedFunnelBaseline(value: unknown): TrustedFunnelBaseline | n
     cohort_capture_started_at: typeof baseline.cohort_capture_started_at === "string"
       ? baseline.cohort_capture_started_at
       : "legacy_unknown",
-    by_discovery_channel: baseline.by_discovery_channel || {} as FunnelSnapshot["by_discovery_channel"],
+    by_channel: normalizedByChannel,
+    by_discovery_channel: normalizedDiscoveryByChannel || {} as FunnelSnapshot["by_discovery_channel"],
     by_discovery_client_class: baseline.by_discovery_client_class || {} as FunnelSnapshot["by_discovery_client_class"],
     by_cohort: baseline.by_cohort || {},
     by_discovery_cohort: baseline.by_discovery_cohort || {},

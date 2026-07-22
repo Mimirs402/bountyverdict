@@ -202,6 +202,8 @@ export function updateUnknownToolRecoveryExperiment(input: RecoveryExperimentInp
       ? "manual_reconciliation_required_epoch_46_was_not_observed"
       : status === "measurement_epoch_closed_before_target"
         ? "epoch_46_closed_before_target"
+        : status === "paused_audited_drain"
+          ? "measurement_interrupted_by_audited_drain_awaiting_epoch_close"
         : status === "running_clean_epoch"
           ? "awaiting_eligible_epoch_46_tools_list_target"
           : "awaiting_active_eligible_epoch_46";

@@ -39,6 +39,7 @@ test("does not count an audited drain even if the active epoch number is 46", ()
     cleanEpochDelta: clean({ tools_list: 20, tool_not_found: 1 }),
   });
   assert.equal(result.status, "paused_audited_drain");
+  assert.equal(result.decision, "measurement_interrupted_by_audited_drain_awaiting_epoch_close");
   assert.deepEqual(result.eligible_delta, clean());
 });
 

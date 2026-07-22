@@ -64,6 +64,10 @@ import {
 } from "../src/selection-experiment.ts";
 import { updateUnknownToolRecoveryExperiment } from "../src/recovery-experiment.ts";
 import { updateTaskLeadingDescriptionExperiment } from "../src/task-leading-description-experiment.ts";
+import {
+  readRecoveryExperimentCheckpoint,
+  writeRecoveryExperimentCheckpoint,
+} from "../src/recovery-experiment-checkpoint.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
 const AGENTIC_MARKET_SERVICE =
@@ -149,6 +153,8 @@ const directoryStateFile = process.env.DIRECTORY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/directories.json`;
 const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/acquisition-experiment.json`;
+const recoveryExperimentStateFile = process.env.RECOVERY_EXPERIMENT_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-unknown-tool-recovery-epoch46-v1.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
@@ -2621,6 +2627,12 @@ try {
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
+const persistedRecoveryExperiment = await readRecoveryExperimentCheckpoint(
+  recoveryExperimentStateFile,
+  MCP_UNKNOWN_TOOL_RECOVERY_EXPERIMENT.id,
+);
+const previousRecoveryExperiment = persistedRecoveryExperiment ||
+  previousReport.funnel?.mcp_unknown_tool_recovery_experiment || null;
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, x402Manifest, mcpMetadata, openapi, llms] = await Promise.all([
@@ -2972,8 +2984,19 @@ if (clawlancer.available === true &&
 
 funnel = await funnelStatus(
   previousReport.funnel?.mcp_preview_copy_experiment || null,
-  previousReport.funnel?.mcp_unknown_tool_recovery_experiment || null,
+  previousRecoveryExperiment,
   previousReport.funnel?.mcp_task_leading_description_experiment || null,
+);
+
+const currentRecoveryExperiment = funnel.mcp_unknown_tool_recovery_experiment;
+if (!currentRecoveryExperiment || typeof currentRecoveryExperiment !== "object" || Array.isArray(currentRecoveryExperiment)) {
+  throw new Error("Recovery experiment state is missing from the funnel report.");
+}
+await writeRecoveryExperimentCheckpoint(
+  recoveryExperimentStateFile,
+  MCP_UNKNOWN_TOOL_RECOVERY_EXPERIMENT.id,
+  checkedAt,
+  currentRecoveryExperiment as Record<string, unknown>,
 );
 
 const taskmarketCommerce = (

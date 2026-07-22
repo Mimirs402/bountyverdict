@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const distributionUrl = new URL("../agent/scripts/distribution-monitor.ts", import.meta.url);
+const recoveryRestoreUrl = new URL("../agent/scripts/restore-recovery-experiment-checkpoint.ts", import.meta.url);
 const auditedRunnerUrl = new URL("../agent/scripts/run-audited-monitor.ts", import.meta.url);
 const directoryMonitorUrl = new URL("../agent/scripts/directory-monitor.ts", import.meta.url);
 const agentToolsCloudUrl = new URL("../agent/src/agent-tools-cloud.ts", import.meta.url);
@@ -235,7 +236,10 @@ test("distribution monitoring measures the task-specific MCP description from an
 });
 
 test("distribution monitoring measures unknown-tool recovery only from clean epoch 46 without causal claims", async () => {
-  const distribution = await readFile(distributionUrl, "utf8");
+  const [distribution, recoveryRestore] = await Promise.all([
+    readFile(distributionUrl, "utf8"),
+    readFile(recoveryRestoreUrl, "utf8"),
+  ]);
   assert.match(distribution, /mcp-unknown-tool-recovery-epoch46-v1/);
   assert.match(distribution, /measurement_epoch_id: 46/);
   assert.match(distribution, /target_tools_list: 25/);
@@ -243,8 +247,16 @@ test("distribution monitoring measures unknown-tool recovery only from clean epo
   assert.match(distribution, /updateUnknownToolRecoveryExperiment/);
   assert.match(distribution, /currentEpochId: Number\(trustedBaseline\.epoch_id \|\| 1\)/);
   assert.match(distribution, /effectiveTrustedMcp\?\.buyer_candidate_totals \|\| null/);
-  assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment \|\| null,\s+previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment \|\| null/s);
+  assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment \|\| null,\s+previousRecoveryExperiment/s);
   assert.match(distribution, /previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment/);
+  assert.match(distribution, /readRecoveryExperimentCheckpoint/);
+  assert.match(distribution, /persistedRecoveryExperiment \|\|\s+previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment/);
+  assert.match(distribution, /writeRecoveryExperimentCheckpoint/);
+  assert.match(distribution, /experiments\/mcp-unknown-tool-recovery-epoch46-v1\.json/);
+  assert.match(recoveryRestore, /RECOVERY_JOURNAL_INVOCATION_ID/);
+  assert.match(recoveryRestore, /2026-07-22T14:09:39\.106Z/);
+  assert.match(recoveryRestore, /eligible_delta\?\.tools_list !== 20/);
+  assert.match(recoveryRestore, /already exists; refusing to overwrite/);
   assert.match(distribution, /first report at or above 25 eligible epoch-46 tools\/list events is immutable/);
   assert.match(distribution, /no session\/retry linkage and never establish a causal recovery rate/);
 });

@@ -249,9 +249,9 @@ test("distribution monitoring measures unknown-tool recovery only from clean epo
   assert.match(distribution, /effectiveTrustedMcp\?\.buyer_candidate_totals \|\| null/);
   assert.match(distribution, /previousReport\.funnel\?\.mcp_preview_copy_experiment \|\| null,\s+previousRecoveryExperiment/s);
   assert.match(distribution, /previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment/);
-  assert.match(distribution, /readRecoveryExperimentCheckpoint/);
+  assert.match(distribution, /readMeasurementExperimentCheckpoint/);
   assert.match(distribution, /persistedRecoveryExperiment \|\|\s+previousReport\.funnel\?\.mcp_unknown_tool_recovery_experiment/);
-  assert.match(distribution, /writeRecoveryExperimentCheckpoint/);
+  assert.match(distribution, /writeMeasurementExperimentCheckpoint/);
   assert.match(distribution, /experiments\/mcp-unknown-tool-recovery-epoch46-v1\.json/);
   assert.match(recoveryRestore, /RECOVERY_JOURNAL_INVOCATION_ID/);
   assert.match(recoveryRestore, /2026-07-22T14:09:39\.106Z/);
@@ -271,7 +271,9 @@ test("distribution monitoring keeps task-leading descriptions in a separate fail
   assert.match(distribution, /TASK_LEADING_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE/);
   assert.match(distribution, /constants\.O_RDONLY \| constants\.O_NOFOLLOW/);
   assert.match(distribution, /mode 0600/);
-  assert.match(distribution, /previousReport\.funnel\?\.mcp_task_leading_description_experiment \|\| null/);
+  assert.match(distribution, /persistedTaskLeadingDescriptionExperiment \|\|\s+previousReport\.funnel\?\.mcp_task_leading_description_experiment \|\| null/);
+  assert.match(distribution, /experiments\/mcp-task-leading-descriptions-v1\.json/);
+  assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+taskLeadingDescriptionExperimentStateFile/s);
   assert.match(distribution, /mcp_task_leading_description_experiment: mcpTaskLeadingDescriptionExperiment/);
   assert.match(distribution, /inactive until exact reviewed release, production activation, completed drain rotation, and fresh epoch coordinates match the trusted ledger/);
   assert.match(distribution, /first report at or above N=25 is immutable/);

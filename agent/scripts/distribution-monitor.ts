@@ -63,10 +63,13 @@ import {
   updateSelectionPreviewExperiment,
 } from "../src/selection-experiment.ts";
 import { updateUnknownToolRecoveryExperiment } from "../src/recovery-experiment.ts";
-import { updateTaskLeadingDescriptionExperiment } from "../src/task-leading-description-experiment.ts";
 import {
-  readRecoveryExperimentCheckpoint,
-  writeRecoveryExperimentCheckpoint,
+  TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+  updateTaskLeadingDescriptionExperiment,
+} from "../src/task-leading-description-experiment.ts";
+import {
+  readMeasurementExperimentCheckpoint,
+  writeMeasurementExperimentCheckpoint,
 } from "../src/recovery-experiment-checkpoint.ts";
 
 const CDP_DISCOVERY = "https://api.cdp.coinbase.com/platform/v2/x402/discovery";
@@ -155,6 +158,8 @@ const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/acquisition-experiment.json`;
 const recoveryExperimentStateFile = process.env.RECOVERY_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-unknown-tool-recovery-epoch46-v1.json`;
+const taskLeadingDescriptionExperimentStateFile = process.env.TASK_LEADING_DESCRIPTION_EXPERIMENT_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v1.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
@@ -2627,12 +2632,18 @@ try {
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
-const persistedRecoveryExperiment = await readRecoveryExperimentCheckpoint(
+const persistedRecoveryExperiment = await readMeasurementExperimentCheckpoint(
   recoveryExperimentStateFile,
   MCP_UNKNOWN_TOOL_RECOVERY_EXPERIMENT.id,
 );
 const previousRecoveryExperiment = persistedRecoveryExperiment ||
   previousReport.funnel?.mcp_unknown_tool_recovery_experiment || null;
+const persistedTaskLeadingDescriptionExperiment = await readMeasurementExperimentCheckpoint(
+  taskLeadingDescriptionExperimentStateFile,
+  TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+);
+const previousTaskLeadingDescriptionExperiment = persistedTaskLeadingDescriptionExperiment ||
+  previousReport.funnel?.mcp_task_leading_description_experiment || null;
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, x402Manifest, mcpMetadata, openapi, llms] = await Promise.all([
@@ -2985,18 +2996,30 @@ if (clawlancer.available === true &&
 funnel = await funnelStatus(
   previousReport.funnel?.mcp_preview_copy_experiment || null,
   previousRecoveryExperiment,
-  previousReport.funnel?.mcp_task_leading_description_experiment || null,
+  previousTaskLeadingDescriptionExperiment,
 );
 
 const currentRecoveryExperiment = funnel.mcp_unknown_tool_recovery_experiment;
 if (!currentRecoveryExperiment || typeof currentRecoveryExperiment !== "object" || Array.isArray(currentRecoveryExperiment)) {
   throw new Error("Recovery experiment state is missing from the funnel report.");
 }
-await writeRecoveryExperimentCheckpoint(
+await writeMeasurementExperimentCheckpoint(
   recoveryExperimentStateFile,
   MCP_UNKNOWN_TOOL_RECOVERY_EXPERIMENT.id,
   checkedAt,
   currentRecoveryExperiment as Record<string, unknown>,
+);
+
+const currentTaskLeadingDescriptionExperiment = funnel.mcp_task_leading_description_experiment;
+if (!currentTaskLeadingDescriptionExperiment || typeof currentTaskLeadingDescriptionExperiment !== "object" ||
+  Array.isArray(currentTaskLeadingDescriptionExperiment)) {
+  throw new Error("Task-leading description experiment state is missing from the funnel report.");
+}
+await writeMeasurementExperimentCheckpoint(
+  taskLeadingDescriptionExperimentStateFile,
+  TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
+  checkedAt,
+  currentTaskLeadingDescriptionExperiment as Record<string, unknown>,
 );
 
 const taskmarketCommerce = (

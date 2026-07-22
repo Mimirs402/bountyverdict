@@ -14,29 +14,29 @@ type CheckpointEnvelope = {
 
 function checkpointEnvelope(value: unknown, expectedExperimentId: string): CheckpointEnvelope {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Recovery experiment checkpoint must be an object.");
+    throw new Error("Measurement experiment checkpoint must be an object.");
   }
   const envelope = value as Record<string, unknown>;
   if (envelope.schema_version !== CHECKPOINT_SCHEMA_VERSION) {
-    throw new Error("Recovery experiment checkpoint schema is unsupported.");
+    throw new Error("Measurement experiment checkpoint schema is unsupported.");
   }
   if (envelope.experiment_id !== expectedExperimentId) {
-    throw new Error("Recovery experiment checkpoint belongs to a different experiment.");
+    throw new Error("Measurement experiment checkpoint belongs to a different experiment.");
   }
   if (typeof envelope.persisted_at !== "string" || !Number.isFinite(Date.parse(envelope.persisted_at))) {
-    throw new Error("Recovery experiment checkpoint time is invalid.");
+    throw new Error("Measurement experiment checkpoint time is invalid.");
   }
   if (!envelope.state || typeof envelope.state !== "object" || Array.isArray(envelope.state)) {
-    throw new Error("Recovery experiment checkpoint state is missing.");
+    throw new Error("Measurement experiment checkpoint state is missing.");
   }
   const state = envelope.state as Record<string, unknown>;
   if (state.id !== expectedExperimentId) {
-    throw new Error("Recovery experiment checkpoint state ID does not match its envelope.");
+    throw new Error("Measurement experiment checkpoint state ID does not match its envelope.");
   }
   return envelope as CheckpointEnvelope;
 }
 
-export async function readRecoveryExperimentCheckpoint(
+export async function readMeasurementExperimentCheckpoint(
   path: string,
   expectedExperimentId: string,
 ): Promise<Record<string, unknown> | null> {
@@ -49,10 +49,10 @@ export async function readRecoveryExperimentCheckpoint(
   }
   try {
     const stat = await handle.stat();
-    if (!stat.isFile()) throw new Error("Recovery experiment checkpoint is not a regular file.");
-    if ((stat.mode & 0o077) !== 0) throw new Error("Recovery experiment checkpoint must use mode 0600.");
+    if (!stat.isFile()) throw new Error("Measurement experiment checkpoint is not a regular file.");
+    if ((stat.mode & 0o077) !== 0) throw new Error("Measurement experiment checkpoint must use mode 0600.");
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-      throw new Error("Recovery experiment checkpoint is not owned by the monitor user.");
+      throw new Error("Measurement experiment checkpoint is not owned by the monitor user.");
     }
     const parsed = JSON.parse(await handle.readFile("utf8"));
     return checkpointEnvelope(parsed, expectedExperimentId).state;
@@ -61,7 +61,7 @@ export async function readRecoveryExperimentCheckpoint(
   }
 }
 
-export async function writeRecoveryExperimentCheckpoint(
+export async function writeMeasurementExperimentCheckpoint(
   path: string,
   experimentId: string,
   persistedAt: string,
@@ -89,3 +89,6 @@ export async function writeRecoveryExperimentCheckpoint(
   }
   await rename(temporary, path);
 }
+
+export const readRecoveryExperimentCheckpoint = readMeasurementExperimentCheckpoint;
+export const writeRecoveryExperimentCheckpoint = writeMeasurementExperimentCheckpoint;

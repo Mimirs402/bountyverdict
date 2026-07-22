@@ -2748,20 +2748,30 @@ try {
   errors.push(`MCP intent page: ${message}`);
 }
 
-try {
+if (reportOnly) {
   acquisition = {
     ...acquisition,
-    mcp_downstreams: await mcpDownstreamStatus(previousReport.acquisition?.mcp_downstreams || {}),
-  };
-} catch (error) {
-  acquisition = {
-    ...acquisition,
-    mcp_downstreams: {
-      ...(previousReport.acquisition?.mcp_downstreams || {}),
-      last_failed_at: checkedAt,
-      last_error: error instanceof Error ? error.message : String(error),
+    mcp_downstreams: previousReport.acquisition?.mcp_downstreams || {
+      checked_at: null,
+      status: "awaiting_full_audited_retrieval",
     },
   };
+} else {
+  try {
+    acquisition = {
+      ...acquisition,
+      mcp_downstreams: await mcpDownstreamStatus(previousReport.acquisition?.mcp_downstreams || {}),
+    };
+  } catch (error) {
+    acquisition = {
+      ...acquisition,
+      mcp_downstreams: {
+        ...(previousReport.acquisition?.mcp_downstreams || {}),
+        last_failed_at: checkedAt,
+        last_error: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
 }
 
 try {

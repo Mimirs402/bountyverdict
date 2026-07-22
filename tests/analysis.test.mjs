@@ -1606,6 +1606,75 @@ test("Gitea-style disclosed AI contributions are not blocked by a no-AI reply ru
   assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
 });
 
+test("Coolify-style AI quality caveats remain disclosure-only while a core-team label blocks eligibility", () => {
+  const issue = {
+    ...healthyIssue,
+    labels: [{ name: "👥 Core Team Only" }],
+  };
+  const policyDocuments = [{
+    body: [
+      "Low-effort AI-generated pull requests will be closed.",
+      "AI usage is allowed. However, contributors must fully understand what their changes do and why.",
+      "## AI Usage Disclosure",
+      "If AI tools were used at any stage, mention it in the pull request description.",
+      "AI-generated pull requests without clear understanding will be closed.",
+    ].join("\n"),
+    html_url: "https://github.com/coollabsio/coolify/blob/v4.x/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.aiPolicyBlocks.length, 0);
+  assert.equal(output.aiPolicyRequirements.length, 1);
+  assert.ok(!output.signals.some((item) => item.label === "Repository AI policy blocks the work"));
+  assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
+  assert.ok(output.signals.some((item) =>
+    item.label === "Issue restricted to core team or maintainers" &&
+    item.hardStop &&
+    item.evidenceUrl === issue.html_url
+  ));
+});
+
+test("exact maintainer-only label variants block external bounty work", () => {
+  for (const label of ["Core Team Only", "maintainer-only", "Maintainers Only"]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, labels: [{ name: label }] },
+      repository: healthyRepo,
+      now,
+    });
+
+    assert.equal(output.verdict, "AVOID", label);
+    assert.ok(output.signals.some((item) =>
+      item.label === "Issue restricted to core team or maintainers" && item.hardStop
+    ), label);
+  }
+
+  for (const label of ["Core team review", "Maintainer wanted", "Team only discussion"]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, labels: [{ name: label }] },
+      repository: healthyRepo,
+      now,
+    });
+    assert.ok(!output.signals.some((item) => item.label === "Issue restricted to core team or maintainers"), label);
+  }
+});
+
+test("an explicit AI allowance cannot override a separate code-contribution ban", () => {
+  const policyDocuments = [{
+    body: [
+      "AI usage is allowed for drafting issue descriptions.",
+      "Low-effort AI-generated issue reports will be closed.",
+      "AI-assisted code contributions are prohibited.",
+    ].join("\n"),
+    html_url: "https://github.com/acme/widget/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.aiPolicyBlocks.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "Repository AI policy blocks the work" && item.hardStop));
+});
+
 test("a scoped no-AI reply rule cannot hide a separate code prohibition", () => {
   const policyDocuments = [{
     body: [

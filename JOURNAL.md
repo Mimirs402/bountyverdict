@@ -1290,3 +1290,16 @@ The strict parser now validates named and anonymous deposit records through the 
 Live replay from both the former and current GitHub URLs now verifies the same trusted-platform **$150** record and preserves its legacy IssueHunt evidence URL. The verdict remains **AVOID** because the issue closed in 2024 and has three linked pull requests. This repairs funding provenance without making stale work actionable.
 
 The bounded sweep found no executable alternative: three other verified IssueHunt records were closed, one open issue was assigned and offered unverified non-USD XTR, and one listing's GitHub issue no longer exists. The complete public suite passes **174 / 174** and the Worker and operations suite passes **511 / 511**; typechecking, synchronized llms contracts, dry Worker deployment, Glama verification, dependency audit, and diff checking all pass. No claim, bid, payment, contact, deployment, or marketplace mutation occurred.
+
+## 2026-07-23 — AI quality caveats and contributor-only labels preserve eligibility
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Exact live replay: **AVOID 18** for `coollabsio/coolify#2390`
+- Production treatment: **unchanged; fix remains on the held v1.1.10 quality branch**
+
+Coolify's official contribution policy explicitly allows AI assistance when contributors understand the output and disclose its use, while warning that low-quality or unreviewed AI-generated pull requests may be closed. The analyzer treated that quality condition as a blanket AI ban. Separately, the issue carries the exact `Core Team Only` label, but label eligibility was not a hard stop.
+
+The held analyzer now treats low-effort, unreviewed, untested, undisclosed, or not-understood AI caveats as quality conditions only when the same official policy explicitly permits AI use. A separate prohibition on AI-assisted code still wins and remains a hard stop. Exact normalized `Core Team Only`, `Maintainer Only`, and `Maintainers Only` labels, including emoji-prefixed and hyphenated variants, now stop external work without matching nearby advisory labels such as `Core team review`.
+
+Live replay now returns **AVOID 18**, preserves the verified **$250 USD** Algora listing, reports `DISCLOSURE_REQUIRED`, emits `Issue restricted to core team or maintainers` with the issue URL, and no longer invents an AI-policy block. The complete public suite passes **179 / 179**, the Worker and operations suite passes **511 / 511**, TypeScript checking passes, synchronized llms contracts pass, and `git diff --check` passes. No issue was claimed, no maintainer was contacted, no payment was made, and no production or frozen-v7 coordinate was changed.

@@ -360,7 +360,7 @@ function uniquePullRequests(timeline = [], issue = null, comments = [], reposito
     if (!url) continue;
     pulls.set(url.toLowerCase(), {
       url,
-      state: item.state,
+      state: item.pull_request.merged_at ? "merged" : item.state,
       title: item.title,
       author: item.user?.login ?? "unknown",
       evidenceUrl: url,
@@ -834,6 +834,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     : [];
   const pulls = uniquePullRequests(timeline, issue, comments, repository);
   const openPulls = pulls.filter((pull) => pull.state === "open");
+  const mergedPulls = pulls.filter((pull) => pull.state === "merged");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
   const referencedPulls = pulls.filter((pull) => pull.state === "referenced");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
@@ -1098,7 +1099,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Issue is stale", -12, `The issue has not changed for ${issueAge} days.`, issue.html_url));
   }
 
-  if (openPulls.length === 0 && referencedPulls.length === 0 && !coverage.timelineTruncated) {
+  if (openPulls.length === 0 && mergedPulls.length === 0 && referencedPulls.length === 0 && !coverage.timelineTruncated) {
     score += 10;
     signals.push(signal("No linked open PR found", 10, "No open pull request appeared in the complete scanned timeline."));
   } else {
@@ -1107,6 +1108,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       score += impact;
       signals.push(signal("Competing open PR", impact, `${openPulls.length} linked pull request${openPulls.length === 1 ? " is" : "s are"} still open.`, openPulls[0].url));
     }
+  }
+
+  if (mergedPulls.length) {
+    score -= 100;
+    signals.push(signal(
+      "Merged implementation PR",
+      -100,
+      `${mergedPulls.length} linked pull request${mergedPulls.length === 1 ? " has" : "s have"} already been merged, so the requested implementation appears delivered even if the issue remains open.`,
+      mergedPulls[0].url,
+      true,
+    ));
   }
 
   if (referencedPulls.length) {

@@ -1203,6 +1203,33 @@ test("linked competing PR reduces the verdict", () => {
   assert.equal(output.pullRequests.length, 1);
 });
 
+test("one merged cross-referenced implementation is a hard stop on an open issue", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Implement the requested DevDocs scraper",
+        state: "closed",
+        user: { login: "solver" },
+        pull_request: {
+          html_url: "https://github.com/acme/widget/pull/9",
+          merged_at: "2026-05-26T12:00:00Z",
+        },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.pullRequests.length, 1);
+  assert.equal(output.pullRequests[0].state, "merged");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Merged implementation PR" && item.hardStop && item.evidenceUrl.endsWith("/pull/9")
+  ));
+  assert.ok(!output.signals.some((item) => item.label === "No linked open PR found"));
+  assert.ok(!output.signals.some((item) => item.label === "Closed-PR swarm"));
+});
+
 test("Fluxer-style exact same-owner PR links in issue discussion become bounded competition evidence", () => {
   const issue = {
     ...healthyIssue,

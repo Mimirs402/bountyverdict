@@ -1129,3 +1129,16 @@ The next production-equivalent field pass found no safely claimable work. Its st
 The source classifier now distinguishes credential use from credential exposure. A secret mention becomes an unsafe hard stop only when the text requests an exposing action, explicit raw or unredacted values, or placement into a public artifact. Requests to paste API keys, publish environment-variable values, or reveal credentials remain blocked. The complete live Gitea issue now has no `Unsafe task instructions` signal while retaining its independent closed, contested, locked, and AI-policy hard stops.
 
 The focused analyzer suite passes **80 / 80**, the complete public suite passes **160 / 160**, the Worker and operations suite passes **485 / 485**, and TypeScript checking passes. The first Worker-suite run encountered host `tmpfs` inode quota errors across unrelated atomic-write tests; removing only owner-owned Chromium scoped directories older than twelve hours reduced owned temporary entries from **888,941** to **298,340**, after which the suite passed unchanged. This source correction is deliberately held from production until the active v6 selection boundary closes, so a quality repair does not silently alter the measured treatment.
+
+## 2026-07-23 — Merged implementation evidence now stops duplicate bounty work
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v6 checkpoint: **2 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; source fix held until the v6 boundary**
+
+A third non-duplicate bounty sweep checked 12 additional IssueHunt and Polar-style candidates and found none safe to pursue. The closest apparent survivor was `cyclejs/cyclejs#618`, which the current production-equivalent checker scored CAUTION 50 because its open issue had no verified reward. Canonical GitHub timeline evidence proves the requested work was already delivered by `freeCodeCamp/devdocs#2684`, merged on May 26, 2026.
+
+The analyzer had preserved the cross-reference but collapsed GitHub's explicit `pull_request.merged_at` field into the generic issue state `closed`. That meant one known merged solution was not a hard stop unless the issue itself closed or several closed PRs accumulated. The source now retains `merged` as a distinct authoritative state, emits a `Merged implementation PR` hard stop for even one linked merge, and withholds the positive no-open-PR signal when a merge exists. The exact Cycle.js issue now returns **AVOID**, score **0**, with the merged DevDocs PR as its evidence.
+
+The complete public suite passes **161 / 161**, the Worker and operations suite passes **486 / 486**, TypeScript checking passes, and the business GitHub identity remains `Mimirs402` with commit author `Mimir's Lab <admin@mimirslab.com>`. No issue was claimed, no bid or payment was made, and no production treatment was changed. The live report-only monitor remains healthy at **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs.

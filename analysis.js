@@ -472,6 +472,22 @@ function opireRewardState(comments) {
 }
 
 function platformClaimState(comments, openPulls, opire, reward, platformEvidence) {
+  if (platformEvidence?.platform === "IssueHunt") {
+    if (platformEvidence.state === "REWARDED") {
+      return {
+        label: "Bounty platform reports reward awarded",
+        detail: "IssueHunt reports that this bounty has already been rewarded.",
+        evidenceUrl: platformEvidence.evidence_url,
+      };
+    }
+    if (platformEvidence.submitted_pull_requests.length) {
+      return {
+        label: "Bounty platform reports submitted outputs",
+        detail: `IssueHunt lists ${platformEvidence.submitted_pull_requests.length} non-cancelled pull request submission${platformEvidence.submitted_pull_requests.length === 1 ? "" : "s"}; verify their current state on GitHub before considering duplicate work.`,
+        evidenceUrl: platformEvidence.submitted_pull_requests[0],
+      };
+    }
+  }
   if (platformEvidence?.platform === "BountyHub") {
     if (platformEvidence.state === "SOLVED") {
       return {
@@ -639,6 +655,16 @@ function openBountyAvailability(issue, comments) {
 }
 
 function rewardEvidence(issue, comments, opire, platformEvidence) {
+  if (platformEvidence?.platform === "IssueHunt") {
+    return {
+      state: platformEvidence.state === "REWARDED" ? "PAID_OR_AWARDED" : "LISTED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "BountyHub") {
     return {
       state: platformEvidence.state === "SOLVED"

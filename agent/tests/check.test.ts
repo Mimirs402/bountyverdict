@@ -16,6 +16,7 @@ const issue = {
 };
 
 const repository = {
+  id: 123456,
   archived: false,
   pushed_at: "2026-07-19T12:00:00Z",
   html_url: "https://github.com/acme/widget",
@@ -69,6 +70,54 @@ function withBountyHub(base: typeof fetch, record: Record<string, unknown>): typ
       return url.pathname === "/api/bounties"
         ? Response.json({ data: [record], hasNextPage: false })
         : Response.json(record);
+    }
+    return base(input, init);
+  };
+}
+
+function withIssueHunt(base: typeof fetch, pageOverrides: Record<string, unknown> = {}): typeof fetch {
+  const pageProps = {
+    repository: { ownerName: "acme", name: "widget", githubId: "123456" },
+    issue: {
+      repositoryOwnerName: "acme",
+      repositoryName: "widget",
+      repositoryGithubId: "123456",
+      number: 4,
+      status: "funded",
+      depositAmount: 4000,
+    },
+    deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "4000", cancelled: false }],
+    anonymousDeposits: [],
+    organizationGithubIdBalanceAmountEntries: [],
+    pullRequests: [{
+      _id: "5d8371ed874954009a39fe83",
+      cancelled: false,
+      url: "https://github.com/acme/widget/pull/12",
+      repositoryOwnerName: "acme",
+      repositoryName: "widget",
+      number: 12,
+    }],
+    depositRequests: [],
+    ...pageOverrides,
+  };
+  const nextData = {
+    props: {
+      pageProps,
+      route: {
+        pathname: "/issues/show",
+        query: { repositoryOwnerName: "acme", repositoryName: "widget", issueNumber: "4" },
+        asPath: "/r/acme/widget/issues/4",
+      },
+    },
+    page: "/issues/show",
+    query: { repositoryOwnerName: "acme", repositoryName: "widget", issueNumber: "4" },
+  };
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (url.origin === "https://oss.issuehunt.io") {
+      return new Response(`<script>__NEXT_DATA__ = ${JSON.stringify(nextData)};__NEXT_LOADED_PAGES__ = []</script>`, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     }
     return base(input, init);
   };
@@ -196,6 +245,57 @@ test("BountyHub claim and terminal states fail closed", async () => {
     assert.equal(result.verdict, "AVOID", expectedLabel);
     assert.ok(result.signals.some((signal) => signal.label === expectedLabel && signal.hard_stop), expectedLabel);
   }
+});
+
+test("verifies funded IssueHunt evidence and hard-stops submitted outputs", async () => {
+  const issueHuntIssue = {
+    ...issue,
+    labels: [{ name: "Funded on Issuehunt" }],
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(githubMock([], null, issueHuntIssue)),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.platform, "IssueHunt");
+  assert.equal(result.reward.amount, 40);
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Bounty platform reports submitted outputs" && signal.hard_stop &&
+    signal.evidence_url === "https://github.com/acme/widget/pull/12"
+  ));
+});
+
+test("does not treat an IssueHunt deposit request as funded evidence", async () => {
+  const issueHuntIssue = {
+    ...issue,
+    labels: [{ name: "Funded on Issuehunt" }],
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(githubMock([], null, issueHuntIssue), {
+      issue: {
+        repositoryOwnerName: "acme",
+        repositoryName: "widget",
+        repositoryGithubId: "123456",
+        number: 4,
+        status: "idle",
+        depositAmount: 0,
+      },
+      deposits: [],
+      pullRequests: [],
+      depositRequests: [{ amount: 10_000, status: "idle" }],
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.notEqual(result.reward.platform, "IssueHunt");
+  assert.notEqual(result.reward.verification, "TRUSTED_PLATFORM_API");
 });
 
 test("paid check reads repository policy and blocks prohibited AI work", async () => {

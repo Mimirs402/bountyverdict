@@ -1147,11 +1147,26 @@ The complete public suite passes **161 / 161**, the Worker and operations suite 
 
 - Genuine external purchases: **0 / 10**
 - Customer revenue: **$0.00**
-- Clean v6 checkpoint: **4 / 25 eligible tools/list; zero downstream calls**
+- v6 excluded mixed window: **4 / 25 tools/list; zero downstream calls**
 - Agent Finder PR: **open, mergeable, review required**
 
 Agent Finder PR [`github/agentfinder-catalog#11`](https://github.com/github/agentfinder-catalog/pull/11) was rebased onto the catalog's post-#12 schema and now uses the documented direct GitHub contribution shape. Its identifier is `urn:ai:github.com:Mimirs402:bountyverdict:bountyverdict`, its public definition is the canonical business repository's `server.json`, and its description leads with the questions an agent would actually ask. The PR head is `4a932542e6a23733fd98e488eadf8dd3c823ace3`, remains mechanically mergeable, and is blocked only on maintainer review. No follow-up comment was posted.
 
 The distribution monitor had still encoded the superseded Registry-shaped Agent Finder record. It now verifies the exact direct-source identifier, definition URL, question-led description, and metadata. Official MCP Registry health remains a separate signal instead of being allowed to turn an otherwise valid Agent Finder PR into contract drift or a request failure. The latest report-only pass independently verified the central Registry record `io.github.Mimirs402/bountyverdict@1.1.9`; GitHub's MCP proxy still returns HTTP 404, so official GitHub approval remains pending and no proxy availability is claimed.
 
-The complete public suite passes **161 / 161**, the Worker and operations suite passes **486 / 486**, TypeScript checking passes, and `git diff --check` passes. This is monitoring and distribution-source work only: the production Worker and its v6 treatment were not deployed or changed. Epoch 54 advanced through two additional clean catalog sessions to four initialize and four tools/list events, with zero tool calls, validation failures, payment challenges, payment presentations, paid successes, or paid errors. The nomination sender remains fail-closed while its dedicated Proton SMTP token is absent; no email was sent.
+The complete public suite passes **161 / 161**, the Worker and operations suite passes **486 / 486**, TypeScript checking passes, and `git diff --check` passes. This is monitoring and distribution-source work only: the production Worker and its v6 tool-description treatment were not deployed or changed. However, the Agent Finder source contract changed after epoch 54 activated, and two additional catalog sessions arrived during the overlapping interval. Their four initialize and four tools/list aggregate is therefore an excluded mixed window, not clean attribution; all downstream stages remained zero. The nomination sender remains fail-closed while its dedicated Proton SMTP token is absent; no email was sent.
+
+## 2026-07-23 — IssueHunt funding verification and a fresh funnel drain
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Excluded v6 mixed window: **4 tools/list; zero downstream calls**
+- Trusted funnel: **epoch 54 ineligible; epoch 55 draining from zero**
+
+The owner update to Agent Finder PR #11 occurred after clean epoch 54 activated. Because two later direct or hidden catalog pairs cannot be separated causally from that distribution change, epoch 54 was marked conversion-ineligible and rotation `agent_finder_contract_epoch_55` began with the full 900-second quiet rule. The v6 checkpoint is `paused_audited_drain`; its four-event aggregate is excluded and no experiment boundary or conversion claim exists. Automatic polling will activate epoch 55 only after the trusted fingerprint remains stable.
+
+The third bounty sweep also exposed a missing positive evidence source. BountyVerdict now reads IssueHunt's public server-rendered record through a strict bounded parser: it binds the route, repository name and numeric GitHub ID, issue number, positive deposited cents, uncancelled deposit aggregate, and exact submitted pull-request URLs. It rejects redirects, oversized or non-HTML responses, zero-dollar deposit requests, identity or aggregate drift, duplicate submissions, and anonymous or organization funding shapes it cannot verify safely. The parser never stores or returns unrelated embedded user data.
+
+The captured live records now resolve correctly: `egoist/denote#3` is a verified **$40** funded listing with three submitted outputs; `cyclejs/cyclejs#618` is a verified **$20** funded listing whose separate GitHub timeline already proves a merged implementation; and `devopshq/artifactory-cleanup#141` remains unverified because its apparent **$100** is only a request while deposited value is zero. This improves funding provenance and duplicate-work detection without creating a falsely actionable bounty.
+
+The complete public suite passes **161 / 161**, the Worker and operations suite passes **494 / 494**, TypeScript checking passes, and `git diff --check` passes. No claim, bid, payment, or client contact occurred.

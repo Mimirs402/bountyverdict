@@ -1,5 +1,6 @@
 import { analyzeBounty, parseIssueUrl } from "../../analysis.js";
 import { fetchBountyHubEvidence, hasBountyHubReference } from "./bountyhub.ts";
+import { fetchIssueHuntEvidence, hasIssueHuntReference } from "./issuehunt.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -361,9 +362,19 @@ export async function checkGithubIssue(
   }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
-  const platformEvidence = hasBountyHubReference(issueResponse.data, comments)
-    ? await fetchBountyHubEvidence(owner, repo, number, fetchImpl)
-    : null;
+  const [bountyHubEvidence, issueHuntEvidence] = await Promise.all([
+    hasBountyHubReference(issueResponse.data, comments)
+      ? fetchBountyHubEvidence(owner, repo, number, fetchImpl)
+      : null,
+    hasIssueHuntReference(issueResponse.data, comments) &&
+        Number.isSafeInteger(repoResponse.data?.id) && repoResponse.data.id > 0
+      ? fetchIssueHuntEvidence(owner, repo, repoResponse.data.id, number, fetchImpl)
+      : null,
+  ]);
+  const platformEvidence = issueHuntEvidence?.state === "REWARDED" ||
+      issueHuntEvidence?.submitted_pull_requests.length
+    ? issueHuntEvidence
+    : bountyHubEvidence || issueHuntEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)

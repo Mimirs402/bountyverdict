@@ -302,7 +302,7 @@ test("directory monitoring tracks Docker registry review separately from live ca
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
   ]);
-  assert.match(directory, /const dockerMcpRegistryPrNumber = 4496/);
+  assert.match(directory, /const dockerMcpRegistryPrNumber = 4509/);
   assert.match(directory, /async function dockerMcpRegistryStatus/);
   assert.match(directory, /parseDockerMcpRegistryDefinition/);
   assert.match(directory, /parseDockerMcpHubPage/);

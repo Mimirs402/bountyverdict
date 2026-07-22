@@ -333,6 +333,21 @@ function canonicalPullRequestUrl(value) {
   return match ? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}` : null;
 }
 
+function relevantPullRequestUrl(value, repository) {
+  const url = canonicalPullRequestUrl(value);
+  const relevantRepository = typeof repository?.full_name === "string"
+    ? repository.full_name.toLowerCase()
+    : null;
+  if (!url || !relevantRepository) return null;
+  const match = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/\d+$/i);
+  if (!match) return null;
+  const referencedRepository = `${match[1]}/${match[2]}`.toLowerCase();
+  const relevantOwner = relevantRepository.split("/")[0];
+  return referencedRepository === relevantRepository || match[1].toLowerCase() === relevantOwner
+    ? url
+    : null;
+}
+
 function bodyPullRequests(issue, comments, repository) {
   const relevantRepository = typeof repository?.full_name === "string"
     ? repository.full_name.toLowerCase()
@@ -374,7 +389,7 @@ function uniquePullRequests(timeline = [], issue = null, comments = [], reposito
   }
   for (const event of timeline) {
     const item = event.event === "cross-referenced" ? event.source?.issue : null;
-    const url = canonicalPullRequestUrl(item?.pull_request?.html_url);
+    const url = relevantPullRequestUrl(item?.pull_request?.html_url, repository);
     if (!url) continue;
     pulls.set(url.toLowerCase(), {
       url,

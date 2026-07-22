@@ -1213,3 +1213,20 @@ The checker now treats a maintainer-authored nominal USD amount whose parentheti
 The complete public suite passes **166 / 166**, the Worker and operations suite passes **502 / 502**, TypeScript checking passes, Bazaar declarations validate under the live 500-character description limit, and `git diff --check` passes. This correction is committed for review but deliberately not deployed until the active v7 boundary closes, so production treatment and clean selection attribution remain unchanged.
 
 The concurrent demand audit found 18 open Taskmarket tasks but no safe positive-EV execution: the nine tracked submissions remain eight pending and one completed without award, the 1.999999-USDC Flowise opportunity remains pending amid seven pitches, twelve insect tasks still omit their mandatory guide, and the CAPTCHA task has negative expected value before labor. Clawlancer remains unfunded and Payan exposes no relevant escrow-backed request. No claim, bid, payment, self-purchase, client contact, or fabricated demand occurred. Honest accounting remains **0** purchases, **$0.00** revenue, and **1.012 USDC** tracked costs.
+
+## 2026-07-23 — Unrelated cross-repository PRs no longer impersonate completed work
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v7 checkpoint: **4 / 25 eligible tools/list; zero downstream calls**
+- Production treatment: **unchanged; correction remains on the held quality branch**
+
+A fresh funded-bounty pass found no executable work. `terrastruct/d2#1578` is officially listed for $50 but assigned and crowded by nine open pull requests and six claimant identities. `tailcallhq/forgecode#389` is closed, assigned, and already delivered by a merged pull request. Three additional Algora-surface candidates lacked current trusted reward evidence or had completed and competing implementations.
+
+The pass also found a distinct provenance false positive on `elysiajs/elysia#313`. GitHub's timeline includes a merged cross-reference from `hackden3618/schoolpulse_elysiajs#2`, an unrelated school-backend repository that merely mentioned the Elysia issue. Production-equivalent source counted all timeline cross-references and therefore emitted a false `Merged implementation PR` hard stop.
+
+Timeline pull-request evidence now uses the same repository boundary as exact PR links in issue discussion: the PR must belong to the current repository or a bounded same-owner coordination repository. Unrelated-owner cross-references are excluded before merged, open, closed, and coverage counts are computed. The existing same-owner Fluxer coordination behavior remains supported.
+
+Live replay proves the change precisely. The current production-equivalent source sees **11** linked PRs and a merged hard stop pointing at the unrelated SchoolPulse PR. The held correction sees **10** linked PRs, removes that hard stop, and retains the real open Elysia PR as competition evidence. The issue remains AVOID on its other cumulative risks, so the correction removes false evidence without manufacturing an actionable bounty.
+
+The complete public suite passes **168 / 168**, the Worker and operations suite passes **503 / 503**, TypeScript checking passes, and `git diff --check` passes. No issue was claimed and no production, listing, payment, or funnel mutation occurred.

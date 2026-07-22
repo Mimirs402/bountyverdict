@@ -1330,6 +1330,47 @@ test("one merged cross-referenced implementation is a hard stop on an open issue
   assert.ok(!output.signals.some((item) => item.label === "Closed-PR swarm"));
 });
 
+test("an unrelated repository cross-reference cannot impersonate a merged implementation", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Unrelated school backend change",
+        state: "closed",
+        user: { login: "solver" },
+        pull_request: {
+          html_url: "https://github.com/another/school-backend/pull/2",
+          merged_at: "2026-05-26T12:00:00Z",
+        },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.pullRequests.length, 0);
+  assert.ok(!output.signals.some((item) => item.label === "Merged implementation PR"));
+  assert.ok(output.signals.some((item) => item.label === "No linked open PR found"));
+});
+
+test("a same-owner coordination repository remains bounded pull-request evidence", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      issue: {
+        title: "Coordinated mobile implementation",
+        state: "open",
+        user: { login: "solver" },
+        pull_request: { html_url: "https://github.com/acme/widget-mobile/pull/9" },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.pullRequests.length, 1);
+  assert.equal(output.pullRequests[0].state, "open");
+  assert.ok(output.signals.some((item) => item.label === "Competing open PR"));
+});
+
 test("Fluxer-style exact same-owner PR links in issue discussion become bounded competition evidence", () => {
   const issue = {
     ...healthyIssue,

@@ -1206,6 +1206,45 @@ test("a merged cross-referenced implementation hard-stops an otherwise-open issu
   assert.ok(result.signals.some((signal) => signal.label === "Merged implementation PR" && signal.hard_stop));
 });
 
+test("an unrelated repository timeline cross-reference is excluded from implementation evidence", async () => {
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: 0 }, { headers });
+    if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+    if (/\/comments\?/.test(url)) return Response.json([], { headers });
+    if (/\/timeline\?/.test(url)) {
+      return Response.json([{
+        event: "cross-referenced",
+        created_at: "2026-05-26T12:00:00Z",
+        source: {
+          issue: {
+            title: "Unrelated merged implementation",
+            state: "closed",
+            user: { login: "solver" },
+            pull_request: {
+              html_url: "https://github.com/another/school-backend/pull/2",
+              merged_at: "2026-05-26T12:00:00Z",
+            },
+          },
+        },
+      }], { headers });
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.coverage.linked_pull_requests_found, 0);
+  assert.ok(!result.signals.some((signal) => signal.label === "Merged implementation PR"));
+  assert.ok(result.signals.some((signal) => signal.label === "No linked open PR found"));
+});
+
 test("a transferred issue uses only its canonical destination repository", async () => {
   const requested: string[] = [];
   const transferredIssue = {

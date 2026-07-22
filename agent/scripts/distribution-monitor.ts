@@ -80,7 +80,7 @@ const MCP_INTENT_PAGE = "https://mimirs402.github.io/bountyverdict/mcp-github-ac
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
-  id: "mcp-task-specific-description-v1",
+  id: "mcp-task-specific-description-post-release-v1",
   started_at: "2026-07-22T10:33:17.239Z",
   release_commit: "556b35fc200240d89a4f855716232c6484cb1e1d",
   baseline: Object.freeze({

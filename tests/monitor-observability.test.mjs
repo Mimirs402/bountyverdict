@@ -210,7 +210,7 @@ test("distribution monitoring treats Payan demand state as a funnel and receipts
 test("distribution monitoring measures the task-specific MCP description from an immutable buyer-event baseline", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   const directory = await readFile(directoryMonitorUrl, "utf8");
-  assert.match(distribution, /mcp-task-specific-description-v1/);
+  assert.match(distribution, /mcp-task-specific-description-post-release-v1/);
   assert.match(distribution, /release_commit: "556b35fc200240d89a4f855716232c6484cb1e1d"/);
   assert.match(distribution, /initialize: 500/);
   assert.match(distribution, /tools_list: 437/);

@@ -20,6 +20,58 @@ export type McpMarketplaceListing = {
   created_at: string;
 };
 
+export type McpMarketplaceSearchObservation = {
+  ranking_mode: "semantic" | "substring";
+  total_matches: number;
+  returned: number;
+  rank: number | null;
+};
+
+export function parseMcpMarketplaceSearchResponse(
+  value: unknown,
+  expectedSlug: string,
+  expectedLimit: number,
+): McpMarketplaceSearchObservation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("MCP Marketplace search response is not an object.");
+  }
+  const payload = value as Record<string, any>;
+  if (!Number.isSafeInteger(expectedLimit) || expectedLimit < 1 || expectedLimit > 25 ||
+    !Number.isSafeInteger(payload.total_matches) || payload.total_matches < 0 || payload.total_matches > 1_000_000 ||
+    payload.page !== 1 || payload.limit !== expectedLimit ||
+    !Number.isSafeInteger(payload.returned) || payload.returned < 0 || payload.returned > expectedLimit ||
+    !["semantic", "substring"].includes(payload.ranking_mode) || typeof payload.has_more !== "boolean" ||
+    !Array.isArray(payload.results) || payload.results.length !== payload.returned || payload.results.length > expectedLimit) {
+    throw new Error("MCP Marketplace search response is malformed or unbounded.");
+  }
+  const slugs = payload.results.map((result: unknown) => {
+    if (!result || typeof result !== "object" || Array.isArray(result)) {
+      throw new Error("MCP Marketplace search result is malformed.");
+    }
+    const record = result as Record<string, unknown>;
+    if (typeof record.name !== "string" || !record.name || record.name.length > 500 ||
+      typeof record.slug !== "string" || !record.slug || record.slug.length > 500 ||
+      typeof record.url !== "string" || !record.url.startsWith("https://mcp-marketplace.io/server/") || record.url.length > 2_048 ||
+      typeof record.tagline !== "string" || record.tagline.length > 2_000 ||
+      typeof record.pricing !== "string" || record.pricing.length > 100 ||
+      typeof record.security_score !== "number" || !Number.isFinite(record.security_score) || record.security_score < 0 || record.security_score > 10 ||
+      !Number.isSafeInteger(record.critical_findings) || Number(record.critical_findings) < 0 || Number(record.critical_findings) > 10_000 ||
+      typeof record.has_critical_findings !== "boolean") {
+      throw new Error("MCP Marketplace search result fields are malformed or unbounded.");
+    }
+    return record.slug as string;
+  });
+  if (new Set(slugs).size !== slugs.length) throw new Error("MCP Marketplace search duplicated a server.");
+  const matches = slugs.flatMap((slug, index) => slug === expectedSlug ? [index + 1] : []);
+  if (matches.length > 1) throw new Error("MCP Marketplace search duplicated the expected listing.");
+  return {
+    ranking_mode: payload.ranking_mode,
+    total_matches: payload.total_matches,
+    returned: payload.returned,
+    rank: matches[0] || null,
+  };
+}
+
 function extractFlightPayload(html: string, markerIndex: number): string {
   const scriptPrefix = "<script>self.__next_f.push(";
   const scriptStart = html.lastIndexOf(scriptPrefix, markerIndex);

@@ -63,6 +63,7 @@ import {
 import {
   MCP_MARKETPLACE_MAX_PAGE_BYTES,
   parseMcpMarketplaceListing,
+  parseMcpMarketplaceSearchResponse,
 } from "../src/mcp-marketplace.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
@@ -234,6 +235,8 @@ const officialMcpRegistryLatestUrl = "https://registry.modelcontextprotocol.io/v
 const mcpMarketplaceSlug = "io-github-mimirs402-bountyverdict";
 const mcpMarketplaceUrl = `https://www.mcp-marketplace.io/server/${mcpMarketplaceSlug}`;
 const mcpMarketplaceEndpoint = `${productionOrigin}/mcp?source=mcp-registry`;
+const mcpMarketplaceSearchEndpoint = "https://mcp-marketplace.io/api/mcp/mcp";
+const mcpMarketplaceSearchLimit = 25;
 const ardCatalogUrl = `${productionOrigin}/.well-known/ai-catalog.json`;
 const ardRepresentativeQueries = Object.freeze([
   "check whether a github bounty issue is still open claimed or worth coding",
@@ -3042,10 +3045,61 @@ async function mcpMarketplaceStatus(
   observedAt: string,
 ): Promise<Record<string, unknown>> {
   try {
-    const response = await fetch(mcpMarketplaceUrl, {
-      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const search = async (query: string, id: number): Promise<Record<string, unknown>> => {
+      const response = await fetch(mcpMarketplaceSearchEndpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+          "User-Agent": "bountyverdict-directory-monitor/1.0",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: {
+            name: "search_servers",
+            arguments: { query, sort: "relevance", limit: mcpMarketplaceSearchLimit, page: 1 },
+          },
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) throw new Error(`MCP Marketplace search returned HTTP ${response.status}.`);
+      const eventStream = await readBoundedText(response, 500_000);
+      const dataLines = eventStream.split("\n").filter((line) => line.startsWith("data: "));
+      if (dataLines.length !== 1 || dataLines[0].length > 400_000) {
+        throw new Error("MCP Marketplace search returned a malformed event stream.");
+      }
+      let envelope: Record<string, any>;
+      try {
+        envelope = JSON.parse(dataLines[0].slice(6)) as Record<string, any>;
+      } catch {
+        throw new Error("MCP Marketplace search returned invalid JSON-RPC data.");
+      }
+      const content = envelope?.result?.content;
+      const texts = Array.isArray(content)
+        ? content.filter((item: unknown) => item && typeof item === "object" && !Array.isArray(item) &&
+          (item as Record<string, unknown>).type === "text" && typeof (item as Record<string, unknown>).text === "string")
+        : [];
+      if (envelope.jsonrpc !== "2.0" || envelope.id !== id || envelope.error || envelope.result?.isError === true ||
+        texts.length !== 1 || String(texts[0].text).length > 300_000) {
+        throw new Error("MCP Marketplace search returned a malformed tool result.");
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(String(texts[0].text));
+      } catch {
+        throw new Error("MCP Marketplace search tool text is not valid JSON.");
+      }
+      return { query, ...parseMcpMarketplaceSearchResponse(payload, mcpMarketplaceSlug, mcpMarketplaceSearchLimit) };
+    };
+    const [response, searchSettled] = await Promise.all([
+      fetch(mcpMarketplaceUrl, {
+        headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+      Promise.allSettled(agentToolsCloudBuyerQueries.map((query, index) => search(query, index + 1))),
+    ]);
     if (!response.ok) throw new Error(`MCP Marketplace returned HTTP ${response.status}.`);
     const parsed = parseMcpMarketplaceListing(
       await readBoundedText(response, MCP_MARKETPLACE_MAX_PAGE_BYTES),
@@ -3056,6 +3110,22 @@ async function mcpMarketplaceStatus(
       mcpMarketplaceEndpoint,
       agentToolsCloudMcpTools,
     );
+    const searches = searchSettled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const searchFailures = searchSettled.flatMap((result, index) => result.status === "rejected" ? [{
+      query: agentToolsCloudBuyerQueries[index],
+      error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+    }] : []);
+    const found = searches.filter(({ rank }) => Number.isSafeInteger(rank));
+    const emptySubstringFallbacks = searches.filter(({ ranking_mode, total_matches }) =>
+      ranking_mode === "substring" && total_matches === 0
+    ).length;
+    const searchStatus = searchFailures.length > 0
+      ? "partial_or_failed"
+      : emptySubstringFallbacks === searches.length
+        ? "degraded_empty_substring_fallback"
+        : found.length > 0
+          ? "listed_in_agent_search"
+          : "not_found_in_agent_search";
     return {
       url: mcpMarketplaceUrl,
       checked_at: observedAt,
@@ -3066,6 +3136,20 @@ async function mcpMarketplaceStatus(
       pricing_note: parsed.pricing_disclosure_accurate
         ? "Marketplace pricing disclosure is accurate."
         : "Marketplace imported the Registry endpoint as free even though valid selected tool calls require disclosed per-call x402 USDC payment; ownership remains unclaimed while the catalog-copy experiment is frozen.",
+      buyer_query_benchmark: {
+        status: searchStatus,
+        healthy: searchFailures.length === 0 && emptySubstringFallbacks !== searches.length,
+        query_count: agentToolsCloudBuyerQueries.length,
+        completed_queries: searches.length,
+        found_queries: found.length,
+        top_ten_queries: found.filter(({ rank }) => Number(rank) <= 10).length,
+        semantic_queries: searches.filter(({ ranking_mode }) => ranking_mode === "semantic").length,
+        empty_substring_fallbacks: emptySubstringFallbacks,
+        queries: searches,
+        failures: searchFailures,
+        methodology: "Fixed unbranded task descriptions supplied by context-isolated agents; bounded to the first 25 MCP Marketplace results.",
+        accounting: "Owner-run retrieval is visibility telemetry, not marketplace query volume, impressions, installs, purchases, or revenue.",
+      },
     };
   } catch (error) {
     return {

@@ -182,6 +182,8 @@ test("distribution monitoring measures the MCP selection-preview rollout from an
   assert.match(distribution, /audited draining intervals are excluded/);
   assert.match(directory, /mcpMarketplaceStatus/);
   assert.match(directory, /parseMcpMarketplaceListing/);
+  assert.match(directory, /parseMcpMarketplaceSearchResponse/);
+  assert.match(directory, /degraded_empty_substring_fallback/);
   assert.match(distribution, /MCP Marketplace:/);
   assert.match(distribution, /pricing_disclosure_state/);
   assert.match(distribution, /monitoredFetchWithNetworkRetry/);

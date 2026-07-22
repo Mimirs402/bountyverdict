@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseMcpMarketplaceListing } from "../src/mcp-marketplace.ts";
+import { parseMcpMarketplaceListing, parseMcpMarketplaceSearchResponse } from "../src/mcp-marketplace.ts";
 
 const name = "io.github.Mimirs402/bountyverdict";
 const slug = "io-github-mimirs402-bountyverdict";
@@ -88,4 +88,62 @@ test("rejects duplicate, malformed, and unbounded listing telemetry", () => {
   assert.throws(() => parse(valid + valid), /duplicate exact listing/);
   assert.throws(() => parse(page(listing({ install_count: -1 }))), /malformed or unbounded/);
   assert.throws(() => parse("x".repeat(2_000_001)), /invalid or unbounded/);
+});
+
+const searchResult = (resultSlug: string) => ({
+  name: "Result",
+  slug: resultSlug,
+  url: `https://mcp-marketplace.io/server/${resultSlug}`,
+  tagline: "A bounded result",
+  pricing: "Free",
+  security_score: 10,
+  critical_findings: 0,
+  has_critical_findings: false,
+});
+
+test("retains exact rank from an agent-facing marketplace search", () => {
+  const result = parseMcpMarketplaceSearchResponse({
+    total_matches: 2,
+    page: 1,
+    limit: 25,
+    returned: 2,
+    ranking_mode: "semantic",
+    has_more: false,
+    results: [searchResult("another-server"), searchResult(slug)],
+  }, slug, 25);
+  assert.deepEqual(result, { ranking_mode: "semantic", total_matches: 2, returned: 2, rank: 2 });
+});
+
+test("retains an empty substring fallback without inventing a marketplace miss", () => {
+  const result = parseMcpMarketplaceSearchResponse({
+    total_matches: 0,
+    page: 1,
+    limit: 25,
+    returned: 0,
+    ranking_mode: "substring",
+    has_more: false,
+    results: [],
+  }, slug, 25);
+  assert.deepEqual(result, { ranking_mode: "substring", total_matches: 0, returned: 0, rank: null });
+});
+
+test("rejects malformed and duplicate marketplace search results", () => {
+  assert.throws(() => parseMcpMarketplaceSearchResponse({
+    total_matches: 2,
+    page: 1,
+    limit: 25,
+    returned: 2,
+    ranking_mode: "semantic",
+    has_more: false,
+    results: [searchResult(slug), searchResult(slug)],
+  }, slug, 25), /duplicated a server/);
+  assert.throws(() => parseMcpMarketplaceSearchResponse({
+    total_matches: 0,
+    page: 1,
+    limit: 25,
+    returned: 1,
+    ranking_mode: "substring",
+    has_more: false,
+    results: [],
+  }, slug, 25), /malformed or unbounded/);
 });

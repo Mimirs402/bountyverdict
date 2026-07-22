@@ -1,6 +1,6 @@
 {
   "name": "bountyverdict",
-  "version": "1.0.3",
+  "version": "1.1.9",
   "description": "Guard public GitHub bounty, agent-harness, CI, and MCP upgrade decisions with evidence-linked x402 checks.",
   "author": {
     "name": "Mimir's Lab",

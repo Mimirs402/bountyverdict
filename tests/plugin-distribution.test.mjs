@@ -13,10 +13,12 @@ const expectedCopilotSkills = [
 test("plugin manifests expose the existing engineering gates without changing SkillVerdict's experiment", async () => {
   const codex = JSON.parse(await readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
   const copilot = JSON.parse(await readFile(new URL("../.github/plugin/plugin.json", import.meta.url), "utf8"));
+  const packageManifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
   assert.equal(codex.name, "bountyverdict");
   assert.equal(copilot.name, codex.name);
   assert.equal(copilot.version, codex.version);
+  assert.equal(codex.version, packageManifest.version);
   assert.equal(copilot.license, "MIT");
   assert.deepEqual(copilot.skills, expectedCopilotSkills);
   assert.ok(copilot.description.includes("x402"));

@@ -1,7 +1,7 @@
 {
   "name": "bountyverdict",
   "description": "Evidence-linked decision gates for public GitHub bounties, coding-agent instructions, Actions failures, flaky retries, and MCP tool-catalog upgrades. The skills inspect free samples and validate exact x402 payment constraints before any optional paid call.",
-  "version": "1.0.3",
+  "version": "1.1.9",
   "author": {
     "name": "Mimir's Lab",
     "url": "https://github.com/Mimirs402"

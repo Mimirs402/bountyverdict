@@ -268,8 +268,8 @@ test("agent landing page exposes all seven self-serve products", async () => {
   assert.match(page, /six paid, read-only tools/);
   assert.match(page, /SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP/);
   assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
-  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.0\.3/);
-  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.0\.3/);
+  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.9/);
+  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.9/);
   assert.match(page, /copilot plugin install Mimirs402\/bountyverdict/);
   assert.match(page, /npx awal@2\.12\.0 x402 details/);
   assert.match(page, /npx awal@2\.12\.0 x402 pay/);

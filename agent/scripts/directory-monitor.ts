@@ -235,7 +235,8 @@ const agentFinderPrUrl = `https://github.com/github/agentfinder-catalog/pull/${a
 const agentFinderCatalogEntryPath = "catalog/Mimirs402/bountyverdict.json";
 const agentFinderCatalogEntryUrl = `https://raw.githubusercontent.com/github/agentfinder-catalog/main/${agentFinderCatalogEntryPath}`;
 const agentFinderSearchUrl = "https://github.com/agentfinder?search=bountyverdict";
-const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.Mimirs402:bountyverdict";
+const agentFinderIdentifier = "urn:ai:github.com:Mimirs402:bountyverdict:bountyverdict";
+const agentFinderDefinitionUrl = "https://github.com/Mimirs402/bountyverdict/blob/main/server.json";
 const toolHivePrNumber = 1388;
 const toolHivePrUrl = `https://github.com/stacklok/toolhive-catalog/pull/${toolHivePrNumber}`;
 const toolHiveCatalogUrl =
@@ -1801,7 +1802,7 @@ async function agentFinderCatalogStatus(
   observedAt: string,
 ): Promise<Record<string, unknown>> {
   try {
-    const [prReview, { stdout: prOutput }, { stdout: prFilesOutput }, catalogResponse, registryResponse, searchResponse] = await Promise.all([
+    const [prReview, { stdout: prOutput }, { stdout: prFilesOutput }, catalogResponse, registryResult, searchResponse] = await Promise.all([
       readGitHubPrStatus("github", "agentfinder-catalog", agentFinderPrNumber, agentFinderPrUrl, timeoutMs),
       execFileAsync("gh", ["api", `repos/github/agentfinder-catalog/pulls/${agentFinderPrNumber}`], {
         timeout: timeoutMs,
@@ -1819,28 +1820,51 @@ async function agentFinderCatalogStatus(
       fetch(officialMcpRegistryLatestUrl, {
         headers: { Accept: "application/json", "User-Agent": "bountyverdict-directory-monitor/1.0" },
         signal: AbortSignal.timeout(timeoutMs),
-      }),
+      }).then((response) => ({ response, error: null as string | null })).catch((error: unknown) => ({
+        response: null,
+        error: error instanceof Error ? error.message : String(error),
+      })),
       fetch(agentFinderSearchUrl, {
         headers: { Accept: "text/html", "User-Agent": "bountyverdict-directory-monitor/1.0" },
         signal: AbortSignal.timeout(timeoutMs),
       }),
     ]);
-    if (prReview.status === "request_failed" || ![200, 404].includes(catalogResponse.status) ||
-      registryResponse.status !== 200 || searchResponse.status !== 200) {
-      throw new Error(`Agent Finder returned unavailable PR telemetry or HTTP ${catalogResponse.status}/${registryResponse.status}/${searchResponse.status}.`);
+    if (prReview.status === "request_failed" || ![200, 404].includes(catalogResponse.status) || searchResponse.status !== 200) {
+      throw new Error(`Agent Finder returned unavailable PR telemetry or HTTP ${catalogResponse.status}/${searchResponse.status}.`);
     }
     const pr = JSON.parse(String(prOutput)) as Record<string, any>;
     const prFiles = JSON.parse(String(prFilesOutput)) as unknown;
     if (!Array.isArray(prFiles) || prFiles.length > 100 ||
       prFiles.some((file: unknown) => !file || typeof file !== "object" || Array.isArray(file) ||
         typeof (file as Record<string, unknown>).filename !== "string" ||
-        String((file as Record<string, unknown>).filename).length > 1_000)) {
+        String((file as Record<string, unknown>).filename).length > 1_000 ||
+        typeof (file as Record<string, unknown>).raw_url !== "string" ||
+        String((file as Record<string, unknown>).raw_url).length > 2_048)) {
       throw new Error("Agent Finder PR files are malformed or unbounded.");
     }
-    const prContractVerified = pr.number === agentFinderPrNumber && pr.html_url === agentFinderPrUrl &&
+    const prFile = prFiles[0] as Record<string, any> | undefined;
+    const expectedPrRawUrl = `https://github.com/github/agentfinder-catalog/raw/${String(pr.head?.sha || "")}/catalog%2FMimirs402%2Fbountyverdict.json`;
+    let prHeadContractVerified = false;
+    if (prFile?.raw_url === expectedPrRawUrl) {
+      const prFileResponse = await fetch(expectedPrRawUrl, {
+        headers: { Accept: "application/json", "User-Agent": "bountyverdict-directory-monitor/1.0" },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (prFileResponse.status !== 200) throw new Error(`Agent Finder PR head returned HTTP ${prFileResponse.status}.`);
+      const prFileBody = await prFileResponse.text();
+      if (prFileBody.length > 100_000) throw new Error("Agent Finder PR head entry is unbounded.");
+      prHeadContractVerified = parseAgentFinderCatalogEntry(
+        JSON.parse(prFileBody),
+        agentFinderIdentifier,
+        agentFinderDefinitionUrl,
+        officialMcpServerName,
+      ).contract_verified;
+    }
+    const prContractVerified = prHeadContractVerified &&
+      pr.number === agentFinderPrNumber && pr.html_url === agentFinderPrUrl &&
       pr.base?.repo?.full_name === "github/agentfinder-catalog" && pr.base?.ref === "main" &&
       pr.head?.label === "Mimirs402:add-bountyverdict-canonical-mimirslab" && pr.changed_files === 1 &&
-      prFiles.length === 1 && prFiles[0].filename === agentFinderCatalogEntryPath && prFiles[0].status === "added";
+      prFiles.length === 1 && prFile?.filename === agentFinderCatalogEntryPath && prFile?.status === "added";
     const prStatus = prReview.status;
 
     let catalog = null;
@@ -1850,38 +1874,46 @@ async function agentFinderCatalogStatus(
       catalog = parseAgentFinderCatalogEntry(
         JSON.parse(body),
         agentFinderIdentifier,
-        officialMcpRegistryLatestUrl,
+        agentFinderDefinitionUrl,
         officialMcpServerName,
       );
     }
-    const registryBody = await registryResponse.text();
-    if (registryBody.length > 500_000) throw new Error("Agent Finder Registry response is unbounded.");
-    const registry = parseAgentFinderRegistryLatest(
-      JSON.parse(registryBody),
-      officialMcpServerName,
-      repository,
-      mcpMarketplaceEndpoint,
-    );
+    let registry: ReturnType<typeof parseAgentFinderRegistryLatest> | null = null;
+    let registryError = registryResult.error;
+    if (registryResult.response?.status === 200) {
+      try {
+        const registryBody = await registryResult.response.text();
+        if (registryBody.length > 500_000) throw new Error("Agent Finder Registry response is unbounded.");
+        registry = parseAgentFinderRegistryLatest(
+          JSON.parse(registryBody),
+          officialMcpServerName,
+          repository,
+          mcpMarketplaceEndpoint,
+        );
+      } catch (error) {
+        registryError = error instanceof Error ? error.message : String(error);
+      }
+    } else if (registryResult.response) {
+      registryError = `Official MCP Registry returned HTTP ${registryResult.response.status}.`;
+    }
     const search = parseAgentFinderSearchPage(
       await searchResponse.text(),
       agentFinderIdentifier,
-      officialMcpRegistryLatestUrl,
+      agentFinderDefinitionUrl,
     );
-    const status = !registry.contract_verified
-      ? "registry_contract_drift"
-      : search.listed
-        ? search.contract_verified ? "agent_finder_search_listed" : "agent_finder_search_contract_drift"
-        : catalog?.listed
-          ? catalog.contract_verified ? "catalog_listed_awaiting_search_index" : "catalog_contract_drift"
-          : !prContractVerified
-            ? "pr_contract_drift"
-            : prStatus === "merged"
-              ? "pr_merged_awaiting_catalog"
-              : prStatus === "open"
-                ? "pr_open"
-                : prStatus === "closed"
-                  ? "pr_closed_without_catalog"
-                  : "pr_status_unknown";
+    const status = search.listed
+      ? search.contract_verified ? "agent_finder_search_listed" : "agent_finder_search_contract_drift"
+      : catalog?.listed
+        ? catalog.contract_verified ? "catalog_listed_awaiting_search_index" : "catalog_contract_drift"
+        : !prContractVerified
+          ? "pr_contract_drift"
+          : prStatus === "merged"
+            ? "pr_merged_awaiting_catalog"
+            : prStatus === "open"
+              ? "pr_open"
+              : prStatus === "closed"
+                ? "pr_closed_without_catalog"
+                : "pr_status_unknown";
     return {
       url: agentFinderPrUrl,
       pr_number: agentFinderPrNumber,
@@ -1892,10 +1924,12 @@ async function agentFinderCatalogStatus(
       catalog_http_status: catalogResponse.status,
       catalog_listed: catalog?.listed === true,
       catalog_contract_verified: catalog?.contract_verified === true,
+      definition_url: agentFinderDefinitionUrl,
       registry_url: officialMcpRegistryLatestUrl,
-      registry_http_status: registryResponse.status,
-      registry_contract_verified: registry.contract_verified,
-      registry_version: registry.version,
+      registry_http_status: registryResult.response?.status ?? null,
+      registry_contract_verified: registry?.contract_verified === true,
+      registry_version: registry?.version ?? null,
+      registry_error: registryError,
       search_url: agentFinderSearchUrl,
       search_http_status: searchResponse.status,
       search_listed: search.listed,
@@ -1909,13 +1943,14 @@ async function agentFinderCatalogStatus(
       first_search_listed_at: search.contract_verified
         ? previousStatus.first_search_listed_at || observedAt
         : null,
-      measurement: "exact_pr_catalog_registry_and_owner_run_search_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+      measurement: "exact_pr_catalog_and_owner_run_search_presence_plus_independent_registry_status_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   } catch (error) {
     return {
       url: agentFinderPrUrl,
       pr_number: agentFinderPrNumber,
       catalog_url: agentFinderCatalogEntryUrl,
+      definition_url: agentFinderDefinitionUrl,
       registry_url: officialMcpRegistryLatestUrl,
       search_url: agentFinderSearchUrl,
       catalog_listed: false,
@@ -1925,7 +1960,7 @@ async function agentFinderCatalogStatus(
       search_contract_verified: false,
       status: "request_failed",
       error: error instanceof Error ? error.message : String(error),
-      measurement: "exact_pr_catalog_registry_and_owner_run_search_presence_not_impressions_installs_tool_calls_purchases_or_revenue",
+      measurement: "exact_pr_catalog_and_owner_run_search_presence_plus_independent_registry_status_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   }
 }

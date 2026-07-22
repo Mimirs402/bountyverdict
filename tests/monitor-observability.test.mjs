@@ -667,7 +667,7 @@ test("directory monitoring tracks Gemini CLI gallery propagation without claimin
   assert.match(distribution, /catalog presence is never an impression, install, tool call, purchase, or revenue/);
 });
 
-test("directory monitoring tracks exact GitHub Agent Finder PR, catalog, Registry, and search state without claiming demand", async () => {
+test("directory monitoring tracks exact GitHub Agent Finder direct contract and independent Registry state without claiming demand", async () => {
   const [directory, distribution] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
@@ -675,15 +675,19 @@ test("directory monitoring tracks exact GitHub Agent Finder PR, catalog, Registr
   assert.match(directory, /const agentFinderPrNumber = 11/);
   assert.match(directory, /github\/agentfinder-catalog\/pull\/\$\{agentFinderPrNumber\}/);
   assert.match(directory, /catalog\/Mimirs402\/bountyverdict\.json/);
+  assert.match(directory, /urn:ai:github\.com:Mimirs402:bountyverdict:bountyverdict/);
+  assert.match(directory, /github\.com\/Mimirs402\/bountyverdict\/blob\/main\/server\.json/);
   assert.match(directory, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
   assert.match(directory, /https:\/\/github\.com\/agentfinder\?search=bountyverdict/);
   assert.match(directory, /async function agentFinderCatalogStatus/);
+  assert.match(directory, /Agent Finder PR head entry is unbounded/);
+  assert.match(directory, /prHeadContractVerified = parseAgentFinderCatalogEntry/);
   assert.match(directory, /parseAgentFinderCatalogEntry/);
   assert.match(directory, /parseAgentFinderRegistryLatest/);
   assert.match(directory, /officialMcpServerName,\n\s*repository,\n\s*mcpMarketplaceEndpoint,/);
   assert.match(directory, /parseAgentFinderSearchPage/);
   assert.match(directory, /agent_finder_catalog: agentFinderCatalog/);
-  assert.match(directory, /exact_pr_catalog_registry_and_owner_run_search_presence_not_impressions_installs_tool_calls_purchases_or_revenue/);
+  assert.match(directory, /exact_pr_catalog_and_owner_run_search_presence_plus_independent_registry_status_not_impressions_installs_tool_calls_purchases_or_revenue/);
   assert.match(distribution, /agent_finder_catalog: state\.agent_finder_catalog/);
   assert.match(distribution, /GitHub Agent Finder/);
   assert.match(distribution, /PR #11/);

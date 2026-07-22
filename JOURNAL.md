@@ -1142,3 +1142,16 @@ A third non-duplicate bounty sweep checked 12 additional IssueHunt and Polar-sty
 The analyzer had preserved the cross-reference but collapsed GitHub's explicit `pull_request.merged_at` field into the generic issue state `closed`. That meant one known merged solution was not a hard stop unless the issue itself closed or several closed PRs accumulated. The source now retains `merged` as a distinct authoritative state, emits a `Merged implementation PR` hard stop for even one linked merge, and withholds the positive no-open-PR signal when a merge exists. The exact Cycle.js issue now returns **AVOID**, score **0**, with the merged DevDocs PR as its evidence.
 
 The complete public suite passes **161 / 161**, the Worker and operations suite passes **486 / 486**, TypeScript checking passes, and the business GitHub identity remains `Mimirs402` with commit author `Mimir's Lab <admin@mimirslab.com>`. No issue was claimed, no bid or payment was made, and no production treatment was changed. The live report-only monitor remains healthy at **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs.
+
+## 2026-07-23 — Agent Finder contract updated for the current catalog
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Clean v6 checkpoint: **4 / 25 eligible tools/list; zero downstream calls**
+- Agent Finder PR: **open, mergeable, review required**
+
+Agent Finder PR [`github/agentfinder-catalog#11`](https://github.com/github/agentfinder-catalog/pull/11) was rebased onto the catalog's post-#12 schema and now uses the documented direct GitHub contribution shape. Its identifier is `urn:ai:github.com:Mimirs402:bountyverdict:bountyverdict`, its public definition is the canonical business repository's `server.json`, and its description leads with the questions an agent would actually ask. The PR head is `4a932542e6a23733fd98e488eadf8dd3c823ace3`, remains mechanically mergeable, and is blocked only on maintainer review. No follow-up comment was posted.
+
+The distribution monitor had still encoded the superseded Registry-shaped Agent Finder record. It now verifies the exact direct-source identifier, definition URL, question-led description, and metadata. Official MCP Registry health remains a separate signal instead of being allowed to turn an otherwise valid Agent Finder PR into contract drift or a request failure. The latest report-only pass independently verified the central Registry record `io.github.Mimirs402/bountyverdict@1.1.9`; GitHub's MCP proxy still returns HTTP 404, so official GitHub approval remains pending and no proxy availability is claimed.
+
+The complete public suite passes **161 / 161**, the Worker and operations suite passes **486 / 486**, TypeScript checking passes, and `git diff --check` passes. This is monitoring and distribution-source work only: the production Worker and its v6 treatment were not deployed or changed. Epoch 54 advanced through two additional clean catalog sessions to four initialize and four tools/list events, with zero tool calls, validation failures, payment challenges, payment presentations, paid successes, or paid errors. The nomination sender remains fail-closed while its dedicated Proton SMTP token is absent; no email was sent.

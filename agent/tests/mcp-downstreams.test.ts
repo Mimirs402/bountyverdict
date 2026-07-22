@@ -32,16 +32,17 @@ const registryEndpoint = `${endpoint}?source=mcp-registry`;
 const clineEndpoint = `${endpoint}?source=cline-marketplace`;
 const kiloEndpoint = `${endpoint}?source=kilo-marketplace`;
 const repository = "https://github.com/Mimirs402/bountyverdict";
-const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.Mimirs402:bountyverdict";
+const agentFinderIdentifier = "urn:ai:github.com:Mimirs402:bountyverdict:bountyverdict";
+const agentFinderDefinitionUrl = "https://github.com/Mimirs402/bountyverdict/blob/main/server.json";
 const registryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
 
-test("recognizes only the exact Agent Finder catalog, Registry, and owner-run search contracts", () => {
+test("recognizes the direct Agent Finder contract and independent Registry contract", () => {
   const catalogEntry = {
     identifier: agentFinderIdentifier,
     displayName: "BountyVerdict Agent Decision Tools",
     mediaType: "application/mcp-server+json",
-    url: registryLatestUrl,
-    description: "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
+    url: agentFinderDefinitionUrl,
+    description: "Check whether a GitHub bounty is worth pursuing, diagnose why an Actions run failed, decide whether to retry a flake, audit AGENTS.md, or detect breaking MCP tool drift.",
     metadata: {
       sourceSet: "bountyverdict",
       repoPath: "server.json",
@@ -49,17 +50,17 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
       version: "latest",
     },
   };
-  assert.deepEqual(parseAgentFinderCatalogEntry(catalogEntry, agentFinderIdentifier, registryLatestUrl, name), {
+  assert.deepEqual(parseAgentFinderCatalogEntry(catalogEntry, agentFinderIdentifier, agentFinderDefinitionUrl, name), {
     listed: true,
     contract_verified: true,
     identifier: agentFinderIdentifier,
-    registry_url: registryLatestUrl,
+    definition_url: agentFinderDefinitionUrl,
   });
   assert.equal(parseAgentFinderCatalogEntry({
     ...catalogEntry,
     url: "https://wrong.example/registry",
-  }, agentFinderIdentifier, registryLatestUrl, name).contract_verified, false);
-  assert.throws(() => parseAgentFinderCatalogEntry([], agentFinderIdentifier, registryLatestUrl, name), /not an object/);
+  }, agentFinderIdentifier, agentFinderDefinitionUrl, name).contract_verified, false);
+  assert.throws(() => parseAgentFinderCatalogEntry([], agentFinderIdentifier, agentFinderDefinitionUrl, name), /not an object/);
 
   const registry = {
     server: {
@@ -94,7 +95,7 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
     api_name: agentFinderIdentifier,
     display_name: "BountyVerdict Agent Decision Tools",
     description: catalogEntry.description,
-    url: registryLatestUrl,
+    url: agentFinderDefinitionUrl,
     extension_type: "MCP server",
   };
   const searchPage = (servers: Array<Record<string, unknown>>) =>
@@ -105,23 +106,23 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
         },
       },
     })}</script></html>`;
-  assert.deepEqual(parseAgentFinderSearchPage(searchPage([searchEntry]), agentFinderIdentifier, registryLatestUrl), {
+  assert.deepEqual(parseAgentFinderSearchPage(searchPage([searchEntry]), agentFinderIdentifier, agentFinderDefinitionUrl), {
     listed: true,
     contract_verified: true,
     rank: 1,
     total_results: 1,
     identifier: agentFinderIdentifier,
-    registry_url: registryLatestUrl,
+    definition_url: agentFinderDefinitionUrl,
   });
-  assert.equal(parseAgentFinderSearchPage(searchPage([]), agentFinderIdentifier, registryLatestUrl).listed, false);
+  assert.equal(parseAgentFinderSearchPage(searchPage([]), agentFinderIdentifier, agentFinderDefinitionUrl).listed, false);
   const driftedSearch = parseAgentFinderSearchPage(searchPage([{
     ...searchEntry,
     extension_type: "Skill",
-  }]), agentFinderIdentifier, registryLatestUrl);
+  }]), agentFinderIdentifier, agentFinderDefinitionUrl);
   assert.equal(driftedSearch.listed, true);
   assert.equal(driftedSearch.contract_verified, false);
-  assert.throws(() => parseAgentFinderSearchPage(searchPage([searchEntry, searchEntry]), agentFinderIdentifier, registryLatestUrl), /duplicated/);
-  assert.throws(() => parseAgentFinderSearchPage("<html></html>", agentFinderIdentifier, registryLatestUrl), /missing or duplicate/);
+  assert.throws(() => parseAgentFinderSearchPage(searchPage([searchEntry, searchEntry]), agentFinderIdentifier, agentFinderDefinitionUrl), /duplicated/);
+  assert.throws(() => parseAgentFinderSearchPage("<html></html>", agentFinderIdentifier, agentFinderDefinitionUrl), /missing or duplicate/);
 });
 
 test("recognizes only the exact bounded Awesome MCP Servers contract", () => {

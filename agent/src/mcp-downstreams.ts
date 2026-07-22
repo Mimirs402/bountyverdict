@@ -1,6 +1,9 @@
 export const BOUNTYVERDICT_REGISTRY_DESCRIPTION =
   "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.";
 
+export const BOUNTYVERDICT_AGENT_FINDER_DESCRIPTION =
+  "Check whether a GitHub bounty is worth pursuing, diagnose why an Actions run failed, decide whether to retry a flake, audit AGENTS.md, or detect breaking MCP tool drift.";
+
 export type QtMcpRegistryStatus = {
   listed: boolean;
   expected_name: string;
@@ -103,7 +106,7 @@ export type AgentFinderCatalogEntryStatus = {
   listed: true;
   contract_verified: boolean;
   identifier: string | null;
-  registry_url: string | null;
+  definition_url: string | null;
 };
 
 export type AgentFinderRegistryStatus = {
@@ -121,13 +124,13 @@ export type AgentFinderSearchStatus = {
   rank: number | null;
   total_results: number;
   identifier: string | null;
-  registry_url: string | null;
+  definition_url: string | null;
 };
 
 export function parseAgentFinderCatalogEntry(
   value: unknown,
   expectedIdentifier: string,
-  expectedRegistryUrl: string,
+  expectedDefinitionUrl: string,
   expectedServerName: string,
 ): AgentFinderCatalogEntryStatus {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -145,8 +148,8 @@ export function parseAgentFinderCatalogEntry(
   const contractVerified = entry.identifier === expectedIdentifier &&
     entry.displayName === "BountyVerdict Agent Decision Tools" &&
     entry.mediaType === "application/mcp-server+json" &&
-    entry.url === expectedRegistryUrl &&
-    entry.description === BOUNTYVERDICT_REGISTRY_DESCRIPTION &&
+    entry.url === expectedDefinitionUrl &&
+    entry.description === BOUNTYVERDICT_AGENT_FINDER_DESCRIPTION &&
     entry.metadata.sourceSet === "bountyverdict" &&
     entry.metadata.repoPath === "server.json" &&
     entry.metadata.serverName === expectedServerName &&
@@ -155,7 +158,7 @@ export function parseAgentFinderCatalogEntry(
     listed: true,
     contract_verified: contractVerified,
     identifier: entry.identifier,
-    registry_url: entry.url,
+    definition_url: entry.url,
   };
 }
 
@@ -207,7 +210,7 @@ export function parseAgentFinderRegistryLatest(
 export function parseAgentFinderSearchPage(
   html: unknown,
   expectedIdentifier: string,
-  expectedRegistryUrl: string,
+  expectedDefinitionUrl: string,
 ): AgentFinderSearchStatus {
   if (typeof html !== "string" || html.length > 5_000_000) {
     throw new Error("Agent Finder search page is invalid or unbounded.");
@@ -246,7 +249,7 @@ export function parseAgentFinderSearchPage(
   }
   const matches = servers
     .map((entry: Record<string, unknown>, index: number) => ({ entry, rank: index + 1 }))
-    .filter(({ entry }) => entry.id === expectedIdentifier || entry.url === expectedRegistryUrl ||
+    .filter(({ entry }) => entry.id === expectedIdentifier || entry.url === expectedDefinitionUrl ||
       entry.display_name === "BountyVerdict Agent Decision Tools");
   if (matches.length > 1) throw new Error("Agent Finder search duplicated the BountyVerdict entry.");
   if (matches.length === 0) {
@@ -256,7 +259,7 @@ export function parseAgentFinderSearchPage(
       rank: null,
       total_results: metadata.total,
       identifier: null,
-      registry_url: null,
+      definition_url: null,
     };
   }
   const { entry, rank } = matches[0];
@@ -265,12 +268,12 @@ export function parseAgentFinderSearchPage(
     contract_verified: entry.id === expectedIdentifier && entry.name === expectedIdentifier &&
       entry.full_name === expectedIdentifier && entry.api_name === expectedIdentifier &&
       entry.display_name === "BountyVerdict Agent Decision Tools" &&
-      entry.description === BOUNTYVERDICT_REGISTRY_DESCRIPTION &&
-      entry.url === expectedRegistryUrl && entry.extension_type === "MCP server",
+      entry.description === BOUNTYVERDICT_AGENT_FINDER_DESCRIPTION &&
+      entry.url === expectedDefinitionUrl && entry.extension_type === "MCP server",
     rank,
     total_results: metadata.total,
     identifier: String(entry.id),
-    registry_url: String(entry.url),
+    definition_url: String(entry.url),
   };
 }
 

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "experiment_id": "mcp-task-leading-descriptions-v1",
+  "release_commit": "REPLACE_WITH_EXACT_40_CHARACTER_RELEASE_COMMIT",
+  "production_activation_commit": "REPLACE_WITH_EXACT_40_CHARACTER_PRODUCTION_ACTIVATION_COMMIT",
+  "production_activated_at": "REPLACE_WITH_CANONICAL_PRODUCTION_ACTIVATION_TIMESTAMP",
+  "drain_rotation_id": "REPLACE_WITH_COMPLETED_DRAIN_ROTATION_ID",
+  "measurement_epoch_id": 0,
+  "epoch_activated_at": "REPLACE_WITH_CANONICAL_FRESH_EPOCH_ACTIVATION_TIMESTAMP",
+  "target_tools_list": 25
+}

@@ -249,6 +249,26 @@ test("distribution monitoring measures unknown-tool recovery only from clean epo
   assert.match(distribution, /no session\/retry linkage and never establish a causal recovery rate/);
 });
 
+test("distribution monitoring keeps task-leading descriptions in a separate fail-closed fresh-epoch experiment", async () => {
+  const distribution = await readFile(distributionUrl, "utf8");
+  const activationTemplate = JSON.parse(await readFile(new URL(
+    "../agent/config/task-leading-description-experiment.activation.template.json",
+    import.meta.url,
+  ), "utf8"));
+  assert.match(distribution, /updateTaskLeadingDescriptionExperiment/);
+  assert.match(distribution, /TASK_LEADING_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE/);
+  assert.match(distribution, /constants\.O_RDONLY \| constants\.O_NOFOLLOW/);
+  assert.match(distribution, /mode 0600/);
+  assert.match(distribution, /previousReport\.funnel\?\.mcp_task_leading_description_experiment \|\| null/);
+  assert.match(distribution, /mcp_task_leading_description_experiment: mcpTaskLeadingDescriptionExperiment/);
+  assert.match(distribution, /inactive until exact reviewed release, production activation, completed drain rotation, and fresh epoch coordinates match the trusted ledger/);
+  assert.match(distribution, /first report at or above N=25 is immutable/);
+  assert.match(distribution, /no session\/exposure linkage and never establish a causal copy conversion rate/);
+  assert.equal(activationTemplate.experiment_id, "mcp-task-leading-descriptions-v1");
+  assert.equal(activationTemplate.measurement_epoch_id, 0);
+  assert.equal(activationTemplate.target_tools_list, 25);
+});
+
 test("distribution monitoring reports MCP conversion from the active trusted epoch", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /trustedMcpDelta\(state, trustedBaseline\.mcp\)/);

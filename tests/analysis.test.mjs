@@ -524,6 +524,85 @@ test("a nominal USD promise qualified as non-cash dockets is unverified and unsa
   ));
 });
 
+test("a numeric coin denomination is also treated as non-cash", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Payment: $100 USD (125 coins). Complete implementation scope, reproducible behavior, tests, and acceptance criteria are provided.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.state, "UNVERIFIED");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
+  ));
+});
+
+test("non-cash denomination language is trusted only from repository authorities", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "Payment: $100 USD (125 coins).",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted",
+    }],
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Reward denomination is non-cash or ambiguous"));
+});
+
+test("parenthetical payment prose and benchmark points are not denominations", () => {
+  for (const body of [
+    "Payment: $100 USD (paid in USDC on Base). Complete implementation scope and acceptance criteria are provided.",
+    "Payment: $100 USD (credit card payout). Complete implementation scope and acceptance criteria are provided.",
+    "Bounty: $100 USD (estimated 10 points of effort). Complete implementation scope and acceptance criteria are provided.",
+    "Benchmark reward 0.00. (The related R-010 equal-points tie remains unresolved.) Complete implementation scope and acceptance criteria are provided.",
+  ]) {
+    const output = analyzeBounty({ issue: { ...healthyIssue, body }, repository: healthyRepo, now });
+    assert.ok(
+      !output.signals.some((item) => item.label === "Reward denomination is non-cash or ambiguous"),
+      body,
+    );
+  }
+});
+
+test("exact trusted platform evidence is preserved when issue wording conflicts", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "Payment: $100 USD (125 coins). Complete implementation scope, reproducible behavior, tests, and acceptance criteria are provided.",
+    },
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "BountyHub",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 100,
+      secured_amount: 100,
+      promised_amount: 0,
+      currency: "USD",
+      evidence_url: "https://www.bountyhub.dev/en/bounty/view/verified",
+    },
+    now,
+  });
+
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(output.reward.amount, 100);
+  assert.equal(output.reward.currency, "USD");
+  assert.ok(!output.signals.some((item) =>
+    item.label === "Reward denomination is non-cash or ambiguous" && item.hardStop
+  ));
+  assert.ok(output.signals.some((item) =>
+    item.label === "Reward wording conflicts with trusted platform settlement" && !item.hardStop
+  ));
+});
+
 test("a same-repository source link is not treated as a mirror", () => {
   const output = analyzeBounty({
     issue: {

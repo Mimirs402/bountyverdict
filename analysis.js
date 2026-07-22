@@ -270,7 +270,7 @@ export function externalSourceIssue(issue, repository) {
   return null;
 }
 
-const AMBIGUOUS_NON_CASH_REWARD_PATTERN = /\b(?:payment|reward|bounty)\b[^\r\n]{0,160}(?:\$\s*)?\d[\d,.]*(?:\s*(?:USD|USDC))?[^\r\n]{0,60}\(\s*[^)\r\n]{0,64}\b(?:dockets?|points?|credits?|coins?)\b[^)\r\n]*\)/i;
+const AMBIGUOUS_NON_CASH_REWARD_PATTERN = /\b(?:payment|reward|bounty)\b[^\r\n]{0,160}(?:\$\s*)?\d[\d,.]*(?:\s*(?:USD|USDC))?[^\r\n]{0,60}\(\s*(?:[A-Za-z0-9][A-Za-z0-9._-]*\s+){0,5}(?:dockets?|points?|credits?|creds?|coins?)\s*\)/i;
 
 function ambiguousNonCashReward(issue, comments) {
   const sources = [
@@ -939,7 +939,10 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.currency = null;
     reward.evidenceUrl = platformEmpty.html_url ?? issue.html_url;
   }
-  if (ambiguousReward && reward.state === "PROMISED" && reward.verification === "MAINTAINER_STATEMENT") {
+  const ambiguousRewardHasTrustedVerification = Boolean(ambiguousReward) &&
+    ["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API"].includes(reward.verification);
+  if (ambiguousReward && !ambiguousRewardHasTrustedVerification &&
+      !["WITHDRAWN", "PAID_OR_AWARDED"].includes(reward.state)) {
     reward.state = "UNVERIFIED";
     reward.verification = "UNVERIFIED";
     reward.amount = null;
@@ -1114,7 +1117,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   }
 
-  if (ambiguousReward) {
+  if (ambiguousReward && !ambiguousRewardHasTrustedVerification) {
     score -= 100;
     signals.push(signal(
       "Reward denomination is non-cash or ambiguous",
@@ -1122,6 +1125,14 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       "The payment statement qualifies a nominal USD amount with a separate docket, point, credit, or coin denomination. Treat it as non-cash and unverified until an exact settlement asset and redemption contract are public.",
       ambiguousReward.evidenceUrl,
       true,
+    ));
+  } else if (ambiguousReward) {
+    score -= 20;
+    signals.push(signal(
+      "Reward wording conflicts with trusted platform settlement",
+      -20,
+      "The issue qualifies a nominal USD amount with a non-cash denomination, but an exact trusted platform record exists. Preserve the platform record and reconcile the conflicting public terms before starting work.",
+      ambiguousReward.evidenceUrl,
     ));
   }
 

@@ -286,7 +286,18 @@ export function parseAwesomeMcpServersReadme(
   if (lines.length > 50_000 || lines.some((line) => line.length > 50_000)) {
     throw new Error("Awesome MCP Servers README lines are unbounded.");
   }
-  const anchor = `[cristianmoroaica/bountyverdict](${expectedRepository})`;
+  let repositoryUrl: URL;
+  try {
+    repositoryUrl = new URL(expectedRepository);
+  } catch {
+    throw new Error("Awesome MCP Servers expected repository is invalid.");
+  }
+  const repositoryParts = repositoryUrl.pathname.split("/").filter(Boolean);
+  if (repositoryUrl.protocol !== "https:" || repositoryUrl.hostname !== "github.com" ||
+      repositoryParts.length !== 2) {
+    throw new Error("Awesome MCP Servers expected repository is invalid.");
+  }
+  const anchor = `[${repositoryParts.join("/")}](${expectedRepository})`;
   const matches = lines.filter((line) => line.startsWith(`- ${anchor}`));
   if (matches.length > 1) throw new Error("Awesome MCP Servers duplicated the exact BountyVerdict listing.");
   if (matches.length === 0) {

@@ -506,11 +506,14 @@ test("directory monitoring tracks exact GitHub Agent Finder PR, catalog, Registr
   assert.match(directory, /async function agentFinderCatalogStatus/);
   assert.match(directory, /parseAgentFinderCatalogEntry/);
   assert.match(directory, /parseAgentFinderRegistryLatest/);
+  assert.match(directory, /officialMcpServerName,\n\s*repository,\n\s*mcpMarketplaceEndpoint,/);
   assert.match(directory, /parseAgentFinderSearchPage/);
   assert.match(directory, /agent_finder_catalog: agentFinderCatalog/);
   assert.match(directory, /exact_pr_catalog_registry_and_owner_run_search_presence_not_impressions_installs_tool_calls_purchases_or_revenue/);
   assert.match(distribution, /agent_finder_catalog: state\.agent_finder_catalog/);
   assert.match(distribution, /GitHub Agent Finder/);
+  assert.match(distribution, /PR #11/);
+  assert.doesNotMatch(distribution, /PR #10\b/);
   assert.match(distribution, /PR, catalog, and search presence are distribution only, never an impression, install, tool call, purchase, or revenue/);
 });
 

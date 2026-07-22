@@ -88,6 +88,41 @@ const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
   /\b(?:dropping|giving up)\s+(?:this|it|the issue|my claim)\b/i,
 ];
 
+const TERMINAL_MAINTAINER_PATTERNS = [
+  /\b(?:we|i)\s+(?:have\s+)?paid\s+(?:the|an?|one|all)\s+(?:accepted\s+)?(?:claim|bounty|reward|payout)s?\b/i,
+  /(?:^|[.!?]\s+|[\r\n])\p{Lu}[\p{L}\p{N}_.-]{1,40}\s+(?:has\s+)?paid\s+(?:the|an?|one|all)\s+(?:accepted\s+)?(?:claim|bounty|reward|payout)s?\b/u,
+  /\b(?:bounty|reward|payout|claim)\s+(?:has been|was|is now)\s+(?:paid|settled|awarded|fulfilled|completed)\b/i,
+  /\b(?:we|i)\s+(?:have\s+)?accepted\s+(?:the|an?)\s+(?:(?:first|one|final|latest)\s+)?(?:delivery|submission|solution|work)\b/i,
+  /(?:^|[.!?]\s+|[\r\n])\p{Lu}[\p{L}\p{N}_.-]{1,40}\s+(?:has\s+)?accepted\s+(?:the|an?)\s+(?:(?:first|one|final|latest)\s+)?(?:delivery|submission|solution|work)\b/u,
+  /(?:^|[.!?]\s+|[\r\n])accepted\s+(?:the|an?)\s+(?:(?:first|one|final|latest)\s+)?(?:delivery|submission|solution|work)\b/i,
+  /\b(?:delivery|submission|solution|work)\s+(?:has been|was|is now)\s+(?:accepted|approved)\b/i,
+];
+const TERMINAL_MAINTAINER_NEGATION_PATTERNS = [
+  /\b(?:no|neither)\s+(?:accepted\s+)?(?:claim|bounty|reward|payout)s?\s+(?:has been|was|is now)\s+(?:paid|settled|awarded|fulfilled|completed)\b/i,
+  /\b(?:no|neither)\s+(?:delivery|submission|solution|work)\s+(?:has been|was|is now)\s+(?:accepted|approved)\b/i,
+  /\bnot\s+(?:one|a|an|the|any)\s+(?:accepted\s+)?(?:claim|bounty|reward|payout)s?\s+(?:has been|was|is now)\s+(?:paid|settled|awarded|fulfilled|completed)\b/i,
+  /\bnot\s+(?:one|a|an|the|any)\s+(?:delivery|submission|solution|work)\s+(?:has been|was|is now)\s+(?:accepted|approved)\b/i,
+  /\bnone\s+of\s+the\s+(?:claims?|bount(?:y|ies)|rewards?|payouts?)\s+(?:have been|were|are now)\s+(?:paid|settled|awarded|fulfilled|completed)\b/i,
+  /\bnone\s+of\s+the\s+(?:deliver(?:y|ies)|submissions?|solutions?|work)\s+(?:has been|have been|was|were|is now|are now)\s+(?:accepted|approved)\b/i,
+  /\b(?:claim|bounty|reward|payout)s?\s+(?:has been|was|is now)\s+not\s+(?:paid|settled|awarded|fulfilled|completed)\b/i,
+  /\b(?:delivery|submission|solution|work)\s+(?:has been|was|is now)\s+not\s+(?:accepted|approved)\b/i,
+  /\bnobody\s+(?:has\s+)?(?:paid|accepted|approved|awarded|settled)\b/i,
+];
+
+const CLOSED_AVAILABILITY_PATTERNS = [
+  /\bslots?\s*:\s*\d+\s*\(\s*(?:filled|closed)\s*\)/i,
+  /\b(?:no|zero)\s+open\s+(?:claim\s+)?slots?\b/i,
+  /\b(?:all|every)\s+(?:claim\s+)?slots?\s+(?:are|were|have been)\s+(?:filled|closed|claimed)\b/i,
+  /\bclaim\s+gate\s*:?\s*closed\b/i,
+  /\bstatus\s*:\s*(?:delivered|paid|settled|completed|fulfilled|awarded)\b/i,
+];
+
+const OPEN_AVAILABILITY_PATTERNS = [
+  /\bslots?\s*:\s*\d+\s*\(\s*[1-9]\d*\s+open\s*\)/i,
+  /\b(?:[1-9]\d*|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:separate\s+)?(?:claim\s+)?slots?\s+remain(?:s)?\s+open\b/i,
+  /\b(?:claim\s+)?slots?\s+remaining\s*:\s*[1-9]\d*\b/i,
+];
+
 const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
 
 function externalSourceIssue(issue, repository) {
@@ -105,6 +140,24 @@ function externalSourceIssue(issue, repository) {
     };
   }
   return null;
+}
+
+function externalBountySource(issue) {
+  const body = typeof issue?.body === "string" ? issue.body : "";
+  if (!MAINTAINER_ASSOCIATIONS.has(issue?.author_association)) return null;
+  if (!/\bsource of truth\b/i.test(body) || !/\bmirror(?:ed)?\b/i.test(body)) return null;
+  const match = body.match(/^(?:claim|source(?:\s+of\s+truth)?|bounty)\s*:\s*(https:\/\/[^\s<>]+)/im);
+  if (!match?.[1] || match[1].length > 2_048) return null;
+  let url;
+  try {
+    url = new URL(match[1].replace(/[),.;]+$/, ""));
+  } catch {
+    return null;
+  }
+  const hostname = url.hostname.toLowerCase().replace(/\.+$/, "");
+  if (url.protocol !== "https:" || url.username || url.password ||
+      hostname === "github.com" || hostname.endsWith(".github.com")) return null;
+  return { url: url.href, host: url.hostname };
 }
 
 export function parseIssueUrl(value) {
@@ -302,6 +355,65 @@ function isAffirmativeRewardedLabel(value) {
   return /^(?:(?:bounty|reward)\s*[:=/_-]?\s*)?rewarded$/i.test(normalized);
 }
 
+function normalizedStatusLabel(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .trim();
+}
+
+function isTerminalBountyLabel(value) {
+  const normalized = normalizedStatusLabel(value);
+  if (isAffirmativeRewardedLabel(normalized)) return true;
+  return /^(?:(?:bounty|reward)\s*[:=/_-]?\s*)?(?:paid|awarded|claimed|settled|fulfilled|delivered|completed)$/i
+    .test(normalized);
+}
+
+function hasMaintainerTerminalStatement(value) {
+  return String(value ?? "")
+    .split(/(?<=[.!?;])\s+|[\r\n]+|\b(?:but|however|yet)\b/i)
+    .some((clause) => !TERMINAL_MAINTAINER_NEGATION_PATTERNS.some((pattern) => pattern.test(clause)) &&
+      TERMINAL_MAINTAINER_PATTERNS.some((pattern) => pattern.test(clause)));
+}
+
+function latestMaintainerTerminalState(comments) {
+  return comments
+    .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association) &&
+      hasMaintainerTerminalStatement(comment.body))
+    .sort((left, right) => commentTime(right) - commentTime(left))[0] ?? null;
+}
+
+function closedBountyAvailability(issue, comments) {
+  const issueText = `${String(issue?.body ?? "")}\n${issueLabelNames(issue).join("\n")}`;
+  if (MAINTAINER_ASSOCIATIONS.has(issue?.author_association) &&
+      CLOSED_AVAILABILITY_PATTERNS.some((pattern) => pattern.test(issueText))) {
+    return { source: "issue", evidenceUrl: issue.html_url, observedAt: null };
+  }
+  const comment = comments
+    .filter((item) => MAINTAINER_ASSOCIATIONS.has(item.author_association) &&
+      CLOSED_AVAILABILITY_PATTERNS.some((pattern) => pattern.test(item.body ?? "")))
+    .sort((left, right) => commentTime(right) - commentTime(left))[0];
+  return comment
+    ? { source: "comment", evidenceUrl: comment.html_url ?? issue.html_url, observedAt: commentTime(comment) }
+    : null;
+}
+
+function openBountyAvailability(issue, comments) {
+  const issueText = String(issue?.body ?? "");
+  if (MAINTAINER_ASSOCIATIONS.has(issue?.author_association) &&
+      OPEN_AVAILABILITY_PATTERNS.some((pattern) => pattern.test(issueText))) {
+    return { source: "issue", evidenceUrl: issue.html_url, observedAt: null };
+  }
+  const comment = comments
+    .filter((item) => MAINTAINER_ASSOCIATIONS.has(item.author_association) &&
+      OPEN_AVAILABILITY_PATTERNS.some((pattern) => pattern.test(item.body ?? "")))
+    .sort((left, right) => commentTime(right) - commentTime(left))[0];
+  return comment
+    ? { source: "comment", evidenceUrl: comment.html_url ?? issue.html_url, observedAt: commentTime(comment) }
+    : null;
+}
+
 function rewardEvidence(issue, comments, opire) {
   const officialAlgora = comments
     .filter((comment) =>
@@ -473,6 +585,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
+  const terminalLabelCandidates = issueLabelNames(issue).filter(isTerminalBountyLabel);
   const opire = opireRewardState(comments);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
   const claimantInterest = activeClaimIntent(comments, now);
@@ -484,9 +597,27 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const platformRejection = relevantOpireRejection(issue, opire, reward);
   const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
-  if (rewardedLabels.length) {
+  const externalPlatformSource = externalSource ? null : externalBountySource(issue);
+  const bountyContext = reward.state !== "NOT_FOUND" ||
+    /(?:bounty|reward)/i.test(authoredIssueRewardText(issue)) ||
+    issueLabelNames(issue).some((label) => /(?:bounty|reward)/i.test(label));
+  const terminalLabels = bountyContext
+    ? terminalLabelCandidates.filter((label) => !isAffirmativeRewardedLabel(label))
+    : [];
+  const maintainerTerminalState = bountyContext ? latestMaintainerTerminalState(comments) : null;
+  const observedClosedAvailability = bountyContext ? closedBountyAvailability(issue, comments) : null;
+  const observedOpenAvailability = bountyContext ? openBountyAvailability(issue, comments) : null;
+  const newerOpenComment = observedOpenAvailability?.source === "comment" &&
+    observedClosedAvailability?.source === "comment" &&
+    observedOpenAvailability.observedAt > observedClosedAvailability.observedAt;
+  const closedAvailability = newerOpenComment ? null : observedClosedAvailability;
+  const openAvailability = observedOpenAvailability && !closedAvailability ? observedOpenAvailability : null;
+  const openLifecycle = openAvailability && terminalLabels.length > 0;
+  const terminalClosureLabels = openLifecycle ? [] : terminalLabels;
+  if (rewardedLabels.length || terminalClosureLabels.length || (maintainerTerminalState && closedAvailability)) {
     reward.state = "PAID_OR_AWARDED";
-    reward.evidenceUrl = issue.html_url;
+    reward.verification = "MAINTAINER_STATEMENT";
+    reward.evidenceUrl = maintainerTerminalState?.html_url ?? closedAvailability?.evidenceUrl ?? issue.html_url;
   } else if (platformRejection) {
     reward.state = "WITHDRAWN";
     reward.verification = "TRUSTED_PLATFORM_APP";
@@ -549,6 +680,32 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       `GitHub currently labels this issue ${JSON.stringify(rewardedLabels[0])}; do not treat an open issue as an unpaid opportunity.`,
       issue.html_url,
       true,
+    ));
+  } else if (terminalClosureLabels.length || closedAvailability) {
+    score -= 100;
+    const observed = terminalClosureLabels[0] ?? "closed availability";
+    signals.push(signal(
+      "Bounty has no open work slot",
+      -100,
+      `Maintainer-controlled GitHub evidence reports terminal bounty status ${JSON.stringify(observed)}; do not start work without a newer explicit reopening and available slot.`,
+      maintainerTerminalState?.html_url ?? closedAvailability?.evidenceUrl ?? issue.html_url,
+      true,
+    ));
+  } else if (openLifecycle) {
+    score -= 40;
+    signals.push(signal(
+      "Bounty lifecycle label coexists with open slots",
+      -40,
+      `GitHub labels this bounty ${JSON.stringify(terminalLabels[0])}, while maintainer-controlled issue evidence still advertises open claim capacity. Confirm the remaining slot before starting.`,
+      openAvailability.evidenceUrl ?? issue.html_url,
+    ));
+  } else if (maintainerTerminalState) {
+    score -= 40;
+    signals.push(signal(
+      "Maintainer reports accepted or paid work",
+      -40,
+      "A maintainer reports accepted, approved, awarded, settled, or paid work. Confirm that a separate claim slot is still open before starting.",
+      maintainerTerminalState.html_url ?? issue.html_url,
     ));
   }
 
@@ -637,6 +794,14 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       -40,
       `This issue mirrors work from ${externalSource.repository}. Authority in the mirror does not prove that the target repository will accept the work; check the linked source issue before coding.`,
       externalSource.url,
+    ));
+  } else if (externalPlatformSource) {
+    score -= 40;
+    signals.push(signal(
+      "External bounty platform requires separate verification",
+      -40,
+      `The maintainer-authored issue declares a mirrored board and names ${externalPlatformSource.host} as the source of truth. This check does not fetch that platform; verify claim capacity and current state there before coding.`,
+      externalPlatformSource.url,
     ));
   }
 

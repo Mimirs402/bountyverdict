@@ -25,14 +25,15 @@ import {
   parseTensorBlockSearch,
 } from "../src/mcp-downstreams.ts";
 
-const name = "io.github.cristianmoroaica/bountyverdict";
+const name = "io.github.Mimirs402/bountyverdict";
 const version = "1.1.9";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp";
+const registryEndpoint = `${endpoint}?source=mcp-registry`;
 const clineEndpoint = `${endpoint}?source=cline-marketplace`;
 const kiloEndpoint = `${endpoint}?source=kilo-marketplace`;
-const repository = "https://github.com/cristianmoroaica/bountyverdict";
-const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.cristianmoroaica:bountyverdict";
-const registryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.cristianmoroaica%2Fbountyverdict/versions/latest";
+const repository = "https://github.com/Mimirs402/bountyverdict";
+const agentFinderIdentifier = "urn:ai:registry.modelcontextprotocol.io:io.github.Mimirs402:bountyverdict";
+const registryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
 
 test("recognizes only the exact Agent Finder catalog, Registry, and owner-run search contracts", () => {
   const catalogEntry = {
@@ -67,24 +68,24 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
       description: "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
       version,
       repository: { url: repository, source: "github" },
-      remotes: [{ type: "streamable-http", url: endpoint }],
+      remotes: [{ type: "streamable-http", url: registryEndpoint }],
     },
     _meta: {
       "io.modelcontextprotocol.registry/official": { status: "active", isLatest: true },
     },
   };
-  assert.deepEqual(parseAgentFinderRegistryLatest(registry, name, repository, endpoint), {
+  assert.deepEqual(parseAgentFinderRegistryLatest(registry, name, repository, registryEndpoint), {
     contract_verified: true,
     name,
     version,
-    endpoint,
+    endpoint: registryEndpoint,
     active: true,
     latest: true,
   });
   assert.equal(parseAgentFinderRegistryLatest({
     ...registry,
     server: { ...registry.server, remotes: [{ type: "streamable-http", url: "https://wrong.example/mcp" }] },
-  }, name, repository, endpoint).contract_verified, false);
+  }, name, repository, registryEndpoint).contract_verified, false);
 
   const searchEntry = {
     id: agentFinderIdentifier,
@@ -124,7 +125,7 @@ test("recognizes only the exact Agent Finder catalog, Registry, and owner-run se
 });
 
 test("recognizes only the exact bounded Awesome MCP Servers contract", () => {
-  const entry = `- [cristianmoroaica/bountyverdict](${repository}) 📇 ☁️ - Six read-only tools. Remote [endpoint](${endpoint}) over x402.`;
+  const entry = `- [Mimirs402/bountyverdict](${repository}) 📇 ☁️ - Six read-only tools. Remote [endpoint](${endpoint}) over x402.`;
   assert.deepEqual(parseAwesomeMcpServersReadme(`# Developer Tools\n${entry}\n`, repository, endpoint), {
     listed: true,
     contract_verified: true,
@@ -147,6 +148,7 @@ test("recognizes only the exact bounded Awesome MCP Servers contract", () => {
 
   assert.throws(() => parseAwesomeMcpServersReadme(`${entry}\n${entry}\n`, repository, endpoint), /duplicated/);
   assert.throws(() => parseAwesomeMcpServersReadme("x".repeat(2_000_001), repository, endpoint), /unbounded/);
+  assert.throws(() => parseAwesomeMcpServersReadme(entry, "https://example.com/wrong/repo", endpoint), /expected repository is invalid/);
 });
 
 test("recognizes only the exact TensorBlock search entry and remote profile", () => {

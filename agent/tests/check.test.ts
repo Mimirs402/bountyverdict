@@ -122,6 +122,37 @@ test("returns AVOID when GitHub already lists an assignee", async () => {
   assert.ok(result.signals.some((signal) => signal.label === "Issue is already assigned" && signal.hard_stop));
 });
 
+test("returns AVOID when a maintainer mirror is delivered with every slot filled", async () => {
+  const deliveredIssue = {
+    ...issue,
+    title: "Frantic bounty #118: Vendor UX dogfood",
+    body: "Frantic bounty #118\n\nWorker price: $1\nSlots: 2 (filled)\nStatus: delivered\n" +
+      "Claim: https://gofrantic.com/bounties/118\n\nFrantic is the source of truth. This GitHub issue is a mirrored board thread.",
+    labels: [{ name: "bounty" }, { name: "funded" }, { name: "delivered" }],
+  };
+  const comments = [{
+    body: "Frantic paid one accepted claim.",
+    author_association: "OWNER",
+    created_at: "2026-07-21T10:46:12Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-paid",
+    user: { login: "maintainer" },
+  }];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock(comments, null, deliveredIssue),
+    new Date("2026-07-22T06:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PAID_OR_AWARDED");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) => signal.label === "Bounty has no open work slot" && signal.hard_stop));
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External bounty platform requires separate verification" &&
+    signal.evidence_url === "https://gofrantic.com/bounties/118"
+  ));
+});
+
 test("returns AVOID for an unconfirmed bounty posted by a non-maintainer", async () => {
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",

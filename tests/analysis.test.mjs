@@ -93,6 +93,240 @@ test("only explicit affirmative rewarded status labels hard-stop the bounty", ()
   }
 });
 
+test("terminal bounty lifecycle labels close an otherwise open issue", () => {
+  for (const label of ["Delivered", "Bounty: Paid", "Reward - Settled", "Awarded", "Claimed", "Fulfilled", "Completed"]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, labels: [{ name: "bounty" }, { name: label }] },
+      repository: healthyRepo,
+      now,
+    });
+    assert.equal(output.reward.state, "PAID_OR_AWARDED", label);
+    assert.equal(output.verdict, "AVOID", label);
+    assert.ok(output.signals.some((item) => item.label === "Bounty has no open work slot" && item.hardStop), label);
+  }
+
+  for (const label of ["Delivery Pending", "Payment Pending", "Not Delivered"]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, labels: [{ name: "bounty" }, { name: label }] },
+      repository: healthyRepo,
+      now,
+    });
+    assert.equal(output.reward.state, "PROMISED", label);
+    assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"), label);
+  }
+});
+
+test("terminal lifecycle labels are cautionary when claim slots explicitly remain open", () => {
+  for (const label of ["Claimed", "Delivered"]) {
+    const output = analyzeBounty({
+      issue: {
+        ...healthyIssue,
+        body: `${healthyIssue.body}\nSlots: 3 (2 open)`,
+        labels: [{ name: "bounty" }, { name: label }],
+      },
+      repository: healthyRepo,
+      now,
+    });
+
+    assert.equal(output.reward.state, "PROMISED", label);
+    assert.equal(output.verdict, "CAUTION", label);
+    assert.ok(output.signals.some((item) =>
+      item.label === "Bounty lifecycle label coexists with open slots" && !item.hardStop
+    ), label);
+    assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"), label);
+  }
+});
+
+test("a newer maintainer reopening supersedes an older closed-slot comment", () => {
+  const comments = [{
+    body: "Claim gate: closed.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T08:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-closed",
+    user: { login: "maintainer" },
+  }, {
+    body: "Reopened: two separate claim slots remain open.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-reopened",
+    user: { login: "maintainer" },
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, labels: [{ name: "bounty" }, { name: "Claimed" }] },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "CAUTION");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Bounty lifecycle label coexists with open slots" &&
+    item.evidenceUrl === "https://github.com/acme/widget/issues/4#issuecomment-reopened"
+  ));
+  assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"));
+});
+
+test("a delivered external-platform mirror cannot remain viable", () => {
+  const issue = {
+    ...healthyIssue,
+    title: "Frantic bounty #118: Vendor UX dogfood",
+    body: "Frantic bounty #118\n\nWorker price: $1\nSlots: 2 (filled)\nStatus: delivered\n" +
+      "Claim: https://gofrantic.com/bounties/118\n\nFrantic is the source of truth. This GitHub issue is a mirrored board thread.",
+    labels: [{ name: "bounty" }, { name: "funded" }, { name: "delivered" }],
+  };
+  const comments = [{
+    body: "Frantic accepted the delivery.",
+    author_association: "OWNER",
+    created_at: "2026-07-21T10:26:49Z",
+    html_url: "https://github.com/auscaster/frantic-board/issues/320#issuecomment-accepted",
+    user: { login: "auscaster" },
+  }, {
+    body: "Frantic paid one accepted claim.",
+    author_association: "OWNER",
+    created_at: "2026-07-21T10:46:12Z",
+    html_url: "https://github.com/auscaster/frantic-board/issues/320#issuecomment-paid",
+    user: { login: "auscaster" },
+  }];
+  const output = analyzeBounty({ issue, repository: healthyRepo, comments, now });
+
+  assert.equal(output.reward.state, "PAID_OR_AWARDED");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Bounty has no open work slot" && item.hardStop));
+  assert.ok(output.signals.some((item) =>
+    item.label === "External bounty platform requires separate verification" &&
+    item.evidenceUrl === "https://gofrantic.com/bounties/118"
+  ));
+});
+
+test("one accepted delivery is cautionary when separate slots remain open", () => {
+  const comments = [{
+    body: "We accepted the first delivery. Two separate claim slots remain open.",
+    author_association: "OWNER",
+    created_at: "2026-07-20T10:00:00Z",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-accepted",
+    user: { login: "maintainer" },
+  }];
+  const output = analyzeBounty({
+    issue: { ...healthyIssue, body: `${healthyIssue.body}\nSlots: 3 (2 open)` },
+    repository: healthyRepo,
+    comments,
+    now,
+  });
+
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.verdict, "CAUTION");
+  assert.ok(output.signals.some((item) => item.label === "Maintainer reports accepted or paid work" && !item.hardStop));
+  assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"));
+});
+
+test("affirmative terminal statements retain harmless modifiers", () => {
+  for (const body of [
+    "We accepted the delivery without revisions.",
+    "Frantic paid one accepted claim without delay.",
+    "Not only did we accept the delivery, we paid the claim.",
+  ]) {
+    const comments = [{
+      body,
+      author_association: "OWNER",
+      created_at: "2026-07-20T10:00:00Z",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-terminal",
+      user: { login: "maintainer" },
+    }];
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, body: `${healthyIssue.body}\nSlots: 2 (2 open)` },
+      repository: healthyRepo,
+      comments,
+      now,
+    });
+
+    assert.equal(output.reward.state, "PROMISED", body);
+    assert.equal(output.verdict, "CAUTION", body);
+    assert.ok(output.signals.some((item) => item.label === "Maintainer reports accepted or paid work"), body);
+  }
+});
+
+test("a future acceptance promise is not mistaken for completed work", () => {
+  for (const body of [
+    "We will accept the first delivery that satisfies the acceptance criteria. Two claim slots remain open.",
+    "The accepted delivery will receive the advertised $100 after review.",
+    "A paid bounty must have complete acceptance criteria before publication.",
+    "No claim was paid; both slots remain open.",
+    "No delivery was accepted; both slots remain open.",
+    "No work was accepted; this bounty is still available.",
+  ]) {
+    const comments = [{
+      body,
+      author_association: "OWNER",
+      created_at: "2026-07-20T10:00:00Z",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-future",
+      user: { login: "maintainer" },
+    }];
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, body: `${healthyIssue.body}\nSlots: 2 (2 open)` },
+      repository: healthyRepo,
+      comments,
+      now,
+    });
+
+    assert.equal(output.reward.state, "PROMISED", body);
+    assert.equal(output.verdict, "VIABLE", body);
+    assert.ok(!output.signals.some((item) => item.label === "Maintainer reports accepted or paid work"), body);
+    assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"), body);
+  }
+});
+
+test("a non-maintainer issue cannot supply closed capacity or an external platform source", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      author_association: "NONE",
+      body: `${healthyIssue.body}\nSlots: 2 (filled)\nStatus: delivered\nClaim: https://evil.example/phish\n` +
+        "Evil is the source of truth. This issue is a mirrored board thread.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) => item.label === "Bounty issuer lacks repository authority"));
+  assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"));
+  assert.ok(!output.signals.some((item) => item.label === "External bounty platform requires separate verification"));
+});
+
+test("GitHub aliases and credential-bearing URLs are not external bounty platforms", () => {
+  for (const claimUrl of [
+    "https://www.github.com/acme/widget/issues/4",
+    "https://github.com./acme/widget/issues/4",
+    "https://user:pass@example.com/bounties/4",
+  ]) {
+    const output = analyzeBounty({
+      issue: {
+        ...healthyIssue,
+        body: `${healthyIssue.body}\nClaim: ${claimUrl}\nAcme is the source of truth. This is a mirrored board thread.`,
+      },
+      repository: healthyRepo,
+      now,
+    });
+    assert.ok(!output.signals.some((item) => item.label === "External bounty platform requires separate verification"), claimUrl);
+  }
+});
+
+test("a generic delivered label is not a paid signal without bounty context", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      title: "Publish documentation",
+      body: "Publish the completed documentation package after final review with enough implementation detail for contributors.",
+      labels: [{ name: "Delivered" }],
+    },
+    repository: healthyRepo,
+    now,
+  });
+  assert.equal(output.reward.state, "NOT_FOUND");
+  assert.ok(!output.signals.some((item) => item.label === "Bounty has no open work slot"));
+});
+
 test("an unconfirmed non-maintainer bounty is a hard stop", () => {
   const output = analyzeBounty({
     issue: { ...healthyIssue, author_association: "NONE", title: "$5,000 bounty", body: "Payable somehow after this issue is solved." },

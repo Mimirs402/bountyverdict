@@ -1750,7 +1750,7 @@ async function agentFinderCatalogStatus(
       JSON.parse(registryBody),
       officialMcpServerName,
       repository,
-      `${productionOrigin}/mcp`,
+      mcpMarketplaceEndpoint,
     );
     const search = parseAgentFinderSearchPage(
       await searchResponse.text(),

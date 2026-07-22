@@ -140,16 +140,18 @@ export function parseIssueHuntPage(
       String(issue.repositoryGithubId) !== String(repositoryGithubId) || issue.number !== number ||
       !new Set(["funded", "ready", "rewarded"]).has(String(issue.status)) ||
       !Number.isSafeInteger(issue.depositAmount) || Number(issue.depositAmount) <= 0 ||
-      !Array.isArray(page.deposits) || page.deposits.length < 1 || page.deposits.length > ISSUEHUNT_MAX_RECORDS ||
+      !Array.isArray(page.deposits) ||
+      !Array.isArray(page.anonymousDeposits) ||
+      page.deposits.length + page.anonymousDeposits.length < 1 ||
+      page.deposits.length + page.anonymousDeposits.length > ISSUEHUNT_MAX_RECORDS ||
       !Array.isArray(page.pullRequests) || page.pullRequests.length > ISSUEHUNT_MAX_RECORDS ||
-      !Array.isArray(page.anonymousDeposits) || page.anonymousDeposits.length > 0 ||
       !Array.isArray(page.organizationGithubIdBalanceAmountEntries) || page.organizationGithubIdBalanceAmountEntries.length > 0) {
     return null;
   }
 
   const seenDeposits = new Set<string>();
   let activeDepositCents = 0n;
-  for (const deposit of page.deposits) {
+  for (const deposit of [...page.deposits, ...page.anonymousDeposits]) {
     if (!isRecord(deposit) || typeof deposit._id !== "string" || !/^[0-9a-f]{24}$/i.test(deposit._id) ||
         seenDeposits.has(deposit._id) || typeof deposit.cancelled !== "boolean") return null;
     seenDeposits.add(deposit._id);

@@ -1275,3 +1275,18 @@ Live replay proves the whole path. Both `publicdomaincompany/scroll#30` and the 
 Because the held branch adds the structured `linked_source` output, its public plugin, MCP, Registry, Glama, ToolHive, monitoring, and nomination identities are staged consistently as **v1.1.10** rather than reusing the immutable v1.1.9 identity. Nomination documentation explicitly requires the Registry to verify v1.1.10 before any nomination can be sent.
 
 The complete public suite passes **174 / 174** and the Worker and operations suite passes **509 / 509**. TypeScript checking, synchronized public documentation, dry Worker deployment, Glama release verification, both dependency audits, and `git diff --check` all pass. No production deployment, listing mutation, bounty claim, bid, payment, client contact, or synthetic demand occurred.
+
+## 2026-07-23 — Anonymous IssueHunt deposits count without exposing funders
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Best fresh funded record: **$150, but closed and non-executable**
+- Production treatment: **unchanged; fix remains in held v1.1.10**
+
+The next funded-bounty field pass found `refined-github/refined-github#3686`, transferred from `sindresorhus/refined-github#3686`. IssueHunt's legacy route is live, securely matches the canonical repository's immutable GitHub ID `51769689`, reports **$150** deposited, and has no IssueHunt pull-request submission. BountyVerdict still discarded the record because **$40** of the total came through IssueHunt's bounded `anonymousDeposits` array.
+
+The strict parser now validates named and anonymous deposit records through the same exact 24-hex ID, positive integer-cent amount, cancellation, cross-array uniqueness, aggregate, and combined 20-record bounds. Only uncancelled cents contribute to the total that must equal IssueHunt's declared deposit amount. Anonymous user identity is not required, retained, or returned. Organization-balance entries remain rejected because they are not exact issue deposits.
+
+Live replay from both the former and current GitHub URLs now verifies the same trusted-platform **$150** record and preserves its legacy IssueHunt evidence URL. The verdict remains **AVOID** because the issue closed in 2024 and has three linked pull requests. This repairs funding provenance without making stale work actionable.
+
+The bounded sweep found no executable alternative: three other verified IssueHunt records were closed, one open issue was assigned and offered unverified non-USD XTR, and one listing's GitHub issue no longer exists. The complete public suite passes **174 / 174** and the Worker and operations suite passes **511 / 511**; typechecking, synchronized llms contracts, dry Worker deployment, Glama verification, dependency audit, and diff checking all pass. No claim, bid, payment, contact, deployment, or marketplace mutation occurred.

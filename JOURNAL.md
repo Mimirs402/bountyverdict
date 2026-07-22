@@ -814,3 +814,53 @@ The task-specific production release advanced canonical `main` after the earlier
 This draft adds a separate explicit reconciliation step. It accepts only the private owner-owned exact prior receipt, the Mimir's Lab GitHub identity, a clean canonical `main` equal to authoritative `origin/main`, the exact reviewed ancestry, the fixed successful production deployment, and one successful CI and Pages run for current main. Every file after the fixed reconciliation base must equal the small reviewed repair allowlist, and the AgentMRR product and publisher contract files must be byte-unchanged from the prior verified release. A dry run is read-only. The explicitly enabled path preserves the exact old receipt bytes once in a private history directory, durably replaces the active receipt with an attestation bound to current main, its reviewed source head, and the deployed Worker release, and is safely repeatable after a crash.
 
 A versioned release handoff replaces the obsolete local sequence: only its explicit release flag can first reconcile the attestation and then invoke the existing gated publisher. The publisher still requires the nomination-dependent hardening receipt, live collector lease, clean trusted-funnel rotation, private AgentMRR identity, and exact product contract. The draft itself does not send email, publish AgentMRR, rotate the funnel, or touch wallet state.
+
+## 2026-07-22 — Task-first MCP tool descriptions (prepared, not deployed)
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Production status: **held until the clean server-description cohort completes**
+
+A read-only buyer-journey audit localized the first observed drop before checkout. The fixed owner-run Bazaar holdout found the suite for **12 / 14** realistic agent tasks, including **9** top-three and **7** first-place results. All seven production handlers pass their real functional canaries, exact x402 prices are disclosed, and the REST payment handoff has an owner settlement proof. However, the post-release baseline still has no valid external tool call or payment presentation. The deployed treatment changed the server-level initialize description, while all six individual `tools/list` descriptions still led with unsigned-payment mechanics before explaining the task models were choosing.
+
+The next isolated treatment rewrites only those six descriptions. Each now leads with the concrete task and returned decision, retains the exact input boundary and neighboring-tool guidance, then discloses read-only behavior, the free payment quote and selection summary, and the exact Base USDC price. Names, titles, schemas, handlers, prices, settlement logic, and the server-level treatment remain frozen. Tests enforce that no description begins with payment mechanics and that every description still contains the exact unsigned and authorized-payment contract.
+
+The focused MCP suite passes **22 / 22**, the full Worker and operations suite passes **410 / 410**, TypeScript checking passes, `git diff --check` passes, and Cloudflare's production dry bundle succeeds. The candidate remains local on an isolated branch. A delayed aggregate burst added four initialize / tools-list pairs during the epoch-44 drain but no validation, payment-required, signed-payment, or success event. Because it followed direct listing verification and its coarse source cannot prove organic intent, the timer correctly reset the quiet window and no demand is claimed from it.
+
+MCP Marketplace imports the Registry server as `free`, but its documented paid models are one-time and monthly licenses rather than usage-based x402. Assigning either would add an unrelated marketplace charge on top of the disclosed per-call settlement. The prepared `LAUNCHGUIDE.md` therefore keeps connection requirements honest, states the **$0.02-$0.40 USDC** usage prices prominently, and supplies task-first prompts, features, tags, and the exact Registry endpoint for an eventual owner claim. Claiming still requires the repository owner's GitHub OAuth session; the noninteractive `gh` credential cannot safely substitute for that consent step.
+
+Epoch **44** activated at **2026-07-22T11:02:08.433Z** after **925 seconds** of stable drain. Its immutable buyer-candidate baseline is **507 initialize / 444 tools/list / 12 validation errors / 0 valid calls or payment presentations**. All seven post-experiment-baseline enumeration pairs observed during the audit and drain remain excluded. The 25-event server-description cohort may now resume without crediting those probes; no broad marketplace retrieval will run inside the active epoch.
+
+## 2026-07-22 — Unknown-tool invocation retained in the selection boundary
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Experiment status at discovery: **15 / 25 eligible tools/list events**
+
+Privacy-safe epoch telemetry recorded one buyer-candidate `tools/call` request for an unknown tool name. The exact name, arguments, request, and caller are intentionally not retained. Because the selection experiment previously omitted `tool_not_found` and `protocol_error`, a terminal report could have incorrectly labeled this real invocation attempt as no invocation and rejected only the copy hypothesis.
+
+Accounting schema 3 now carries both bounded counters across raw, clean-epoch, attributable-runtime, and immutable-boundary state. Schema-1 and schema-2 reports migrate in place without resetting the target, epoch, or already eligible events; the rollout's evidence-backed frozen values for both new counters are zero. The decision ladder keeps deeper evidence authoritative and uses `unknown_tool_invocation_observed` without claiming session linkage. Unknown-tool calls contribute to the invalid-call share, while protocol errors remain outside the call-opportunity denominator.
+
+The change affects only the private report classifier. It does not alter the production Worker, product contracts, prices, traffic, or settlement accounting. All **146 / 146** public tests and **426 / 426** Worker and operations tests, TypeScript checking, `git diff --check`, Cloudflare dry deployment, and the zero-vulnerability production dependency audit pass.
+
+## 2026-07-22 — High-reward bounty scan avoided three false opportunities
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Autonomous contribution candidates authorized: **0**
+
+A bounded search under the Mimir's Lab GitHub identity ranked fresh public bounty leads, then passed the strongest survivors through the local BountyVerdict implementation and authoritative issue, pull-request, assignment, and maintainer evidence. The highest advertised amounts were not actionable work: Godot issue 70796 listed **$3,280** but was locked with four open competing pull requests and a maintainer rejection of bounty-driven AI submissions; TypeORM issue 3357 listed **$590** but was assigned, locked, had a designated active pull request, and explicitly prohibited new community pull requests; Trovu issue 329 listed **$70** but had an apparently claimed reward, eight open pull requests, 37 attempts, and required a human attestation and discussion.
+
+BountyVerdict returned **AVOID 0** for all three after the full evidence pass. No assignment request, comment, fork, branch, pull request, payment, or claim was made. This is real avoided-work value rather than revenue: the tool prevented autonomous effort on contested or expressly unauthorized tasks, but no customer purchase can be inferred from an owner-run local analysis.
+
+## 2026-07-22 — Server-description cohort selected the task-first treatment
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Immutable experiment boundary: **25 / 25 eligible tools/list events**
+- Terminal decision: **`unknown_tool_invocation_observed`**
+- Production status: **task-first descriptions remain prepared, not deployed**
+
+The scheduled report-only monitor froze the schema-3 boundary at the first report at or above the precommitted target. Eligible evidence contained **28 initialize**, **25 tools/list**, and **1 privacy-safe unknown-tool invocation** event. It contained no known-tool validation, capacity, payment-required, payment-present, paid-success, or paid-error event. Fourteen tools/list observations collected during audited draining intervals remain excluded, and owner automation, registry crawlers, Glama release traffic, and x402 observers remain outside the buyer-candidate cohort.
+
+This result is evidence of invocation intent without enough information to identify the attempted tool or link it to a preceding list session. It therefore does not prove that a known BountyVerdict tool was selected, and it does not make checkout salience the next bottleneck. The authorized follow-up keeps the held checkout treatment shelved and advances the already verified task-first `tools/list` descriptions, which lead with the delegated task and returned decision before explaining payment mechanics. No self-traffic, payment, deployment, nomination email, or customer metric was generated to reach or record the boundary.

@@ -2280,7 +2280,9 @@ async function agentToolsCloudStatus(): Promise<Record<string, unknown>> {
         expectedResources: x402ScanResources,
       }),
       mcp: parseAgentToolsCloudMcpListing(mcpSearch, mcpDetail, {
-        endpointUrl: `${productionOrigin}/mcp`,
+        endpointUrl: `${productionOrigin}/mcp?source=mcp-registry`,
+        homepageUrl: "https://mimirs402.github.io/bountyverdict/",
+        name: "BountyVerdict Agent Decision Tools",
         slug: agentToolsCloudMcpSlug,
         expectedTools: agentToolsCloudMcpTools,
       }),

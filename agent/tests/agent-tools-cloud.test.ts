@@ -103,13 +103,15 @@ const expectedMcpTools = [
   "check_mcp_tool_drift",
 ];
 const mcpSlug = "bountyverdict-agent-decision-tools-bountyverdict-agent-production-mimirslab-work";
-const mcpEndpoint = `${productionOrigin}/mcp`;
+const mcpEndpoint = `${productionOrigin}/mcp?source=mcp-registry`;
+const mcpHomepage = "https://mimirs402.github.io/bountyverdict/";
+const mcpName = "BountyVerdict Agent Decision Tools";
 const mcpSearch = { count: 1, total_matched: 1, servers: [{ slug: mcpSlug }] };
 function mcpPayload(overrides: Record<string, unknown> = {}) {
   return {
     slug: mcpSlug,
-    name: "BountyVerdict Agent Decision APIs",
-    homepage_url: mcpEndpoint,
+    name: mcpName,
+    homepage_url: mcpHomepage,
     endpoint_url: mcpEndpoint,
     transport: "streamable-http",
     x402_supported: 1,
@@ -127,7 +129,13 @@ function mcpPayload(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
-const mcpOptions = { endpointUrl: mcpEndpoint, slug: mcpSlug, expectedTools: expectedMcpTools };
+const mcpOptions = {
+  endpointUrl: mcpEndpoint,
+  homepageUrl: mcpHomepage,
+  name: mcpName,
+  slug: mcpSlug,
+  expectedTools: expectedMcpTools,
+};
 
 test("Agent Tools Cloud verifies the refreshed six-tool x402 MCP listing", () => {
   const parsed = parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload(), mcpOptions);
@@ -140,6 +148,8 @@ test("Agent Tools Cloud verifies the refreshed six-tool x402 MCP listing", () =>
 
 test("Agent Tools Cloud MCP parser rejects identity, tool, and payment-support drift", () => {
   assert.throws(() => parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({ endpoint_url: "https://attacker.example/mcp" }), mcpOptions), AgentToolsCloudContractDrift);
+  assert.throws(() => parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({ homepage_url: "https://attacker.example/" }), mcpOptions), AgentToolsCloudContractDrift);
+  assert.throws(() => parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({ name: "BountyVerdict Agent Decision APIs" }), mcpOptions), AgentToolsCloudContractDrift);
   assert.throws(() => parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({ tools: [], tool_count: 0 }), mcpOptions), AgentToolsCloudContractDrift);
   assert.throws(() => parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload({ x402_supported: 0 }), mcpOptions), AgentToolsCloudContractDrift);
 });

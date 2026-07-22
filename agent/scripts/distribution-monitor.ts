@@ -172,7 +172,7 @@ const recoveryExperimentStateFile = process.env.RECOVERY_EXPERIMENT_STATE_FILE |
 const taskLeadingDescriptionExperimentStateFile = process.env.TASK_LEADING_DESCRIPTION_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v2.json`;
 const agentQuestionDescriptionExperimentStateFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_STATE_FILE ||
-  `${homedir()}/.local/state/bountyverdict/experiments/mcp-agent-question-descriptions-v5.json`;
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-agent-question-descriptions-v6.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
@@ -188,7 +188,7 @@ const trustedFunnelEpochFile = process.env.TRUSTED_FUNNEL_HISTORY_FILE ||
 const taskLeadingDescriptionActivationFile = process.env.TASK_LEADING_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE ||
   `${homedir()}/.config/bountyverdict/task-leading-description-experiment.activation.json`;
 const agentQuestionDescriptionActivationFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE ||
-  `${homedir()}/.config/bountyverdict/agent-question-description-experiment-v5.activation.json`;
+  `${homedir()}/.config/bountyverdict/agent-question-description-experiment-v6.activation.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = configuration.trackedCostsUsdc;
 const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";

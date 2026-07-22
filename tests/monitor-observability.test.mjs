@@ -298,12 +298,12 @@ test("question-shaped MCP selection copy gets an isolated v5 checkpoint after th
   ), "utf8"));
   assert.match(distribution, /AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID/);
   assert.match(distribution, /AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE/);
-  assert.match(distribution, /experiments\/mcp-agent-question-descriptions-v5\.json/);
+  assert.match(distribution, /experiments\/mcp-agent-question-descriptions-v6\.json/);
   assert.match(distribution, /persistedAgentQuestionDescriptionExperiment \|\|\s+previousReport\.funnel\?\.mcp_agent_question_description_experiment \|\| null/);
   assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+agentQuestionDescriptionExperimentStateFile/s);
   assert.match(distribution, /mcp_agent_question_description_experiment: mcpAgentQuestionDescriptionExperiment/);
   assert.match(distribution, /the completed v2 baseline and excluded v3\/v4 audit windows remain frozen/);
-  assert.equal(activationTemplate.experiment_id, "mcp-agent-question-descriptions-v5");
+  assert.equal(activationTemplate.experiment_id, "mcp-agent-question-descriptions-v6");
   assert.equal(activationTemplate.measurement_epoch_id, 0);
   assert.equal(activationTemplate.target_tools_list, 25);
 });

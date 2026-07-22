@@ -1068,3 +1068,17 @@ The Memanto candidate exposed a separate execution-quality gap. A financially cr
 The public field report records every candidate and explicitly limits the evidence: this run demonstrates avoided duplicate or non-executable work, not organic demand, purchase conversion, positive selection efficacy, acceptance, or payout. Product copy now also states the real difference between the free browser triage and the paid machine contract, and corrects Portfolio economics: repeated $0.05 checks cost less for two to seven candidates unless one ranked, partial-failure-aware response is worth the premium; the fixed $0.40 portfolio reaches price parity or better only at eight to ten.
 
 All **159 / 159** public tests and **482 / 482** Worker and operations tests pass, along with TypeScript checking and `git diff --check`. The report-only production monitor remains healthy with zero errors, zero genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs. Clean experiment epoch 53 remains at four eligible catalog events and zero tool calls, payment challenges, presented payments, or paid successes; the benchmark activity was owner-run and is not counted as demand.
+
+## 2026-07-22 — Field-test fixes deployed; selection measurement re-isolated
+
+- Production release: **151fca29d89d9825e881c81fe0252e21b916c466**
+- Production activation: **ba4242e43cd710e4bad82106c85009af0c5ea546**
+- Deployment workflow: **29955605258 passed all seven real handlers**
+- v5 frozen prefix: **5 / 25 eligible tools/list; zero downstream calls**
+- Replacement measurement: **v6 awaiting clean epoch 54 after a 900-second drain**
+
+CI and GitHub Pages passed for the field-test release. The paid Worker deployment then verified the live free and paid contracts, exercised every one of the seven real production handlers with owner-attributed probes, and published the active manifest. The deployed checker now carries the slash-claim, same-owner PR-link, and external-prerequisite fixes, while the live MCP selection contract states the corrected portfolio economics.
+
+That final MCP wording change means epoch 53 no longer represents one immutable selection treatment. Its five eligible initialize and tools/list pairs remain preserved with zero protocol errors, unknown tools, validation errors, capacity rejections, payment challenges, presented payments, paid successes, or paid errors, but the epoch was immediately marked ineligible rather than blending later traffic. Rotation `field-test-release-epoch-54` started at `2026-07-22T20:35:16.608Z` with the precommitted 900-second quiet period. The local report-only monitor is healthy, the automatic epoch and distribution timers are enabled, and v6 uses separate activation and checkpoint files so the v5 prefix cannot be rewritten or reused.
+
+No customer purchase, revenue, or paid-work settlement occurred during release. The honest commerce counters remain **0** genuine purchases, **$0.00** customer revenue, and **1.012 USDC** tracked costs.

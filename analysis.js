@@ -221,6 +221,7 @@ const CLAIM_INTENT_PATTERNS = [
   /\bi\s+can\s+(?:fix|handle|resolve|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
   /\bi\s+(?:really\s+)?(?:want\s+to|wanna)\s+w(?:ork|ord)\s+on\s+(?:this|it|the issue)\b/i,
   /\bcan\s+i\s+be\s+assigned(?:\s+(?:to\s+)?(?:this|it|the issue))?\b/i,
+  /\bi(?:['’]d|\s+would)\s+like\s+to\s+be\s+(?:considered|selected)\s+for\b/i,
   /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\b/i,
   /\bi(?:['’]ll|\s+will|\s+am\s+going\s+to|\s+plan\s+to|\s+intend\s+to)\s+(?:start\s+)?(?:implement(?:ing)?|fix(?:ing)?|handle|resolve|address|work\s+on|take\s+on)\b/i,
   /\bi(?:['’]m|\s+am)\s+(?:(?:currently|already|now)\s+)?(?:implementing|fixing|handling|resolving|addressing|working\s+on)\b/i,
@@ -228,7 +229,7 @@ const CLAIM_INTENT_PATTERNS = [
   /(?:^|\n)\s*taking\s+(?:this|it|the issue)\b/im,
 ];
 const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
-  /\bwithdraw(?:ing)?\s+(?:(?:my|this|the)\s+)?(?:claim|interest|attempt)\b/i,
+  /\bwithdraw(?:ing)?\s+(?:(?:my|this|the)\s+)?(?:claim|interest|attempt|application|proposal|candidacy)\b/i,
   /\bno longer\s+(?:working|claiming|interested)\b/i,
   /\b(?:can['’]?t|cannot|won['’]?t|will not)\s+(?:continue\s+)?work(?:ing)?\s+on\s+(?:this|it|the issue)\b/i,
   /\b(?:please\s+)?unassign\s+me\b/i,

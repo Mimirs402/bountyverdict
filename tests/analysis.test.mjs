@@ -974,6 +974,32 @@ test("passive assignment requests and explicit PR promises count as claimant int
   ));
 });
 
+test("first-person candidacy requests count without matching generic program discussion", () => {
+  const comments = [{
+    body: "I would like to be considered for this microgrant.",
+    created_at: "2026-07-21T23:25:26Z",
+    user: { login: "alice" },
+  }, {
+    body: "I'd like to be selected for the parser task.",
+    created_at: "2026-07-22T00:23:10Z",
+    user: { login: "bob" },
+  }, {
+    body: "Candidates would like to be considered fairly under the published rules.",
+    created_at: "2026-07-22T01:23:10Z",
+    user: { login: "program-observer" },
+  }, {
+    body: "How are applicants considered for the program?",
+    created_at: "2026-07-22T02:23:10Z",
+    user: { login: "questioner" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(output.claimantInterest.map(({ login }) => login).sort(), ["alice", "bob"]);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unconfirmed claimant interest" && item.impact === -20 && !item.hardStop
+  ));
+});
+
 test("one active natural-language claimant can never remain viable", () => {
   const comments = [{
     body: "I will like to work on this issue.",
@@ -1038,7 +1064,7 @@ test("Fluxer-style slash claims and generic first-person implementation intent a
 
 test("quoted commands, code examples, and maintainer implementation language do not forge claimant intent", () => {
   const comments = [{
-    body: "> /claim\n> I will implement this.\n\nHas this claimant withdrawn?",
+    body: "> /claim\n> I will implement this.\n> I would like to be considered for this task.\n\nHas this claimant withdrawn?",
     created_at: "2026-07-18T09:00:00Z",
     author_association: "NONE",
     user: { login: "quote-reviewer" },
@@ -1093,6 +1119,22 @@ test("a later withdrawal clears only that user's natural-language claim intent",
   const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
   assert.deepEqual(output.claimantInterest.map(({ login }) => login), ["bob"]);
   assert.ok(output.signals.some((item) => item.label === "Unconfirmed claimant interest" && item.impact === -10));
+});
+
+test("a later candidacy withdrawal clears an earlier application", () => {
+  const comments = [{
+    body: "I would like to be considered for this microgrant.",
+    created_at: "2026-07-18T12:00:00Z",
+    user: { login: "alice" },
+  }, {
+    body: "Withdrawing my application because I cannot complete the work.",
+    created_at: "2026-07-19T12:00:00Z",
+    user: { login: "alice" },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, comments, now });
+  assert.equal(output.verdict, "VIABLE");
+  assert.deepEqual(output.claimantInterest, []);
+  assert.ok(!output.signals.some((item) => item.label === "Unconfirmed claimant interest"));
 });
 
 test("stale or ambiguous interest does not create a claimant signal", () => {

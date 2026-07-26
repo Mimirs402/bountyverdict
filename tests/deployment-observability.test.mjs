@@ -18,3 +18,20 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /payment\?\.agentic_wallet\?\.execute_as_argument_vector !== true/);
   assert.match(canary, /"User-Agent": "bountyverdict-owner-audit\/1\.0"/);
 });
+
+test("production deployment is version-pinned, rollback-capable, and activation is race-safe", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+  assert.match(workflow, /registry_version=\$\(jq -er '\.version' \.\.\/server\.json\)/);
+  assert.match(workflow, /worker_version=\$\(jq -er '\.version' package\.json\)/);
+  assert.match(workflow, /manifest_status=\$\(jq -er '\.status' \.\.\/agent-manifest\.json\)/);
+  assert.match(workflow, /\[\[ "\$manifest_status" == "awaiting_production" \]\]/);
+  assert.match(workflow, /jq -e '\.production_api == null' \.\.\/agent-manifest\.json/);
+  assert.match(workflow, /serverInfo\?\.version !== process\.env\.WORKER_RELEASE_VERSION/);
+  assert.match(workflow, /npx wrangler deployments list --env production --json/);
+  assert.match(workflow, /current production deployment is not one version at 100 percent/);
+  assert.match(workflow, /npx wrangler rollback "\$PREVIOUS_WORKER_VERSION"/);
+  assert.match(workflow, /failure\(\) && steps\.deploy\.outcome != 'skipped'/);
+  assert.match(workflow, /EXPECTED_MAIN_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /git rev-parse refs\/remotes\/origin\/main\)" == "\$EXPECTED_MAIN_SHA"/);
+  assert.doesNotMatch(workflow, /push .*--force/);
+});

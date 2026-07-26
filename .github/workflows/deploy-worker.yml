@@ -30,6 +30,19 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      - name: Read expected Worker release
+        run: |
+          registry_version=$(jq -er '.version' ../server.json)
+          worker_version=$(jq -er '.version' package.json)
+          manifest_version=$(jq -er '.release_version' ../agent-manifest.json)
+          manifest_status=$(jq -er '.status' ../agent-manifest.json)
+          [[ "$registry_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$worker_version" == "$registry_version" ]]
+          [[ "$manifest_version" == "$worker_version" ]]
+          [[ "$manifest_status" == "awaiting_production" ]]
+          jq -e '.production_api == null' ../agent-manifest.json >/dev/null
+          echo "WORKER_RELEASE_VERSION=$worker_version" >> "$GITHUB_ENV"
+
       - name: Verify required deployment secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -48,7 +61,25 @@ jobs:
             if (!/^0x[a-fA-F0-9]{40}$/.test(process.env.PAY_TO_ADDRESS)) throw new Error("PAY_TO_ADDRESS is invalid.");
           '
 
+      - name: Capture current production Worker version
+        id: previous
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          deployments=$(npx wrangler deployments list --env production --json)
+          previous_version=$(jq -er '
+            max_by(.created_on)
+            | .versions
+            | if length == 1 and .[0].percentage == 100
+              then .[0].version_id
+              else error("current production deployment is not one version at 100 percent")
+              end
+          ' <<<"$deployments")
+          [[ "$previous_version" =~ ^[0-9a-f-]{36}$ ]]
+          echo "version_id=$previous_version" >> "$GITHUB_OUTPUT"
+
       - name: Deploy production Worker with secrets
+        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
@@ -266,7 +297,11 @@ jobs:
             capabilities: {},
             clientInfo: { name: "bountyverdict-release-check", version: "1.0.0" },
           });
-          if (initialized.result?.protocolVersion !== "2025-11-25" || initialized.result?.serverInfo?.name !== "BountyVerdict") process.exit(1);
+          if (
+            initialized.result?.protocolVersion !== "2025-11-25" ||
+            initialized.result?.serverInfo?.name !== "BountyVerdict" ||
+            initialized.result?.serverInfo?.version !== process.env.WORKER_RELEASE_VERSION
+          ) process.exit(1);
           const listed = await rpc(2, "tools/list");
           const expectedNames = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
           if (JSON.stringify(listed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
@@ -384,6 +419,30 @@ jobs:
             if (!state.checks?.some(({ product, ok }) => product === "mcpdrift" && ok === true)) process.exit(1);
           ' "$canary_state"
 
+      - name: Roll back failed production deployment
+        if: ${{ failure() && steps.deploy.outcome != 'skipped' && steps.previous.outputs.version_id != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PREVIOUS_WORKER_VERSION: ${{ steps.previous.outputs.version_id }}
+        run: |
+          npx wrangler rollback "$PREVIOUS_WORKER_VERSION" \
+            --env production \
+            --yes \
+            --message "Automatic rollback after failed BountyVerdict release verification"
+          for attempt in {1..12}; do
+            current_version=$(npx wrangler deployments list --env production --json | jq -er '
+              max_by(.created_on)
+              | .versions
+              | if length == 1 and .[0].percentage == 100 then .[0].version_id else empty end
+            ')
+            if [[ "$current_version" == "$PREVIOUS_WORKER_VERSION" ]]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Cloudflare did not confirm rollback to the captured Worker version" >&2
+          exit 1
+
       - name: Activate public agent manifest
         run: npm run manifest:activate
 
@@ -413,7 +472,11 @@ jobs:
       - name: Publish activation record
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
         run: |
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
           cp /tmp/bountyverdict-activation/agent-manifest.json agent-manifest.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

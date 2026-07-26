@@ -33,7 +33,16 @@ export const EARNED_PLACEMENT_PROVENANCE_GATE = Object.freeze({
 });
 export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-56";
 export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
+export const SNAPSHOT_SOURCE_COMMIT = "7afcca5ca4c43a83d8b74e5c2f5d72421a1857bd";
+export const SNAPSHOT_SOURCE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict";
+export const SNAPSHOT_SERVICE_SHA256 = "bd3401a1ca6a210c605729bc302404bd62d5b1cb05f43c727c713ecc50a4f105";
+export const SNAPSHOT_TIMER_SHA256 = "30cde8ebdc07a95b76fd703d44a59d1b7bed8d1d2a4ec56ba7be121ea0ad14f2";
 const MAXIMUM_FREEZE_LAG_MS = 5 * 60 * 1000;
+const MAXIMUM_SERVICE_COMPLETION_LAG_MS = 2 * 60 * 1000;
+const SNAPSHOT_COMMANDS = Object.freeze([
+  "/usr/bin/env AUDITED_MONITOR=directory node --experimental-strip-types scripts/run-audited-monitor.ts",
+  "/usr/bin/env AUDITED_MONITOR=distribution node --experimental-strip-types scripts/run-audited-monitor.ts",
+]);
 
 const TERMINAL_STATUSES = new Set([
   "target_purchase_success",
@@ -49,6 +58,32 @@ export type SnapshotServiceState = {
   ExecMainStatus: string | number;
   ActiveState: string;
   SubState: string;
+  InvocationID: string;
+  started_at: string;
+  completed_at: string;
+  NeedDaemonReload: string;
+  DropInPaths: string;
+  FragmentPath: string;
+  WorkingDirectory: string;
+  ExecStartCommands: string[];
+};
+
+export type SnapshotTimerState = {
+  last_trigger_at: string;
+  NeedDaemonReload: string;
+  DropInPaths: string;
+  FragmentPath: string;
+};
+
+export type SnapshotSourceState = {
+  worktree: string;
+  head: string;
+  porcelain: string;
+};
+
+export type SnapshotUnitEvidence = {
+  service_sha256: string;
+  timer_sha256: string;
 };
 
 function record(value: unknown, label: string): Record<string, any> {
@@ -87,15 +122,39 @@ export function verifyPostBoundaryReleaseGate(input: {
   distributionReport: unknown;
   trustedFunnelLedger: unknown;
   snapshotService: SnapshotServiceState;
+  snapshotTimer: SnapshotTimerState;
+  snapshotSource: SnapshotSourceState;
+  snapshotUnits: SnapshotUnitEvidence;
 }) {
   const experiment = record(input.experiment, "Acquisition experiment state");
   const report = record(input.distributionReport, "Distribution report");
   const ledger = record(input.trustedFunnelLedger, "Trusted funnel epoch ledger");
   const service = record(input.snapshotService, "Snapshot service state");
+  const timer = record(input.snapshotTimer, "Snapshot timer state");
+  const source = record(input.snapshotSource, "Snapshot source state");
+  const units = record(input.snapshotUnits, "Snapshot unit evidence");
 
   if (service.Result !== "success" || Number(service.ExecMainStatus) !== 0 ||
       service.ActiveState !== "inactive" || service.SubState !== "dead") {
     throw new Error("Acquisition snapshot service did not finish successfully.");
+  }
+  if (!/^[a-f0-9]{32}$/i.test(String(service.InvocationID)) ||
+      service.NeedDaemonReload !== "no" || service.DropInPaths !== "" ||
+      service.FragmentPath !== "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.service" ||
+      service.WorkingDirectory !== `${SNAPSHOT_SOURCE_WORKTREE}/agent` ||
+      !isDeepStrictEqual(service.ExecStartCommands, SNAPSHOT_COMMANDS)) {
+    throw new Error("Acquisition snapshot service definition or invocation evidence drifted.");
+  }
+  if (timer.NeedDaemonReload !== "no" || timer.DropInPaths !== "" ||
+      timer.FragmentPath !== "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.timer") {
+    throw new Error("Acquisition snapshot timer definition drifted.");
+  }
+  if (source.worktree !== SNAPSHOT_SOURCE_WORKTREE || source.head !== SNAPSHOT_SOURCE_COMMIT ||
+      source.porcelain !== "") {
+    throw new Error("Acquisition snapshot source is dirty or no longer at the reviewed commit.");
+  }
+  if (units.service_sha256 !== SNAPSHOT_SERVICE_SHA256 || units.timer_sha256 !== SNAPSHOT_TIMER_SHA256) {
+    throw new Error("Acquisition snapshot unit hashes drifted.");
   }
   if (experiment.name !== EARNED_PLACEMENT_EXPERIMENT_NAME) {
     throw new Error("Acquisition experiment identity drifted.");
@@ -185,6 +244,16 @@ export function verifyPostBoundaryReleaseGate(input: {
   }
 
   const frozenAt = canonicalTimestamp(terminal.frozen_at, "Acquisition frozen_at");
+  const serviceStartedAt = canonicalTimestamp(service.started_at, "Acquisition snapshot service start");
+  const serviceCompletedAt = canonicalTimestamp(service.completed_at, "Acquisition snapshot service completion");
+  const timerTriggeredAt = canonicalTimestamp(timer.last_trigger_at, "Acquisition snapshot timer trigger");
+  if (Date.parse(timerTriggeredAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT) ||
+      Date.parse(serviceStartedAt) < Date.parse(timerTriggeredAt) ||
+      Date.parse(serviceCompletedAt) < Date.parse(serviceStartedAt) ||
+      Date.parse(serviceCompletedAt) < Date.parse(frozenAt) ||
+      Date.parse(serviceCompletedAt) - Date.parse(frozenAt) > MAXIMUM_SERVICE_COMPLETION_LAG_MS) {
+    throw new Error("Acquisition snapshot invocation did not execute from the post-boundary timer.");
+  }
   if (Date.parse(frozenAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
     throw new Error("Acquisition terminal result froze before the experiment boundary.");
   }

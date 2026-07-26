@@ -7,6 +7,10 @@ import {
   EARNED_PLACEMENT_PROVENANCE_GATE,
   POST_BOUNDARY_DRAIN_ID,
   POST_BOUNDARY_DRAIN_REASON,
+  SNAPSHOT_SERVICE_SHA256,
+  SNAPSHOT_SOURCE_COMMIT,
+  SNAPSHOT_SOURCE_WORKTREE,
+  SNAPSHOT_TIMER_SHA256,
   verifyPostBoundaryReleaseGate,
 } from "../src/post-boundary-release-gate.ts";
 
@@ -83,6 +87,32 @@ const service = {
   ExecMainStatus: "0",
   ActiveState: "inactive",
   SubState: "dead",
+  InvocationID: "a".repeat(32),
+  started_at: "2026-07-27T16:37:15.000Z",
+  completed_at: "2026-07-27T16:38:05.000Z",
+  NeedDaemonReload: "no",
+  DropInPaths: "",
+  FragmentPath: "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.service",
+  WorkingDirectory: `${SNAPSHOT_SOURCE_WORKTREE}/agent`,
+  ExecStartCommands: [
+    "/usr/bin/env AUDITED_MONITOR=directory node --experimental-strip-types scripts/run-audited-monitor.ts",
+    "/usr/bin/env AUDITED_MONITOR=distribution node --experimental-strip-types scripts/run-audited-monitor.ts",
+  ],
+};
+const timer = {
+  last_trigger_at: "2026-07-27T16:37:15.000Z",
+  NeedDaemonReload: "no",
+  DropInPaths: "",
+  FragmentPath: "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.timer",
+};
+const source = {
+  worktree: SNAPSHOT_SOURCE_WORKTREE,
+  head: SNAPSHOT_SOURCE_COMMIT,
+  porcelain: "",
+};
+const units = {
+  service_sha256: SNAPSHOT_SERVICE_SHA256,
+  timer_sha256: SNAPSHOT_TIMER_SHA256,
 };
 
 const verify = (overrides: Record<string, unknown> = {}) => verifyPostBoundaryReleaseGate({
@@ -90,6 +120,9 @@ const verify = (overrides: Record<string, unknown> = {}) => verifyPostBoundaryRe
   distributionReport: report,
   trustedFunnelLedger: ledger,
   snapshotService: service,
+  snapshotTimer: timer,
+  snapshotSource: source,
+  snapshotUnits: units,
   ...overrides,
 });
 
@@ -113,6 +146,21 @@ test("rejects early, inconclusive, unhealthy, stale, and service-failed snapshot
   assert.throws(() => verify({
     snapshotService: { ...service, Result: "failed", ExecMainStatus: "1" },
   }), /did not finish successfully/);
+  assert.throws(() => verify({
+    snapshotService: { ...service, InvocationID: "" },
+  }), /definition or invocation evidence drifted/);
+  assert.throws(() => verify({
+    snapshotTimer: { ...timer, last_trigger_at: "2026-07-20T16:37:15.000Z" },
+  }), /did not execute from the post-boundary timer/);
+  assert.throws(() => verify({
+    snapshotSource: { ...source, porcelain: " M agent/src/index.ts\n" },
+  }), /dirty or no longer at the reviewed commit/);
+  assert.throws(() => verify({
+    snapshotUnits: { ...units, service_sha256: "0".repeat(64) },
+  }), /unit hashes drifted/);
+  assert.throws(() => verify({
+    snapshotService: { ...service, completed_at: "2026-07-27T16:37:59.000Z" },
+  }), /did not execute from the post-boundary timer/);
   assert.throws(() => verify({
     experiment: { ...experiment, ends_at: "2026-07-28T16:37:12.796Z" },
   }), /boundary drifted/);
@@ -142,6 +190,7 @@ test("rejects early, inconclusive, unhealthy, stale, and service-failed snapshot
       ...experiment,
       terminal_result: { ...terminal, frozen_at: "2026-07-27T16:43:00.000Z" },
     },
+    snapshotService: { ...service, completed_at: "2026-07-27T16:43:05.000Z" },
   }), /too long after/);
   assert.throws(() => verify({
     distributionReport: { ...report, mode: "report_only_without_semantic_retrieval" },

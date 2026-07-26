@@ -7,7 +7,7 @@
 - Free representative result: https://bountyverdict-agent-production.mimirslab.workers.dev/api/sample
 - x402 seller manifest: https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/x402
 - OpenAPI 3.1 contract: https://bountyverdict-agent-production.mimirslab.workers.dev/openapi.json
-- Remote MCP server: https://bountyverdict-agent-production.mimirslab.workers.dev/mcp (MCP 2025-11-25 Streamable HTTP; six paid read-only tools; SkillVerdict excluded)
+- Remote MCP server: https://bountyverdict-agent-production.mimirslab.workers.dev/mcp (MCP 2025-11-25 Streamable HTTP; one free selector plus six paid read-only tools; SkillVerdict excluded)
 - MCP endpoint metadata: https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/mcp.json
 - MCP server card: https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/mcp/server-card.json
 - RFC 9727 API catalog: https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/api-catalog

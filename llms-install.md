@@ -4,7 +4,7 @@ Canonical remote MCP endpoint:
 
 `https://bountyverdict-agent-production.mimirslab.workers.dev/mcp`
 
-The connection requires no BountyVerdict account, API key, headers, or repository secrets. Loading the server and listing its six read-only tools are free. A valid tool call returns an x402 v2 Base USDC payment requirement; invalid input is rejected before any payment requirement is created.
+The connection requires no BountyVerdict account, API key, headers, or repository secrets. Loading the server, listing its seven read-only tools, and calling `choose_github_agent_decision` are free. The selector maps one bounded task category to an exact paid tool, price, sample, and required input without inspecting a URL or producing a verdict. A valid paid tool call returns an x402 v2 Base USDC payment requirement; invalid input is rejected before any payment requirement is created.
 
 ## Client-specific connection
 
@@ -82,7 +82,7 @@ Add this to the user MCP configuration or `.vscode/mcp.json`. VS Code uses the t
 }
 ```
 
-Then run `MCP: List Servers` and inspect BountyVerdict's six tools.
+Then run `MCP: List Servers` and inspect BountyVerdict's free selector plus six paid tools.
 
 ### Cursor
 

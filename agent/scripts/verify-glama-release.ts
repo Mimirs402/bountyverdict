@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 const image = process.env.GLAMA_RELEASE_IMAGE || "bountyverdict-glama-verify:local";
 const endpoint = "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=glama-release";
 const entrypoint = "./node_modules/.bin/mcp-remote";
-const expectedTools = Object.freeze([
+const expectedPaidTools = Object.freeze([
   "audit_agent_harness",
   "check_github_bounty",
   "check_mcp_tool_drift",
@@ -16,7 +16,12 @@ const expectedTools = Object.freeze([
   "diagnose_github_actions_run",
   "rank_github_bounties",
 ]);
+const expectedTools = Object.freeze([
+  ...(process.env.GLAMA_EXPECT_FREE_SELECTOR === "YES" ? ["choose_github_agent_decision"] : []),
+  ...expectedPaidTools,
+]);
 const expectedTaskOpeners = Object.freeze({
+  choose_github_agent_decision: /^Which tool should I use/,
   check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
   rank_github_bounties: /^Which public GitHub bounty should I work on next/,
   audit_agent_harness: /^Can a coding agent safely work in this public repository/,
@@ -67,7 +72,7 @@ try {
   await client.connect(transport);
   const result = await client.listTools();
   const names = result.tools.map(({ name }) => name).sort();
-  assert.deepEqual(names, expectedTools);
+  assert.deepEqual(names, [...expectedTools].sort());
   for (const tool of result.tools) {
     assert.equal(typeof tool.description, "string");
     assert.match(

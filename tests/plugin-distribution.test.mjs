@@ -76,7 +76,7 @@ test("VS Code one-click install decodes to the exact source-marked production re
   assert.match(readme, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.ok(readme.indexOf(match[1]) < readme.indexOf("| Decision | Product | Price | Guarded skill |"));
   assert.match(readme, /Paid calls still require a separately authorized x402 wallet/);
-  assert.match(readme, /installing or listing the tools does not charge anything/);
+  assert.match(readme, /installing, listing, or using the selector does not charge anything/);
 });
 
 test("Glama release packaging bridges only the existing hosted MCP without secrets", async () => {
@@ -111,6 +111,7 @@ test("Glama release packaging bridges only the existing hosted MCP without secre
   }
   assert.match(smoke, /User-Agent:bountyverdict-owner-audit\/1\.0/);
   assert.match(smoke, /client\.listTools\(\)/);
-  assert.match(smoke, /assert\.deepEqual\(names, expectedTools\)/);
+  assert.match(smoke, /GLAMA_EXPECT_FREE_SELECTOR === "YES"/);
+  assert.match(smoke, /assert\.deepEqual\(names, \[\.\.\.expectedTools\]\.sort\(\)\)/);
   assert.match(workflow, /npm run glama:verify/);
 });

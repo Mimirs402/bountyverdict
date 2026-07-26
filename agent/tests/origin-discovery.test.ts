@@ -51,6 +51,7 @@ test("origin manifest publishes six exact products without changing SkillVerdict
   assert.equal(manifest.mcp.direct_automatic_payment_requires, "@x402/mcp");
   assert.equal(manifest.mcp.http_payment_handoff_extension, MCP_HTTP_PAYMENT_HANDOFF_EXTENSION);
   assert.deepEqual(manifest.mcp.tools.map(({ name }) => name), [
+    "choose_github_agent_decision",
     "check_github_bounty",
     "rank_github_bounties",
     "audit_agent_harness",
@@ -58,6 +59,11 @@ test("origin manifest publishes six exact products without changing SkillVerdict
     "classify_github_actions_flake",
     "check_mcp_tool_drift",
   ]);
+  assert.deepEqual(manifest.mcp.tools.map(({ payment_required }) => payment_required), [
+    false, true, true, true, true, true, true,
+  ]);
+  assert.equal(manifest.mcp.tools[0].verdict_produced, false);
+  assert.equal(manifest.mcp.tools[0].amount_atomic_usdc, "0");
 });
 
 test("origin skill is a truthful six-product payment-safe routing surface", () => {
@@ -126,6 +132,7 @@ test("ARD catalog publishes one semantic MCP entry without inventing an agent ru
   assert.match(entry.description, /no-account/i);
   assert.doesNotMatch(entry.description, /\bx402\b|\bUSDC\b|payment|price/i);
   assert.deepEqual(entry.capabilities, [
+    "choose_github_agent_decision",
     "check_github_bounty",
     "rank_github_bounties",
     "audit_agent_harness",

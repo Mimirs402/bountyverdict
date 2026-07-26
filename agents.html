@@ -23,7 +23,7 @@
         <h1>Agent tools that answer <em>before</em> you act.</h1>
         <p class="lede">No account or API key. Inspect a free sample and the exact payment challenge, then buy only the result your agent needs. Paid bounty checks add authenticated capacity, contribution-policy coverage, trusted BountyHub funding and claim verification, stable typed output, bounded evidence coverage, and reuse guidance beyond the unauthenticated browser triage. Invalid inputs and upstream failures are not settled.</p>
         <p class="kicker">Connect the remote MCP</p>
-        <p>Use the official <code>io.github.Mimirs402/bountyverdict</code> server for six paid, read-only tools covering bounty checks, portfolio ranking, repository harness audits, GitHub Actions diagnosis, flaky-retry decisions, and MCP schema drift. SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP.</p>
+        <p>Use the official <code>io.github.Mimirs402/bountyverdict</code> server for one free selector plus six paid, read-only tools covering bounty checks, portfolio ranking, repository harness audits, GitHub Actions diagnosis, flaky-retry decisions, and MCP schema drift. If the task is clear but the product is not, <code>choose_github_agent_decision</code> returns the exact tool, price, sample, and required input without producing a verdict or requesting payment. SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP.</p>
         <p>Each client has its own remote-server format. Do not paste one generic JSON object into every host:</p>
         <p class="install-command"><code>codex mcp add bountyverdict --url https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
         <p class="install-command"><code>claude mcp add --transport http --scope user bountyverdict https://bountyverdict-agent-production.mimirslab.workers.dev/mcp</code></p>
@@ -34,8 +34,8 @@
         <p>Connect, call <code>tools/list</code>, and select the narrowest tool. A remote MCP connection does not itself provide a wallet. Direct automatic payment requires an x402-aware MCP client; otherwise the unpaid challenge includes a versioned exact-HTTP handoff for an authorized x402 wallet. Invalid input is rejected before payment.</p>
         <p><a class="agent-link" href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest">Inspect the official MCP Registry entry ↗</a></p>
         <p class="install-command"><code>npx skills add Mimirs402/bountyverdict --skill route-github-agent-checks -y</code></p>
-        <p class="install-command"><code>gh skill preview Mimirs402/bountyverdict route-github-agent-checks@v1.1.10</code></p>
-        <p class="install-command"><code>gh skill install Mimirs402/bountyverdict route-github-agent-checks --pin v1.1.10</code></p>
+        <p class="install-command"><code>gh skill preview Mimirs402/bountyverdict route-github-agent-checks@v1.1.11</code></p>
+        <p class="install-command"><code>gh skill install Mimirs402/bountyverdict route-github-agent-checks --pin v1.1.11</code></p>
         <p class="install-command"><code>copilot plugin install Mimirs402/bountyverdict</code></p>
         <p><a class="agent-link" href="https://skills.sh/Mimirs402/bountyverdict/route-github-agent-checks">Install the router on skills.sh ↗</a></p>
         <p><a href="mcp-github-actions-diagnosis.html">GitHub Actions failure diagnosis MCP server: compare root-cause and flaky-retry tools →</a></p>

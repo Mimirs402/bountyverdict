@@ -215,7 +215,7 @@ jobs:
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
               const entry = value.entries?.[0];
-              const tools = ["check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+              const tools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
               if (value.specVersion !== "1.0" || value.entries?.length !== 1) process.exit(1);
               if (entry?.identifier !== "urn:air:bountyverdict-agent-production.mimirslab.workers.dev:server:bountyverdict") process.exit(1);
               if (entry?.type !== "application/mcp-server-card+json" || entry?.url !== `${process.env.PRODUCTION_API_URL}/.well-known/mcp.json`) process.exit(1);
@@ -231,6 +231,10 @@ jobs:
               if (value.spec !== "bountyverdict-agent-manifest/1" || value.version !== 1) process.exit(1);
               if (value.origin !== process.env.PRODUCTION_API_URL || JSON.stringify(value.products?.map(({ id }) => id)) !== JSON.stringify(expected)) process.exit(1);
               if (value.products?.some(({ id }) => id === "skill") || JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
+              const mcpTools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+              if (JSON.stringify(value.mcp?.tools?.map(({ name }) => name)) !== JSON.stringify(mcpTools)) process.exit(1);
+              if (value.mcp.tools[0]?.payment_required !== false || value.mcp.tools[0]?.verdict_produced !== false || value.mcp.tools[0]?.amount_atomic_usdc !== "0") process.exit(1);
+              if (value.mcp.tools.slice(1).some(({ payment_required }) => payment_required !== true)) process.exit(1);
               if (value.payment?.network !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.pay_to || "")) process.exit(1);
             });
           '
@@ -264,11 +268,13 @@ jobs:
           });
           if (initialized.result?.protocolVersion !== "2025-11-25" || initialized.result?.serverInfo?.name !== "BountyVerdict") process.exit(1);
           const listed = await rpc(2, "tools/list");
-          const expectedNames = ["check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+          const expectedNames = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
           if (JSON.stringify(listed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
           const outputSchemaSizes = listed.result.tools.map(({ outputSchema }) => Buffer.byteLength(JSON.stringify(outputSchema)));
+          const descriptionSizes = listed.result.tools.map(({ description }) => Buffer.byteLength(description));
           if (listed.result.tools.some(({ outputSchema }) => outputSchema?.type !== "object" || !Array.isArray(outputSchema.required))) process.exit(1);
           if (outputSchemaSizes.some((bytes) => bytes > 2048) || outputSchemaSizes.reduce((total, bytes) => total + bytes, 0) > 12000) process.exit(1);
+          if (descriptionSizes.some((bytes) => bytes > 1500) || descriptionSizes.reduce((total, bytes) => total + bytes, 0) > 4500) process.exit(1);
           const compatibilityHeaders = { ...headers, "MCP-Protocol-Version": "2025-06-18" };
           async function compatibilityRpc(id, method, params = {}) {
             const response = await fetch(`${api}/mcp`, {
@@ -287,6 +293,27 @@ jobs:
           if (compatibilityInitialized.result?.protocolVersion !== "2025-06-18") process.exit(1);
           const compatibilityListed = await compatibilityRpc(21, "tools/list");
           if (JSON.stringify(compatibilityListed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
+          const freeResponse = await fetch(`${api}/mcp`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 22,
+              method: "tools/call",
+              params: {
+                name: "choose_github_agent_decision",
+                arguments: { task: "github_actions_root_cause" },
+              },
+            }),
+          });
+          if (!freeResponse.ok || freeResponse.headers.has("PAYMENT-REQUIRED")) process.exit(1);
+          const freeCalled = await freeResponse.json();
+          const freeRoute = freeCalled.result?.structuredContent;
+          if (freeCalled.result?.isError || freeRoute?.tool_name !== "diagnose_github_actions_run") process.exit(1);
+          if (freeRoute?.payment_required !== false || freeRoute?.verdict_produced !== false || "verdict" in freeRoute) process.exit(1);
+          if (freeRoute?.price_usdc !== "0.04" || freeRoute?.required_input !== "run_url") process.exit(1);
+          const freeText = JSON.parse(freeCalled.result?.content?.[0]?.text || "null");
+          if (JSON.stringify(freeText) !== JSON.stringify(freeRoute) || freeText?.accepts !== undefined) process.exit(1);
           const calls = [
             ["check_github_bounty", { issue_url: "https://github.com/owner/repo/issues/1" }, "50000", "/api/bounty-preflight", "POST"],
             ["rank_github_bounties", { issue_urls: ["https://github.com/owner/repo/issues/1", "https://github.com/owner/repo/issues/2"] }, "400000", "/api/portfolio", "POST"],
@@ -339,6 +366,7 @@ jobs:
               EXPECTED_ASSET="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" \
               npm run payment:inspect
           done
+          GLAMA_EXPECT_FREE_SELECTOR=YES npm run glama:verify
 
       - name: Verify real production handlers
         env:

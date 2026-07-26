@@ -12,6 +12,7 @@ Use the `bountyverdict` MCP server only when the current task needs one of these
 
 | Need | Tool | Exact price |
 | --- | --- | --- |
+| Choose the right decision tool from a task category | `choose_github_agent_decision` | Free |
 | Check one public bounty issue before coding | `check_github_bounty` | $0.05 USDC |
 | Compare and rank 2–10 public bounty issues | `rank_github_bounties` | $0.40 USDC |
 | Audit a public repository's coding-agent instructions | `audit_agent_harness` | $0.03 USDC |
@@ -19,7 +20,7 @@ Use the `bountyverdict` MCP server only when the current task needs one of these
 | Decide whether a completed failed run merits one retry | `classify_github_actions_flake` | $0.07 USDC |
 | Gate a changed MCP `tools/list` catalog | `check_mcp_tool_drift` | $0.02 USDC |
 
-The six tools are read-only. They do not claim bounties, modify repositories, rerun workflows, invoke submitted MCP tools, or change an MCP catalog. Use only public GitHub targets and non-sensitive MCP catalogs. Skill security auditing is intentionally not exposed by this MCP server.
+The free selector and six paid tools are read-only. The selector does not inspect a URL or produce a verdict; it only maps one bounded task category to the exact paid tool, price, sample, and required input. None of the tools claim bounties, modify repositories, rerun workflows, invoke submitted MCP tools, or change an MCP catalog. Use only public GitHub targets and non-sensitive MCP catalogs. Skill security auditing is intentionally not exposed by this MCP server.
 
 No BountyVerdict account or API key is required. A structurally invalid input is rejected before any payment requirement. A valid selected tool returns its exact x402 payment requirement for Base USDC. Do not make a paid call unless it directly answers the current request and the caller has authorized that exact spend. If the active environment cannot present a valid x402 payment, report the requirement and stop; never invent a paid result. Payment identifies the fixed-price tool, not its arguments, so preserve the exact normalized arguments when retrying with payment.
 

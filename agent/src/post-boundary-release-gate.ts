@@ -31,6 +31,9 @@ export const EARNED_PLACEMENT_PROVENANCE_GATE = Object.freeze({
     source: "recognized_non_owner_onchain_settlements",
   },
 });
+export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-56";
+export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
+const MAXIMUM_FREEZE_LAG_MS = 5 * 60 * 1000;
 
 const TERMINAL_STATUSES = new Set([
   "target_purchase_success",
@@ -82,10 +85,12 @@ function nonNegativeCounts(value: unknown, label: string): Record<string, number
 export function verifyPostBoundaryReleaseGate(input: {
   experiment: unknown;
   distributionReport: unknown;
+  trustedFunnelLedger: unknown;
   snapshotService: SnapshotServiceState;
 }) {
   const experiment = record(input.experiment, "Acquisition experiment state");
   const report = record(input.distributionReport, "Distribution report");
+  const ledger = record(input.trustedFunnelLedger, "Trusted funnel epoch ledger");
   const service = record(input.snapshotService, "Snapshot service state");
 
   if (service.Result !== "success" || Number(service.ExecMainStatus) !== 0 ||
@@ -131,12 +136,63 @@ export function verifyPostBoundaryReleaseGate(input: {
   if (Number(current.genuine_purchases) !== Number(delta.genuine_purchases)) {
     throw new Error("Acquisition terminal purchase counters do not reconcile.");
   }
+  const installDeltas = {
+    total: Number(current.total_installs) - EARNED_PLACEMENT_BASELINE_GATE.total_installs,
+    router: Number(current.router_installs) - EARNED_PLACEMENT_BASELINE_GATE.router_installs,
+    skillverdict: Number(current.skillverdict_installs) - EARNED_PLACEMENT_BASELINE_GATE.skillverdict_installs,
+  };
+  exact(delta.installs, installDeltas, "Acquisition terminal install deltas");
+  if (Number(current.skillverdict_purchases) + Number(current.other_purchases) !== Number(current.genuine_purchases) ||
+      Number(delta.skillverdict_purchases) !== Number(current.skillverdict_purchases) ||
+      Number(delta.other_purchases) !== Number(current.other_purchases)) {
+    throw new Error("Acquisition terminal product purchase counters do not reconcile.");
+  }
+  const targetedInstallDelta = Math.max(installDeltas.router, installDeltas.skillverdict);
+  const nonTargetInstallDelta = installDeltas.total -
+    Math.max(0, installDeltas.router) -
+    Math.max(0, installDeltas.skillverdict);
+  const expectedStatus = Number(current.skillverdict_purchases) >= 1
+    ? "target_purchase_success"
+    : Number(current.other_purchases) >= 1
+      ? "off_target_purchase_success"
+      : targetedInstallDelta >= 1
+        ? "install_to_purchase_failure"
+        : Number(current.skillverdict_registry_queries) >= 1
+          ? "listing_to_install_failure"
+          : nonTargetInstallDelta >= 1 || Number(current.non_target_registry_queries) >= 1
+            ? "off_target_reach"
+            : "reach_failure";
+  if (terminal.status !== expectedStatus) {
+    throw new Error("Acquisition terminal status does not reconcile with its counters.");
+  }
+  const expectedNextAction = {
+    target_purchase_success: "scale_proven_distribution",
+    off_target_purchase_success: "scale_purchased_product",
+    install_to_purchase_failure: "test_purchase_friction",
+    listing_to_install_failure: "improve_listing_conversion",
+    off_target_reach: "focus_reached_product",
+    reach_failure: "expand_earned_reach",
+  }[expectedStatus];
+  if (record(terminal.next_action, "Acquisition terminal next action").code !== expectedNextAction) {
+    throw new Error("Acquisition terminal next action does not reconcile with its status.");
+  }
+  if (terminal.primary_success !== (Number(current.skillverdict_purchases) >= 1) ||
+      terminal.commercial_success !== (Number(current.genuine_purchases) >= 1) ||
+      terminal.supporting_success !== (targetedInstallDelta >= 1) ||
+      !Number.isSafeInteger(terminal.elapsed_hours) || Number(terminal.elapsed_hours) < 168 ||
+      terminal.window_days !== 7) {
+    throw new Error("Acquisition terminal success flags or window do not reconcile.");
+  }
 
   const frozenAt = canonicalTimestamp(terminal.frozen_at, "Acquisition frozen_at");
   if (Date.parse(frozenAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
     throw new Error("Acquisition terminal result froze before the experiment boundary.");
   }
-  if (report.healthy !== true || !Array.isArray(report.errors) || report.errors.length !== 0) {
+  if (Date.parse(frozenAt) - Date.parse(EARNED_PLACEMENT_ENDS_AT) > MAXIMUM_FREEZE_LAG_MS) {
+    throw new Error("Acquisition terminal result froze too long after the experiment boundary.");
+  }
+  if (report.mode !== "full_marketplace_retrieval_audit" || report.network !== "eip155:8453" ||
+      report.healthy !== true || !Array.isArray(report.errors) || report.errors.length !== 0) {
     throw new Error("Distribution report is unhealthy.");
   }
   const checkedAt = canonicalTimestamp(report.checked_at, "Distribution report checked_at");
@@ -145,6 +201,24 @@ export function verifyPostBoundaryReleaseGate(input: {
   }
   const acquisition = record(report.acquisition, "Distribution acquisition section");
   exact(acquisition.experiment, terminal, "Distribution terminal experiment projection");
+  if (ledger.schema_version !== 2 || ledger.active_epoch_id !== 55 || !Array.isArray(ledger.epochs)) {
+    throw new Error("Trusted funnel ledger is not at the reviewed pre-release epoch.");
+  }
+  const rotation = record(ledger.rotation, "Trusted funnel post-boundary rotation");
+  const requestedAt = canonicalTimestamp(rotation.requested_at, "Trusted funnel rotation requested_at");
+  if (rotation.id !== POST_BOUNDARY_DRAIN_ID || rotation.status !== "draining" ||
+      rotation.target_epoch_id !== 56 || rotation.reason !== POST_BOUNDARY_DRAIN_REASON ||
+      Date.parse(requestedAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
+    throw new Error("Trusted funnel post-boundary rotation is not the exact draining release boundary.");
+  }
+  const active = record(
+    ledger.epochs.find((candidate: Record<string, unknown>) => candidate?.id === 55),
+    "Trusted funnel active pre-release epoch",
+  );
+  if (active.status !== "draining" || active.conversion_eligible !== false ||
+      active.classification !== "excluded_unattributed_owner_triggered_downstream_probe") {
+    throw new Error("Trusted funnel pre-release epoch is not excluded by the release drain.");
+  }
 
   return {
     ready: true,
@@ -155,6 +229,8 @@ export function verifyPostBoundaryReleaseGate(input: {
     measurement_valid: true,
     currently_healthy: true,
     genuine_purchases: Number(current.genuine_purchases),
-    next_action: record(terminal.next_action, "Acquisition terminal next action").code,
+    next_action: expectedNextAction,
+    drain_rotation_id: POST_BOUNDARY_DRAIN_ID,
+    drain_status: "draining",
   };
 }

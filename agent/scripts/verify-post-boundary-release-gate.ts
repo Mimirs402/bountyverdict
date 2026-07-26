@@ -12,11 +12,14 @@ const experimentPath = process.env.ACQUISITION_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/acquisition-experiment.json`;
 const reportPath = process.env.DISTRIBUTION_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/distribution-status.json`;
+const ledgerPath = process.env.TRUSTED_FUNNEL_HISTORY_FILE ||
+  `${homedir()}/.local/state/bountyverdict/funnel-trusted-epochs.json`;
 const serviceName = "bountyverdict-acquisition-snapshot.service";
 
-const [experiment, distributionReport, serviceOutput] = await Promise.all([
+const [experiment, distributionReport, trustedFunnelLedger, serviceOutput] = await Promise.all([
   readPrivateJson(experimentPath, 64 * 1024),
   readPrivateJson(reportPath, 2 * 1024 * 1024),
+  readPrivateJson(ledgerPath, 64 * 1024 * 1024),
   execFile("systemctl", [
     "--user",
     "show",
@@ -27,7 +30,9 @@ const [experiment, distributionReport, serviceOutput] = await Promise.all([
     "--property=SubState",
   ]),
 ]);
-if (!experiment || !distributionReport) throw new Error("Post-boundary release evidence is missing.");
+if (!experiment || !distributionReport || !trustedFunnelLedger) {
+  throw new Error("Post-boundary release evidence is missing.");
+}
 
 const snapshotService = Object.fromEntries(
   serviceOutput.stdout.trim().split(/\r?\n/).map((line) => {
@@ -40,5 +45,6 @@ const snapshotService = Object.fromEntries(
 console.log(JSON.stringify(verifyPostBoundaryReleaseGate({
   experiment,
   distributionReport,
+  trustedFunnelLedger,
   snapshotService,
 }), null, 2));

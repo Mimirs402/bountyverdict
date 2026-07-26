@@ -5,6 +5,8 @@ import {
   EARNED_PLACEMENT_ENDS_AT,
   EARNED_PLACEMENT_EXPERIMENT_NAME,
   EARNED_PLACEMENT_PROVENANCE_GATE,
+  POST_BOUNDARY_DRAIN_ID,
+  POST_BOUNDARY_DRAIN_REASON,
   verifyPostBoundaryReleaseGate,
 } from "../src/post-boundary-release-gate.ts";
 
@@ -33,6 +35,11 @@ const terminal = {
   },
   measurement_valid: true,
   currently_healthy: true,
+  elapsed_hours: 168,
+  window_days: 7,
+  primary_success: false,
+  commercial_success: false,
+  supporting_success: false,
   measurement_provenance: EARNED_PLACEMENT_PROVENANCE_GATE,
   next_action: { code: "expand_earned_reach", reason: "No reach." },
   frozen_at: frozenAt,
@@ -50,7 +57,26 @@ const report = {
   checked_at: frozenAt,
   healthy: true,
   errors: [],
+  mode: "full_marketplace_retrieval_audit",
+  network: "eip155:8453",
   acquisition: { experiment: terminal },
+};
+const ledger = {
+  schema_version: 2,
+  active_epoch_id: 55,
+  epochs: [{
+    id: 55,
+    status: "draining",
+    conversion_eligible: false,
+    classification: "excluded_unattributed_owner_triggered_downstream_probe",
+  }],
+  rotation: {
+    id: POST_BOUNDARY_DRAIN_ID,
+    status: "draining",
+    requested_at: "2026-07-27T16:37:15.000Z",
+    target_epoch_id: 56,
+    reason: POST_BOUNDARY_DRAIN_REASON,
+  },
 };
 const service = {
   Result: "success",
@@ -62,6 +88,7 @@ const service = {
 const verify = (overrides: Record<string, unknown> = {}) => verifyPostBoundaryReleaseGate({
   experiment,
   distributionReport: report,
+  trustedFunnelLedger: ledger,
   snapshotService: service,
   ...overrides,
 });
@@ -77,6 +104,8 @@ test("accepts one exact healthy terminal snapshot after the immutable boundary",
     currently_healthy: true,
     genuine_purchases: 0,
     next_action: "expand_earned_reach",
+    drain_rotation_id: POST_BOUNDARY_DRAIN_ID,
+    drain_status: "draining",
   });
 });
 
@@ -108,6 +137,15 @@ test("rejects early, inconclusive, unhealthy, stale, and service-failed snapshot
   assert.throws(() => verify({
     distributionReport: { ...report, checked_at: "2026-07-27T16:39:00.000Z" },
   }), /does not belong/);
+  assert.throws(() => verify({
+    experiment: {
+      ...experiment,
+      terminal_result: { ...terminal, frozen_at: "2026-07-27T16:43:00.000Z" },
+    },
+  }), /too long after/);
+  assert.throws(() => verify({
+    distributionReport: { ...report, mode: "report_only_without_semantic_retrieval" },
+  }), /unhealthy/);
 });
 
 test("rejects baseline, provenance, report projection, and purchase reconciliation drift", () => {
@@ -141,4 +179,20 @@ test("rejects baseline, provenance, report projection, and purchase reconciliati
       },
     },
   }), /do not reconcile/);
+  assert.throws(() => verify({
+    trustedFunnelLedger: {
+      ...ledger,
+      rotation: { ...ledger.rotation, status: "activated" },
+    },
+  }), /not the exact draining/);
+  assert.throws(() => verify({
+    experiment: {
+      ...experiment,
+      terminal_result: {
+        ...terminal,
+        status: "off_target_reach",
+        next_action: { code: "focus_reached_product" },
+      },
+    },
+  }), /status does not reconcile/);
 });

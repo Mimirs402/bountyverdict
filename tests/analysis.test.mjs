@@ -1176,6 +1176,33 @@ test("truncated evidence can never establish a viable verdict", () => {
   assert.ok(!output.signals.some((item) => item.label === "No linked open PR found"));
 });
 
+test("multi-year issue inactivity requires fresh acceptance confirmation", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      updated_at: "2023-04-19T20:51:10Z",
+    },
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "IssueHunt",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "FUNDED",
+      amount: 276,
+      currency: "USD",
+      evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
+      pull_request_count: 0,
+      deposit_request_count: 0,
+      submitted_pull_requests: [],
+    },
+    now,
+  });
+  const staleness = output.signals.find((item) => item.label === "Issue is very stale");
+
+  assert.equal(output.verdict, "CAUTION");
+  assert.equal(staleness?.impact, -20);
+  assert.match(staleness?.detail ?? "", /fresh maintainer confirmation/i);
+});
+
 test("withdrawn bounty is detected even when issue remains open", () => {
   const comments = [{
     body: "I have removed the $1000 bounty because the issue attracted duplicate PRs.",
@@ -1756,6 +1783,43 @@ No public social post or engagement is required.
 Specialized hardware is not required.`,
   };
   const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.deepEqual(output.externalPrerequisites, []);
+  assert.ok(!output.signals.some((item) => item.label === "Mandatory external prerequisites"));
+});
+
+test("maintainer-only gated platform review downgrades an otherwise viable bounty", () => {
+  const comment = {
+    body: "There is no reliable way of testing it except submitting it to Mac App Store review.",
+    author_association: "MEMBER",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-platform-review",
+  };
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [comment],
+    now,
+  });
+  const advisory = output.signals.find((item) => item.label === "Mandatory external prerequisites");
+
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(output.externalPrerequisites, ["gated platform validation"]);
+  assert.equal(advisory?.impact, -10);
+  assert.equal(advisory?.hardStop, false);
+  assert.equal(advisory?.evidenceUrl, comment.html_url);
+});
+
+test("an untrusted user cannot fabricate a gated platform validation requirement", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "There is no reliable way of testing it except submitting it to Mac App Store review.",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted-platform-review",
+    }],
+    now,
+  });
 
   assert.deepEqual(output.externalPrerequisites, []);
   assert.ok(!output.signals.some((item) => item.label === "Mandatory external prerequisites"));

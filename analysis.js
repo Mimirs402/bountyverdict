@@ -167,10 +167,15 @@ const EXTERNAL_PREREQUISITE_CATEGORIES = [
     category: "specialized hardware",
     pattern: /\b(?:(?:specialized|dedicated|qualifying|physical) hardware|nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device)\b/i,
   },
+  {
+    category: "gated platform validation",
+    pattern: /\b(?:submitt(?:ing|ed)?|submission)\b.{0,80}\b(?:mac app store|app store|mas|platform|store)\b.{0,50}\b(?:review|approval)\b|\b(?:mac app store|app store|mas|platform|store)\b.{0,50}\b(?:review|approval)\b/i,
+  },
 ];
 
 const EXTERNAL_PREREQUISITE_REQUIREMENT = /\b(?:must|required|mandatory|prerequisites?|need(?:ed)? to|needs? (?:an?|the|your)|have to|has to|shall)\b/i;
 const EXTERNAL_PREREQUISITE_DIRECTIVE = /^(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b|:\s*(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b/i;
+const EXTERNAL_PREREQUISITE_EXCLUSIVE_VALIDATION = /\b(?:no|not)\s+(?:other\s+)?(?:reliable\s+)?(?:way|method)\s+(?:of|to)\s+(?:test(?:ing)?|validat(?:e|ing)|verif(?:y|ying))\b.{0,100}\b(?:except|without|other than)\b/i;
 const EXTERNAL_PREREQUISITE_OPT_OUT = /\b(?:optional(?:ly)?|not required|isn['’]?t required|aren['’]?t required|not mandatory|if (?:available|desired|helpful|you (?:want|wish|have))|nice to have|may (?:include|use|provide|record|post|publish|run)|can optionally)\b|\bno\b.{0,60}\b(?:required|mandatory)\b/i;
 const EXTERNAL_PREREQUISITE_SECTION = /\b(?:prerequisites?|requirements?|implementation guidelines?|submission instructions?|steps? to participate)\b/i;
 const EXTERNAL_PREREQUISITE_REFERENCE_ONLY = /^(?:see|read|reference|docs?|documentation|guide|example|learn more)\b/i;
@@ -193,6 +198,7 @@ function mandatoryExternalPrerequisites(value) {
     if (!matched.length) continue;
     const directive = EXTERNAL_PREREQUISITE_REQUIREMENT.test(line) ||
       EXTERNAL_PREREQUISITE_DIRECTIVE.test(line) ||
+      EXTERNAL_PREREQUISITE_EXCLUSIVE_VALIDATION.test(line) ||
       (requiredSection && !EXTERNAL_PREREQUISITE_REFERENCE_ONLY.test(line));
     if (!directive) continue;
     for (const { category } of matched) categories.add(category);
@@ -1081,7 +1087,20 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     const category = sensitiveTaskDisclosure(source.body);
     return category ? [{ ...source, category }] : [];
   });
-  const externalPrerequisites = mandatoryExternalPrerequisites(issue.body);
+  const authoritativePrerequisiteSources = [
+    MAINTAINER_ASSOCIATIONS.has(issue.author_association)
+      ? { body: issue.body, html_url: issue.html_url }
+      : null,
+    ...comments.filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association)),
+  ].filter(Boolean);
+  const externalPrerequisites = EXTERNAL_PREREQUISITE_CATEGORIES
+    .map(({ category }) => category)
+    .filter((category) => authoritativePrerequisiteSources.some(({ body }) =>
+      mandatoryExternalPrerequisites(body).includes(category)
+    ));
+  const gatedValidationSource = authoritativePrerequisiteSources.find(({ body }) =>
+    mandatoryExternalPrerequisites(body).includes("gated platform validation")
+  );
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
   let score = 50;
@@ -1300,6 +1319,9 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   if (issueAge <= 30) {
     score += 8;
     signals.push(signal("Issue is current", 8, `The issue changed ${issueAge} day${issueAge === 1 ? "" : "s"} ago.`, issue.html_url));
+  } else if (issueAge > 730) {
+    score -= 20;
+    signals.push(signal("Issue is very stale", -20, `The issue has not changed for ${issueAge} days, so its scope and acceptance path need fresh maintainer confirmation.`, issue.html_url));
   } else if (issueAge > 180) {
     score -= 12;
     signals.push(signal("Issue is stale", -12, `The issue has not changed for ${issueAge} days.`, issue.html_url));
@@ -1423,13 +1445,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   }
 
   if (externalPrerequisites.length) {
-    const impact = -Math.min(15, externalPrerequisites.length * 3);
+    const impact = -Math.min(20, externalPrerequisites.reduce(
+      (total, category) => total + (category === "gated platform validation" ? 10 : 3),
+      0,
+    ));
     score += impact;
     signals.push(signal(
       "Mandatory external prerequisites",
       impact,
       `The issue explicitly requires external execution prerequisites: ${externalPrerequisites.join(", ")}. Confirm access and willingness to complete them before investing implementation time.`,
-      issue.html_url,
+      gatedValidationSource?.html_url ?? issue.html_url,
     ));
   }
 
@@ -1469,7 +1494,10 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated;
   const verdict = hasHardStop || score < 45
     ? "AVOID"
-    : claimantInterest.length || score < 75 || incompleteCoverage
+    : claimantInterest.length ||
+      externalPrerequisites.includes("gated platform validation") ||
+      score < 75 ||
+      incompleteCoverage
     ? "CAUTION"
     : "VIABLE";
 

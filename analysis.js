@@ -1088,11 +1088,9 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     return category ? [{ ...source, category }] : [];
   });
   const authoritativePrerequisiteSources = [
-    MAINTAINER_ASSOCIATIONS.has(issue.author_association)
-      ? { body: issue.body, html_url: issue.html_url }
-      : null,
+    { body: issue.body, html_url: issue.html_url },
     ...comments.filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association)),
-  ].filter(Boolean);
+  ];
   const externalPrerequisites = EXTERNAL_PREREQUISITE_CATEGORIES
     .map(({ category }) => category)
     .filter((category) => authoritativePrerequisiteSources.some(({ body }) =>

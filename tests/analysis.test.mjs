@@ -1767,6 +1767,39 @@ test("Memanto-style mandatory external execution prerequisites produce a bounded
   }
 });
 
+test("platform-funded issue bodies retain required prerequisites from ordinary authors", () => {
+  const issue = {
+    ...healthyIssue,
+    author_association: "NONE",
+    body: `${healthyIssue.body}
+
+### Prerequisites
+- Register a provider account and obtain an API key.
+- Run the acceptance benchmark on a dedicated CUDA GPU.`,
+  };
+  const output = analyzeBounty({
+    issue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "IssueHunt",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "FUNDED",
+      amount: 100,
+      currency: "USD",
+      evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
+      submitted_pull_requests: [],
+    },
+    now,
+  });
+
+  assert.deepEqual(output.externalPrerequisites, [
+    "account or registration",
+    "API key or provider data",
+    "specialized hardware",
+  ]);
+  assert.ok(output.signals.some((item) => item.label === "Mandatory external prerequisites"));
+});
+
 test("generic and optional external prerequisite mentions do not produce the advisory", () => {
   const issue = {
     ...healthyIssue,

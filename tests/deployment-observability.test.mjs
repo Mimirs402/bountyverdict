@@ -29,8 +29,13 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /serverInfo\?\.version !== process\.env\.WORKER_RELEASE_VERSION/);
   assert.match(workflow, /npx wrangler deployments list --env production --json/);
   assert.match(workflow, /current production deployment is not one version at 100 percent/);
+  assert.match(workflow, /semantic_version=\$previous_semantic_version/);
+  assert.match(workflow, /bountyverdict-release-rollback-capture/);
   assert.match(workflow, /npx wrangler rollback "\$PREVIOUS_WORKER_VERSION"/);
-  assert.match(workflow, /failure\(\) && steps\.deploy\.outcome != 'skipped'/);
+  assert.match(workflow, /PREVIOUS_SEMANTIC_VERSION: \$\{\{ steps\.previous\.outputs\.semantic_version \}\}/);
+  assert.match(workflow, /bountyverdict-release-rollback-check/);
+  assert.match(workflow, /"\$current_version" == "\$PREVIOUS_WORKER_VERSION" && "\$current_semantic_version" == "\$PREVIOUS_SEMANTIC_VERSION"/);
+  assert.match(workflow, /failure\(\) && steps\.deploy\.outcome != 'skipped'.*steps\.previous\.outputs\.semantic_version != ''/);
   assert.match(workflow, /EXPECTED_MAIN_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /\[\[ "\$EXPECTED_RELEASE_REF" == "refs\/heads\/main" \]\]/);
   assert.equal(

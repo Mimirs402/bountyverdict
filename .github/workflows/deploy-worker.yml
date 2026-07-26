@@ -75,6 +75,7 @@ jobs:
         id: previous
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_API_URL: https://bountyverdict-agent-production.mimirslab.workers.dev
         run: |
           deployments=$(npx wrangler deployments list --env production --json)
           previous_version=$(jq -er '
@@ -86,7 +87,41 @@ jobs:
               end
           ' <<<"$deployments")
           [[ "$previous_version" =~ ^[0-9a-f-]{36}$ ]]
+          previous_semantic_version=$(
+            node <<'NODE'
+          const response = await fetch(`${process.env.PRODUCTION_API_URL}/mcp`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "User-Agent": "bountyverdict-owner-audit/1.0",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-11-25",
+                capabilities: {},
+                clientInfo: {
+                  name: "bountyverdict-release-rollback-capture",
+                  version: "1.0.0",
+                },
+              },
+            }),
+          });
+          if (!response.ok) throw new Error(`MCP initialize returned ${response.status}`);
+          const initialized = await response.json();
+          const version = initialized.result?.serverInfo?.version;
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version || "")) {
+            throw new Error("Production MCP did not return a valid semantic version");
+          }
+          process.stdout.write(version);
+          NODE
+          )
           echo "version_id=$previous_version" >> "$GITHUB_OUTPUT"
+          echo "semantic_version=$previous_semantic_version" >> "$GITHUB_OUTPUT"
 
       - name: Deploy production Worker with secrets
         id: deploy
@@ -437,28 +472,65 @@ jobs:
           [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
 
       - name: Roll back failed production deployment
-        if: ${{ failure() && steps.deploy.outcome != 'skipped' && steps.previous.outputs.version_id != '' }}
+        if: ${{ failure() && steps.deploy.outcome != 'skipped' && steps.previous.outputs.version_id != '' && steps.previous.outputs.semantic_version != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PREVIOUS_SEMANTIC_VERSION: ${{ steps.previous.outputs.semantic_version }}
           PREVIOUS_WORKER_VERSION: ${{ steps.previous.outputs.version_id }}
+          PRODUCTION_API_URL: https://bountyverdict-agent-production.mimirslab.workers.dev
         run: |
           npx wrangler rollback "$PREVIOUS_WORKER_VERSION" \
             --env production \
             --yes \
             --message "Automatic rollback after failed BountyVerdict release verification"
-          for attempt in {1..12}; do
+          rollback_ready=false
+          for attempt in {1..30}; do
             current_version=$(npx wrangler deployments list --env production --json | jq -er '
               max_by(.created_on)
               | .versions
               | if length == 1 and .[0].percentage == 100 then .[0].version_id else empty end
-            ')
-            if [[ "$current_version" == "$PREVIOUS_WORKER_VERSION" ]]; then
-              exit 0
+            ') || current_version=""
+            current_semantic_version=$(
+              node <<'NODE'
+          const response = await fetch(`${process.env.PRODUCTION_API_URL}/mcp`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "User-Agent": "bountyverdict-owner-audit/1.0",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-11-25",
+                capabilities: {},
+                clientInfo: {
+                  name: "bountyverdict-release-rollback-check",
+                  version: "1.0.0",
+                },
+              },
+            }),
+          });
+          if (!response.ok) process.exit(1);
+          const initialized = await response.json();
+          const version = initialized.result?.serverInfo?.version;
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version || "")) process.exit(1);
+          process.stdout.write(version);
+          NODE
+            ) || current_semantic_version=""
+            if [[ "$current_version" == "$PREVIOUS_WORKER_VERSION" && "$current_semantic_version" == "$PREVIOUS_SEMANTIC_VERSION" ]]; then
+              rollback_ready=true
+              break
             fi
             sleep 1
           done
-          echo "Cloudflare did not confirm rollback to the captured Worker version" >&2
-          exit 1
+          if [[ "$rollback_ready" != "true" ]]; then
+            echo "Production did not converge to the captured Worker deployment and MCP semantic version" >&2
+            exit 1
+          fi
 
       - name: Activate public agent manifest
         run: npm run manifest:activate

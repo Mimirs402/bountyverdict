@@ -31,7 +31,7 @@ export const EARNED_PLACEMENT_PROVENANCE_GATE = Object.freeze({
     source: "recognized_non_owner_onchain_settlements",
   },
 });
-export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-56";
+export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-57";
 export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
 export const SNAPSHOT_SOURCE_COMMIT = "c25c3f5d1109a98850bb71745130e9e389b78296";
 export const SNAPSHOT_SOURCE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict";
@@ -270,18 +270,18 @@ export function verifyPostBoundaryReleaseGate(input: {
   }
   const acquisition = record(report.acquisition, "Distribution acquisition section");
   exact(acquisition.experiment, terminal, "Distribution terminal experiment projection");
-  if (ledger.schema_version !== 2 || ledger.active_epoch_id !== 55 || !Array.isArray(ledger.epochs)) {
+  if (ledger.schema_version !== 2 || ledger.active_epoch_id !== 56 || !Array.isArray(ledger.epochs)) {
     throw new Error("Trusted funnel ledger is not at the reviewed pre-release epoch.");
   }
   const rotation = record(ledger.rotation, "Trusted funnel post-boundary rotation");
   const requestedAt = canonicalTimestamp(rotation.requested_at, "Trusted funnel rotation requested_at");
   if (rotation.id !== POST_BOUNDARY_DRAIN_ID || rotation.status !== "draining" ||
-      rotation.target_epoch_id !== 56 || rotation.reason !== POST_BOUNDARY_DRAIN_REASON ||
+      rotation.target_epoch_id !== 57 || rotation.reason !== POST_BOUNDARY_DRAIN_REASON ||
       Date.parse(requestedAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
     throw new Error("Trusted funnel post-boundary rotation is not the exact draining release boundary.");
   }
   const active = record(
-    ledger.epochs.find((candidate: Record<string, unknown>) => candidate?.id === 55),
+    ledger.epochs.find((candidate: Record<string, unknown>) => candidate?.id === 56),
     "Trusted funnel active pre-release epoch",
   );
   if (active.status !== "draining" || active.conversion_eligible !== false ||

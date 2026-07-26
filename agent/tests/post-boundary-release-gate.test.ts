@@ -67,9 +67,9 @@ const report = {
 };
 const ledger = {
   schema_version: 2,
-  active_epoch_id: 55,
+  active_epoch_id: 56,
   epochs: [{
-    id: 55,
+    id: 56,
     status: "draining",
     conversion_eligible: false,
     classification: "excluded_unattributed_owner_triggered_downstream_probe",
@@ -78,7 +78,7 @@ const ledger = {
     id: POST_BOUNDARY_DRAIN_ID,
     status: "draining",
     requested_at: "2026-07-27T16:37:15.000Z",
-    target_epoch_id: 56,
+    target_epoch_id: 57,
     reason: POST_BOUNDARY_DRAIN_REASON,
   },
 };

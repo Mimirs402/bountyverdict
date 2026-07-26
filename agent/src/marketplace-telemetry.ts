@@ -218,3 +218,76 @@ export function normalizeThe402ServiceOutcome(value: unknown, expectedServiceId:
   }
   return result;
 }
+
+export function normalizeThe402WebhookHealth(
+  values: unknown[],
+  completedJobs: number,
+): { healthy: boolean; status: "healthy" | "unverified_no_completed_jobs" } {
+  if (!Number.isSafeInteger(completedJobs) || completedJobs < 0) {
+    throw new Error("the402 completed-job count is invalid.");
+  }
+  if (values.length === 0 || values.some((value) => typeof value !== "boolean")) {
+    throw new Error("the402 webhook health telemetry is malformed.");
+  }
+  if (values.every((value) => value === true)) {
+    return { healthy: true, status: "healthy" };
+  }
+  if (completedJobs === 0 && values.every((value) => value === false)) {
+    return { healthy: false, status: "unverified_no_completed_jobs" };
+  }
+  throw new Error("the402 webhook health telemetry is inconsistent with completed jobs.");
+}
+
+export function normalizeThe402CustomerSettlement(
+  settlementValue: unknown,
+  jobValue: unknown,
+  expectedServiceIds: ReadonlySet<string>,
+  excludedBuyerWallets: ReadonlySet<string>,
+): {
+  settlement_id: string;
+  job_id: string;
+  service_id: string;
+  buyer_wallet: string;
+  amount_usd: number;
+  settled_at: string;
+} | null {
+  if (!settlementValue || typeof settlementValue !== "object" || Array.isArray(settlementValue) ||
+    !jobValue || typeof jobValue !== "object" || Array.isArray(jobValue)) {
+    throw new Error("the402 settlement attribution is malformed.");
+  }
+  const settlement = settlementValue as Record<string, any>;
+  const job = jobValue as Record<string, any>;
+  for (const [label, value] of [
+    ["settlement ID", settlement.id],
+    ["job ID", settlement.job_id],
+    ["job response ID", job.id],
+    ["service ID", job.service_id],
+  ] as const) {
+    if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) {
+      throw new Error(`the402 ${label} is invalid.`);
+    }
+  }
+  if (job.id !== settlement.job_id) throw new Error("the402 settlement job identity is inconsistent.");
+  if (!expectedServiceIds.has(job.service_id)) throw new Error("the402 settlement references an unknown service.");
+  const buyerWallet = String(job.agent_wallet || "").toLowerCase();
+  if (!/^0x[a-f0-9]{40}$/.test(buyerWallet)) throw new Error("the402 settlement buyer wallet is invalid.");
+  const amount = Number(settlement.amount_usd);
+  const providerAmount = Number(job.provider_amount_usd);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000 ||
+    !Number.isFinite(providerAmount) || Math.abs(amount - providerAmount) > 0.000001) {
+    throw new Error("the402 settlement amount is inconsistent.");
+  }
+  if (excludedBuyerWallets.has(buyerWallet)) return null;
+  if (!["completed", "verified", "released"].includes(String(job.status)) ||
+    job.escrow_status !== "released") {
+    return null;
+  }
+  return {
+    settlement_id: settlement.id,
+    job_id: settlement.job_id,
+    service_id: job.service_id,
+    buyer_wallet: buyerWallet,
+    amount_usd: amount,
+    settled_at: timestamp(settlement.created_at, "settlement created_at"),
+  };
+}

@@ -4,7 +4,9 @@ import {
   appendCdpMerchantQualityHistory,
   normalizeAgenticMarketQuality,
   normalizeCdpMerchantQuality,
+  normalizeThe402CustomerSettlement,
   normalizeThe402ServiceOutcome,
+  normalizeThe402WebhookHealth,
 } from "../src/marketplace-telemetry.ts";
 
 test("accepts pending and string-valued Agentic Market quality counters", () => {
@@ -76,6 +78,73 @@ test("rejects wrong identities and inconsistent or malformed outcome telemetry",
     service_reputation: { ...detail.service_reputation, confidence: 2 },
   }, "svc_expected"), /confidence/);
   assert.throws(() => normalizeThe402ServiceOutcome({ ...detail, updated_at: "not-a-date" }, "svc_expected"), /updated_at/);
+});
+
+test("distinguishes a pre-sale unverified webhook from a failed webhook", () => {
+  assert.deepEqual(
+    normalizeThe402WebhookHealth([true, true], 1),
+    { healthy: true, status: "healthy" },
+  );
+  assert.deepEqual(
+    normalizeThe402WebhookHealth([false, false], 0),
+    { healthy: false, status: "unverified_no_completed_jobs" },
+  );
+  assert.throws(
+    () => normalizeThe402WebhookHealth([false, false], 1),
+    /inconsistent with completed jobs/,
+  );
+  assert.throws(
+    () => normalizeThe402WebhookHealth([true, false], 0),
+    /inconsistent with completed jobs/,
+  );
+});
+
+test("the402 revenue attribution excludes platform probes and incomplete jobs", () => {
+  const settlement = {
+    id: "earn_1",
+    job_id: "job_1",
+    amount_usd: 0.05035,
+    created_at: "2026-07-23T16:30:31.000Z",
+  };
+  const job = {
+    id: "job_1",
+    service_id: "svc_1",
+    agent_wallet: "0x1111111111111111111111111111111111111111",
+    provider_amount_usd: 0.05035,
+    status: "released",
+    escrow_status: "released",
+  };
+  const services = new Set(["svc_1"]);
+  const excluded = new Set(["0x2222222222222222222222222222222222222222"]);
+  assert.deepEqual(normalizeThe402CustomerSettlement(settlement, job, services, excluded), {
+    settlement_id: "earn_1",
+    job_id: "job_1",
+    service_id: "svc_1",
+    buyer_wallet: job.agent_wallet,
+    amount_usd: 0.05035,
+    settled_at: settlement.created_at,
+  });
+  assert.equal(normalizeThe402CustomerSettlement(
+    settlement,
+    { ...job, agent_wallet: "0x2222222222222222222222222222222222222222" },
+    services,
+    excluded,
+  ), null);
+  assert.equal(normalizeThe402CustomerSettlement(
+    settlement,
+    { ...job, status: "dispatched" },
+    services,
+    excluded,
+  ), null);
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      settlement,
+      { ...job, provider_amount_usd: 0.04 },
+      services,
+      excluded,
+    ),
+    /amount is inconsistent/,
+  );
 });
 
 const merchantResource = {

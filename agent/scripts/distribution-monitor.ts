@@ -44,7 +44,9 @@ import {
   appendCdpMerchantQualityHistory,
   normalizeAgenticMarketQuality,
   normalizeCdpMerchantQuality,
+  normalizeThe402CustomerSettlement,
   normalizeThe402ServiceOutcome,
+  normalizeThe402WebhookHealth,
 } from "../src/marketplace-telemetry.ts";
 import { loadDistributionMonitorConfiguration } from "../src/monitor-configuration.ts";
 import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseMcpubGetResponse, parseMcpubSearchLiveResponse, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
@@ -102,6 +104,7 @@ const GLAMA_MCP_CONNECTOR = `https://glama.ai/mcp/connectors/${MCP_REGISTRY_NAME
 const MCPUB_MCP = "https://mcpub.dev/mcp";
 const MCP_INTENT_PAGE = "https://mimirs402.github.io/bountyverdict/mcp-github-actions-diagnosis.html";
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const THE402_PLATFORM_VERIFICATION_WALLET = "0x3289eb342c6d118b264cf02364e98f4fc0cbd949";
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
   id: "mcp-task-specific-description-post-release-v1",
@@ -984,9 +987,6 @@ async function the402Status(): Promise<Record<string, unknown>> {
   if (services.some(({ name }) => name === "SkillVerdict")) {
     throw new Error("SkillVerdict was added to the402 before its isolated experiment ended.");
   }
-  if (!owned.every(({ webhook_healthy }) => webhook_healthy === true)) {
-    throw new Error("the402 reports an unhealthy BountyVerdict webhook.");
-  }
   for (const service of owned) {
     const expected = expectedById.get(String(service.id));
     if (!expected) throw new Error("the402 returned an unexpected service.");
@@ -1006,6 +1006,10 @@ async function the402Status(): Promise<Record<string, unknown>> {
   if (completedCounts.length !== 1 || !Number.isSafeInteger(completedCounts[0]) || completedCounts[0] < 0) {
     throw new Error("the402 completed-job telemetry is inconsistent or invalid.");
   }
+  const webhookHealth = normalizeThe402WebhookHealth(
+    owned.map(({ webhook_healthy }) => webhook_healthy),
+    completedCounts[0],
+  );
   const detailResponses = await Promise.all(owned.map(({ id }) =>
     monitoredFetch(`${THE402_API}/services/${encodeURIComponent(String(id))}`)));
   if (detailResponses.some((response) => !response.ok)) {
@@ -1053,6 +1057,39 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const recentSettlements = Array.isArray(earnings.recent_settlements)
     ? earnings.recent_settlements as Array<Record<string, unknown>>
     : [];
+  if (recentSettlements.length > 100) throw new Error("the402 settlement history is unbounded.");
+  const settlementJobIds = recentSettlements.map((entry) => entry.job_id);
+  if (settlementJobIds.some((id) => typeof id !== "string" || !/^job_[A-Za-z0-9_-]{1,160}$/.test(id)) ||
+    new Set(settlementJobIds).size !== settlementJobIds.length) {
+    throw new Error("the402 settlement job identities are malformed or duplicated.");
+  }
+  const settlementJobResponses = await Promise.all(settlementJobIds.map((jobId) =>
+    monitoredFetch(`${THE402_API}/jobs/${encodeURIComponent(String(jobId))}`, {
+      headers: { "X-API-Key": the402ApiKey },
+    })));
+  if (settlementJobResponses.some((response) => !response.ok)) {
+    throw new Error("one or more the402 settlement job lookups failed.");
+  }
+  const settlementJobs = await Promise.all(settlementJobResponses.map((response) => response.json()));
+  const excludedBuyerWallets = new Set([
+    THE402_PLATFORM_VERIFICATION_WALLET,
+    OWNER_CONTROLLED_CANARY_PAYER.toLowerCase(),
+    wallet.toLowerCase(),
+    ...(settlementBuyer ? [settlementBuyer.toLowerCase()] : []),
+  ]);
+  const verifiedCustomerSettlements = recentSettlements.flatMap((settlement, index) => {
+    const verified = normalizeThe402CustomerSettlement(
+      settlement,
+      settlementJobs[index],
+      expectedIds,
+      excludedBuyerWallets,
+    );
+    return verified ? [verified] : [];
+  });
+  const verifiedCustomerRevenueUsd = verifiedCustomerSettlements.reduce(
+    (sum, settlement) => sum + settlement.amount_usd,
+    0,
+  );
   // A subscription is one purchase even when it later produces many covered
   // service calls. Only count settlements that the marketplace explicitly
   // attributes to our plan; never infer a subscription from price alone.
@@ -1086,7 +1123,8 @@ async function the402Status(): Promise<Record<string, unknown>> {
     provider_wallet: String(earnings.wallet).toLowerCase(),
     service_count: owned.length,
     skillverdict_excluded: true,
-    webhook_healthy: true,
+    webhook_healthy: webhookHealth.healthy,
+    webhook_health_status: webhookHealth.status,
     listing_contracts_verified: true,
     request_notifications_enabled: true,
     request_notification_failures: Number.isSafeInteger(notifications.consecutive_failures)
@@ -1106,13 +1144,24 @@ async function the402Status(): Promise<Record<string, unknown>> {
     service_outcome_totals: outcomeTotals,
     service_outcome_note: "Per-service marketplace attempt and reputation telemetry; customer purchases and revenue still require settlement attribution.",
     settled_usd: settledUsd,
+    verified_customer_revenue_usdc: verifiedCustomerRevenueUsd,
+    verified_external_purchases: verifiedCustomerSettlements.length,
+    verified_customer_settlements: verifiedCustomerSettlements,
+    quarantined_unattributed_settled_usd: Math.max(0, settledUsd - verifiedCustomerRevenueUsd),
     held_usd: heldUsd,
     pending_usd: pendingUsd,
     recent_settlement_count: recentSettlements.length,
     subscription_settlement_ids: subscriptionSettlements.map(({ settlement_id }) => settlement_id),
     subscription_settlements: subscriptionSettlements,
-    recent_settlements: recentSettlements.map((entry) => ({
-      service_id: typeof entry.service_id === "string" ? entry.service_id : null,
+    recent_settlements: recentSettlements.map((entry, index) => ({
+      settlement_id: typeof entry.id === "string" ? entry.id : null,
+      job_id: typeof entry.job_id === "string" ? entry.job_id : null,
+      service_id: typeof (settlementJobs[index] as Record<string, unknown>)?.service_id === "string"
+        ? (settlementJobs[index] as Record<string, unknown>).service_id
+        : null,
+      job_status: typeof (settlementJobs[index] as Record<string, unknown>)?.status === "string"
+        ? (settlementJobs[index] as Record<string, unknown>).status
+        : null,
       transaction_hash: typeof entry.transaction_hash === "string"
         ? entry.transaction_hash
         : typeof entry.tx_hash === "string" ? entry.tx_hash : null,
@@ -2256,7 +2305,7 @@ function optionalCount(value: unknown): number | undefined {
 
 function renderMonitorNote(report: Record<string, any>): string {
   const directRevenueValue = Number(report.revenue?.recognized_usdc || 0);
-  const marketplaceRevenueValue = Number(report.marketplaces?.the402?.settled_usd || 0);
+  const marketplaceRevenueValue = Number(report.marketplaces?.the402?.verified_customer_revenue_usdc || 0);
   const nearRevenueValue = Number(report.marketplaces?.near?.earned_usdc_balance || 0);
   const taskmarketTracked = report.acquisition?.public_demand_watch?.taskmarket?.tracked_worker || {};
   const taskmarketRevenueValue = Number(taskmarketTracked.settled_worker_earnings_usdc || 0);
@@ -2266,7 +2315,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const costsValue = Number(trackedCostsInput);
   const profitValue = revenueValue - costsValue;
   const purchases = report.revenue?.purchases || {};
-  const marketplacePurchases = Number(report.marketplaces?.the402?.completed_jobs || 0);
+  const marketplacePurchases = Number(report.marketplaces?.the402?.verified_external_purchases || 0);
   const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
   const nearPurchases = Number(report.marketplaces?.near?.completed_external_jobs || 0);
   const taskmarketPurchases = Number(taskmarketTracked.settled_submissions || 0);
@@ -2628,7 +2677,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - Monetize Your Agent suite entry: ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - 402directory endpoints: ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} (${report.acquisition?.directory_402?.status || "unavailable"}; seven review submissions are not purchases)
 - 402 Index endpoints: ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} (${report.acquisition?.index_402?.status || "unavailable"}; MCPDrift body-bound preflight is not probe-compatible)
-- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
+- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - the402 per-product service attempts: ${Object.entries(report.marketplaces?.the402?.service_outcomes || {}).map(([product, outcome]: [string, any]) => `${product} ${Number(outcome.total_jobs || 0)} total/${Number(outcome.failed_jobs || 0)} failed/${Number(outcome.disputed_jobs || 0)} disputed`).join("; ") || "unavailable"} (attempt telemetry only; settlements remain authoritative)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded); exact-fit request automation ${report.marketplaces?.payan?.demand_capture?.healthy ? "healthy" : "unavailable"}
@@ -3203,12 +3252,12 @@ const report = {
   marketplaces: { the402, near: nearMarket, payan, agentic_market: agenticMarket, clawlancer },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
-      Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0) +
+      Number(the402.verified_external_purchases || 0) + Number(the402.subscription_purchases || 0) +
       Number(nearMarket.completed_external_jobs || 0) +
       Number(taskmarketCommerce.settled_submissions || 0) +
       Number(clawlancer.settled_jobs || 0),
     customer_revenue_usdc: (
-      Number(revenue.recognized_usdc || 0) + Number(the402.settled_usd || 0) +
+      Number(revenue.recognized_usdc || 0) + Number(the402.verified_customer_revenue_usdc || 0) +
       Number(nearMarket.earned_usdc_balance || 0) +
       Number(taskmarketCommerce.settled_worker_earnings_usdc || 0) +
       Number(clawlancer.verified_worker_earnings_usdc || 0)

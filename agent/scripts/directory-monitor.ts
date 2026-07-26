@@ -343,8 +343,6 @@ const skillsShBuyerQueries = Object.freeze([
 const stateFile = process.env.DIRECTORY_STATE_FILE || `${homedir()}/.local/state/bountyverdict/directories.json`;
 const timeoutMs = 30_000;
 const skillsShMaximumPageBytes = 2_000_000;
-const agentSkillRetryMs = 20 * 60 * 60 * 1000;
-const forceAgentSkillSubmission = process.env.AGENTSKILL_FORCE_SUBMIT === "YES";
 const execFileAsync = promisify(execFile);
 
 async function atomicWrite(path: string, contents: string): Promise<void> {
@@ -2559,39 +2557,6 @@ async function index402Status(): Promise<Record<string, unknown>> {
   }
 }
 
-async function submitAgentSkill(): Promise<Record<string, unknown>> {
-  try {
-    const response = await fetch("https://agentskill.sh/api/skills/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: repository }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const payload = await response.json() as {
-      success?: boolean;
-      data?: { summary?: { found?: number; imported?: number; updated?: number; failed?: number } };
-    };
-    const summary = payload.data?.summary || {};
-    const accepted = response.ok && payload.success === true && summary.found === 7 && summary.failed === 0;
-    return {
-      url: "https://agentskill.sh/submit",
-      attempted_at: new Date().toISOString(),
-      http_status: response.status,
-      accepted,
-      status: accepted ? "accepted_for_indexing" : "upstream_blocked",
-      summary,
-    };
-  } catch (error) {
-    return {
-      url: "https://agentskill.sh/submit",
-      attempted_at: new Date().toISOString(),
-      accepted: false,
-      status: "request_failed",
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 function mergeAgentSkillHistory(
   previousHistory: unknown,
   current: Record<string, any>,
@@ -3462,43 +3427,7 @@ if (Number(x402scan.listed_resources || 0) > 0) {
   x402scan.exposed_at = previous.x402scan?.exposed_at || new Date().toISOString();
 }
 const observedAt = new Date().toISOString();
-let agentSkill = await agentSkillStatus(previous.agentskill || {}, observedAt);
-const previousSubmission = previous.agentskill?.submission || (
-  previous.agentskill?.summary || previous.agentskill?.attempted_at
-    ? {
-        attempted_at: previous.agentskill.attempted_at || previous.checked_at,
-        http_status: previous.agentskill.http_status,
-        accepted: false,
-        status: previous.agentskill.status,
-        summary: previous.agentskill.summary,
-      }
-    : {}
-);
-const previousAttempt = Date.parse(String(previousSubmission.attempted_at || previous.checked_at || ""));
-const agentSkillRetryDue = forceAgentSkillSubmission || !Number.isFinite(previousAttempt) ||
-  Date.now() - previousAttempt >= agentSkillRetryMs;
-let agentSkillSubmission = previousSubmission;
-if (agentSkill.listed !== true && agentSkillRetryDue) {
-  agentSkillSubmission = await submitAgentSkill();
-  if (agentSkillSubmission.accepted === true) {
-    agentSkill = await agentSkillStatus(previous.agentskill || {}, new Date().toISOString());
-  }
-}
-const agentskill = {
-  ...agentSkill,
-  status: agentSkill.listed === true
-    ? "listed"
-    : agentSkillSubmission.status === "upstream_blocked"
-      ? "not_indexed_upstream_blocked"
-      : agentSkill.status,
-  submission: agentSkillRetryDue || agentSkill.listed === true
-    ? agentSkillSubmission
-    : {
-        ...agentSkillSubmission,
-        retry_deferred: true,
-        retry_after: new Date(previousAttempt + agentSkillRetryMs).toISOString(),
-      },
-};
+const agentskill = await agentSkillStatus(previous.agentskill || {}, observedAt);
 const githubPrChecks = [
   ["mcpub_crawler", mcpubCrawlerPr],
   ["security_directory", securityDirectoryPr],

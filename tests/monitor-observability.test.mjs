@@ -56,6 +56,13 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /execFileAsync\("gh", \[\s*"skill", "search"/s);
   assert.match(directory, /one_rotating_owner_run_exact_github_code_search_per_hour/);
   assert.match(directory, /github_skill: githubSkill/);
+  assert.match(directory, /const agentskill = await agentSkillStatus/);
+  assert.doesNotMatch(directory, /api\/skills\/submit/);
+  assert.doesNotMatch(directory, /submitAgentSkill/);
+  assert.doesNotMatch(directory, /AGENTSKILL_FORCE_SUBMIT|agentSkillRetryMs/);
+  assert.equal((directory.match(/method:\s*"POST",\s*headers:/g) || []).length, 2);
+  assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
+  assert.match(directory, /name: "search_servers"/);
 });
 
 test("Skills.sh keeps canonical business discovery separate from the frozen legacy counter series", async () => {
@@ -933,6 +940,9 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.match(snapshotService, /AUDITED_MONITOR=directory[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.match(snapshotService, /AUDITED_MONITOR=distribution[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.doesNotMatch(snapshotService, /ExecStart=.*scripts\/(?:directory|distribution)-monitor\.ts/);
+  assert.match(directoryService, /Description=BountyVerdict read-only agent-directory listing monitor/);
+  assert.doesNotMatch(directoryService, /submit|register|publish|MUTATION|FORCE_SUBMIT/i);
+  assert.doesNotMatch(snapshotService, /submit-agentskill|FORCE_SUBMIT|DIRECTORY_MUTATION/i);
 });
 
 test("broad retrieval audits share a bounded six-hour measurement window", async () => {

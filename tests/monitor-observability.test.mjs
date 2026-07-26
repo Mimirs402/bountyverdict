@@ -56,6 +56,38 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /execFileAsync\("gh", \[\s*"skill", "search"/s);
   assert.match(directory, /one_rotating_owner_run_exact_github_code_search_per_hour/);
   assert.match(directory, /github_skill: githubSkill/);
+  assert.match(directory, /const agentskill = await agentSkillStatus/);
+  assert.doesNotMatch(directory, /api\/skills\/submit/);
+  assert.doesNotMatch(directory, /submitAgentSkill/);
+  assert.doesNotMatch(directory, /AGENTSKILL_FORCE_SUBMIT|agentSkillRetryMs/);
+  assert.equal((directory.match(/method:\s*"POST",\s*headers:/g) || []).length, 2);
+  assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
+  assert.match(directory, /name: "search_servers"/);
+});
+
+test("the scheduled acquisition snapshot has no marketplace mutation request path", async () => {
+  const [runner, directory, distribution, service] = await Promise.all([
+    readFile(auditedRunnerUrl, "utf8"),
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot.service", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=directory /);
+  assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=distribution /);
+  assert.match(runner, /if \(monitor === "directory"\) await import\("\.\/directory-monitor\.ts"\)/);
+  assert.match(runner, /else await import\("\.\/distribution-monitor\.ts"\)/);
+
+  assert.doesNotMatch(directory, /api\/skills\/submit|submitAgentSkill|AGENTSKILL_FORCE_SUBMIT/);
+  assert.equal((directory.match(/method:\s*"POST",\s*headers:/g) || []).length, 2);
+  assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
+  assert.match(directory, /name: "search_servers"/);
+
+  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 8);
+  assert.equal((distribution.match(/method:\s*"(?:PUT|PATCH|DELETE)"/g) || []).length, 0);
+  assert.equal((distribution.match(/params: \{ name: "(?:get|search_live)"/g) || []).length, 2);
+  assert.match(distribution, /validatePaymentChallenge\(challenge, \{\s+maximumAtomic: expectedAmount,\s+executePayment: false,/);
+  assert.doesNotMatch(distribution, /method:\s*"POST"[\s\S]{0,240}(?:\/bids?|\/fulfill|\/approve|\/publish|\/register|\/submit)/);
 });
 
 test("Skills.sh keeps canonical business discovery separate from the frozen legacy counter series", async () => {
@@ -958,6 +990,9 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.match(snapshotService, /AUDITED_MONITOR=directory[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.match(snapshotService, /AUDITED_MONITOR=distribution[\s\S]+scripts\/run-audited-monitor\.ts/);
   assert.doesNotMatch(snapshotService, /ExecStart=.*scripts\/(?:directory|distribution)-monitor\.ts/);
+  assert.match(directoryService, /Description=BountyVerdict read-only agent-directory listing monitor/);
+  assert.doesNotMatch(directoryService, /submit|register|publish|MUTATION|FORCE_SUBMIT/i);
+  assert.doesNotMatch(snapshotService, /submit-agentskill|FORCE_SUBMIT|DIRECTORY_MUTATION/i);
 });
 
 test("post-boundary release readiness is a one-shot read-only evidence gate", async () => {

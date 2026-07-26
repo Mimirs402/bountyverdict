@@ -1,5 +1,5 @@
 [Unit]
-Description=BountyVerdict agent-directory submission and listing monitor
+Description=BountyVerdict read-only agent-directory listing monitor
 After=network-online.target
 Wants=network-online.target
 

@@ -46,10 +46,23 @@ test("NEAR Market endpoint fulfills a wrapped deterministic MCP drift request", 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ input: mcpDriftExampleInput, job_id: "market-job" }),
   }, {
+    NEAR_MARKET_AUTOMATION_ENABLED: "YES",
     NEAR_MARKET_RATE_LIMITER: { limit: async () => ({ success: true }) },
   });
   assert.equal(response.status, 200);
   const output = await response.json() as Record<string, unknown>;
   assert.equal(output.service, "MCPDriftVerdict");
   assert.equal(output.contract_version, "mcp-drift/1");
+});
+
+test("NEAR Market fulfillment is fail-closed unless explicitly enabled", async () => {
+  for (const env of [{}, { NEAR_MARKET_AUTOMATION_ENABLED: "yes" }]) {
+    const response = await app.request("/api/near-market/mcpdrift", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: mcpDriftExampleInput, job_id: "untrusted-job" }),
+    }, env);
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "NOT_FOUND" });
+  }
 });

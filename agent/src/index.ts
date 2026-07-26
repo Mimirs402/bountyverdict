@@ -100,6 +100,8 @@ interface Env {
   THE402_API_KEY?: string;
   THE402_WEBHOOK_SECRET?: string;
   THE402_SERVICE_MAP?: string;
+  THE402_AUTOMATION_ENABLED?: string;
+  NEAR_MARKET_AUTOMATION_ENABLED?: string;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
   NEAR_MARKET_RATE_LIMITER?: RateLimit;
@@ -720,6 +722,9 @@ app.all("/mcp", (c) => handleMcpRequest(c.req.raw, c.env));
 app.post("/api/the402/webhook", async (c) => {
   c.header("Cache-Control", "no-store");
   c.header("X-Robots-Tag", "noindex, nofollow");
+  if (c.env.THE402_AUTOMATION_ENABLED !== "YES") {
+    return c.json({ error: "NOT_FOUND" }, 404);
+  }
   const declaredLength = c.req.header("Content-Length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > 65_536) {
     return c.json({ error: "NOT_FOUND" }, 404);
@@ -1257,6 +1262,9 @@ app.post(MCP_DRIFT_ENDPOINT, (c) => c.json(c.get("mcpDriftResult")));
 app.post("/api/near-market/:product", async (c) => {
   c.header("Cache-Control", "no-store");
   c.header("X-Robots-Tag", "noindex, nofollow");
+  if (c.env.NEAR_MARKET_AUTOMATION_ENABLED !== "YES") {
+    return c.json({ error: "NOT_FOUND" }, 404);
+  }
   const product = parseNearMarketProduct(c.req.param("product"));
   if (!product) return c.json({ error: "NOT_FOUND" }, 404);
   const contentType = c.req.header("Content-Type") || "";

@@ -33,7 +33,7 @@ export const EARNED_PLACEMENT_PROVENANCE_GATE = Object.freeze({
 });
 export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-56";
 export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
-export const SNAPSHOT_SOURCE_COMMIT = "7afcca5ca4c43a83d8b74e5c2f5d72421a1857bd";
+export const SNAPSHOT_SOURCE_COMMIT = "c25c3f5d1109a98850bb71745130e9e389b78296";
 export const SNAPSHOT_SOURCE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict";
 export const SNAPSHOT_SERVICE_SHA256 = "bd3401a1ca6a210c605729bc302404bd62d5b1cb05f43c727c713ecc50a4f105";
 export const SNAPSHOT_TIMER_SHA256 = "30cde8ebdc07a95b76fd703d44a59d1b7bed8d1d2a4ec56ba7be121ea0ad14f2";

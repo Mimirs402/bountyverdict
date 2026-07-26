@@ -801,6 +801,126 @@ test("a verified Algora GitHub App comment establishes listing provenance only",
   assert.equal(output.verdict, "VIABLE");
 });
 
+test("an official Algora sponsor record survives a repository transfer and exposes active claims", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Algora",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "CLAIMED",
+      amount: 100,
+      currency: "USD",
+      claim_count: 1,
+      bounty_ids: ["cliq08aod000cl60fo6yqmsu2"],
+      evidence_url: "https://algora.io/McPizza0/bounties?status=open",
+      completeness: "discovered_trusted_sponsor_records",
+    },
+    now,
+  });
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(output.reward.platform, "Algora");
+  assert.equal(output.reward.amount, 100);
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Bounty platform reports active competition" && item.hardStop
+  ));
+});
+
+test("an unclaimed official Algora sponsor record is a trusted discovered listing", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Algora",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 100,
+      currency: "USD",
+      claim_count: 0,
+      bounty_ids: ["cliq08aod000cl60fo6yqmsu2"],
+      evidence_url: "https://algora.io/McPizza0/bounties?status=open",
+      completeness: "discovered_trusted_sponsor_records",
+    },
+    now,
+  });
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) => item.label === "Bounty platform reports active competition"));
+});
+
+test("a locked Lightning Bounties reward keeps its sats denomination and secured balance", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Lightning Bounties",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 50_000,
+      secured_amount: 50_000,
+      reclaimable_amount: 0,
+      currency: "SATS",
+      evidence_url: "https://app.lightningbounties.com/",
+    },
+    now,
+  });
+  assert.equal(output.reward.state, "LISTED");
+  assert.equal(output.reward.amount, 50_000);
+  assert.equal(output.reward.currency, "SATS");
+  const listing = output.signals.find((item) => item.label === "Trusted platform listing found");
+  assert.match(listing.detail, /50,000 sats/);
+  assert.doesNotMatch(listing.detail, /\$50000 USD/);
+});
+
+test("a fully unlocked Lightning reward is a reclaimable promise rather than secured funding", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Lightning Bounties",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 50_000,
+      secured_amount: 0,
+      reclaimable_amount: 50_000,
+      currency: "SATS",
+      evidence_url: "https://app.lightningbounties.com/",
+    },
+    now,
+  });
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Platform pay-when-solved promise found" && /50,000 sats/.test(item.detail)
+  ));
+});
+
+test("an awarded Lightning bounty is terminal", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Lightning Bounties",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "AWARDED",
+      amount: 50_000,
+      secured_amount: 50_000,
+      reclaimable_amount: 0,
+      currency: "SATS",
+      evidence_url: "https://app.lightningbounties.com/",
+    },
+    now,
+  });
+  assert.equal(output.reward.state, "PAID_OR_AWARDED");
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Bounty platform reports reward awarded" && item.hardStop
+  ));
+});
+
 test("a trusted platform listing is not overridden by contributor-payment heuristics", () => {
   const comments = [{
     body: "## 💎 $250 bounty • acme\nReceive payment 2-5 days post-reward.",

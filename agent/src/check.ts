@@ -5,6 +5,8 @@ import {
   hasIssueHuntReference,
   issueHuntReferenceRoutes,
 } from "./issuehunt.ts";
+import { fetchAlgoraEvidence } from "./algora.ts";
+import { fetchLightningBountiesEvidence } from "./lightning-bounties.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -453,7 +455,7 @@ async function checkGithubIssueInternal(
   }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
-  const [bountyHubEvidence, issueHuntEvidence] = await Promise.all([
+  const [bountyHubEvidence, issueHuntEvidence, algoraEvidence, lightningEvidence] = await Promise.all([
     fetchCanonicalBountyHubEvidence(canonical, submitted, fetchImpl),
     fetchCanonicalIssueHuntEvidence(
       issueResponse.data,
@@ -463,11 +465,35 @@ async function checkGithubIssueInternal(
       repoResponse.data?.id,
       fetchImpl,
     ),
+    fetchAlgoraEvidence(comments, canonical, submitted, fetchImpl),
+    Number.isSafeInteger(issueResponse.data?.id) && Number(issueResponse.data.id) > 0
+      ? fetchLightningBountiesEvidence(
+          Number(issueResponse.data.id),
+          [
+            canonical,
+            ...(canonical.owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+                canonical.repo.toLowerCase() !== submitted.repo.toLowerCase() ||
+                canonical.number !== submitted.number
+              ? [submitted]
+              : []),
+          ],
+          fetchImpl,
+        )
+      : Promise.resolve(null),
   ]);
-  const platformEvidence = issueHuntEvidence?.state === "REWARDED" ||
-      issueHuntEvidence?.submitted_pull_requests.length
-    ? issueHuntEvidence
-    : bountyHubEvidence || issueHuntEvidence;
+  const bountyHubTerminal = bountyHubEvidence &&
+    ["SOLVED", "RETRACTED", "FROZEN", "CLAIMED"].includes(bountyHubEvidence.state);
+  const platformEvidence = lightningEvidence?.state === "AWARDED"
+    ? lightningEvidence
+    : issueHuntEvidence?.state === "REWARDED"
+      ? issueHuntEvidence
+    : bountyHubTerminal
+      ? bountyHubEvidence
+      : algoraEvidence?.state === "CLAIMED"
+        ? algoraEvidence
+        : issueHuntEvidence?.submitted_pull_requests.length
+          ? issueHuntEvidence
+          : bountyHubEvidence || algoraEvidence || lightningEvidence || issueHuntEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)

@@ -591,6 +591,21 @@ function opireRewardState(comments) {
 }
 
 function platformClaimState(comments, openPulls, opire, reward, platformEvidence) {
+  if (platformEvidence?.platform === "Lightning Bounties" && platformEvidence.state === "AWARDED") {
+    return {
+      label: "Bounty platform reports reward awarded",
+      detail: "Lightning Bounties reports that this bounty already has a winner and claimed timestamp.",
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Algora" &&
+      (platformEvidence.state === "CLAIMED" || platformEvidence.claim_count > 0)) {
+    return {
+      label: "Bounty platform reports active competition",
+      detail: `Algora reports ${platformEvidence.claim_count} active claim${platformEvidence.claim_count === 1 ? "" : "s"} across the discovered trusted sponsor record${platformEvidence.bounty_ids?.length === 1 ? "" : "s"}.`,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "IssueHunt") {
     if (platformEvidence.state === "REWARDED") {
       return {
@@ -683,6 +698,13 @@ function amountFromText(text) {
     amount: Number.isFinite(amount) ? amount : null,
     currency: String(match[3] || "USD").toUpperCase(),
   };
+}
+
+function formatRewardAmount(amount, currency) {
+  if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) return "";
+  if (currency === "SATS") return `${Number(amount).toLocaleString("en-US")} sats`;
+  if (currency === "USD" || currency === "USDC") return `$${amount} ${currency}`;
+  return `${amount}${currency ? ` ${currency}` : ""}`;
 }
 
 function amountFromAlgoraListing(text) {
@@ -782,6 +804,30 @@ function openBountyAvailability(issue, comments) {
 }
 
 function rewardEvidence(issue, comments, opire, platformEvidence) {
+  if (platformEvidence?.platform === "Lightning Bounties") {
+    return {
+      state: platformEvidence.state === "AWARDED"
+        ? "PAID_OR_AWARDED"
+        : platformEvidence.secured_amount > 0
+          ? "LISTED"
+          : "PROMISED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Algora") {
+    return {
+      state: "LISTED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "IssueHunt") {
     return {
       state: platformEvidence.state === "REWARDED" ? "PAID_OR_AWARDED" : "LISTED",
@@ -1216,15 +1262,19 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Trusted platform listing found",
       5,
-      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a $${reward.amount} USD`} reward${platformEvidence?.platform === "BountyHub" ? `; $${platformEvidence.secured_amount} is platform-held/prepaid and $${platformEvidence.promised_amount} remains pay-when-solved` : ""}, but creator approval and payout are still not guaranteed.`,
+      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a ${formatRewardAmount(reward.amount, reward.currency)}`} reward${platformEvidence?.platform === "BountyHub" ? `; $${platformEvidence.secured_amount} is platform-held/prepaid and $${platformEvidence.promised_amount} remains pay-when-solved` : platformEvidence?.platform === "Lightning Bounties" ? `; ${formatRewardAmount(platformEvidence.secured_amount, "SATS")} remains locked and ${formatRewardAmount(platformEvidence.reclaimable_amount, "SATS")} is reclaimable` : ""}, but creator approval and payout are still not guaranteed.`,
       reward.evidenceUrl,
     ));
   } else if (reward.state === "PROMISED") {
     signals.push(signal(
-      platformEvidence?.platform === "BountyHub" ? "Platform pay-when-solved promise found" : "Maintainer reward promise found",
+      platformEvidence?.platform === "BountyHub" || platformEvidence?.platform === "Lightning Bounties"
+        ? "Platform pay-when-solved promise found"
+        : "Maintainer reward promise found",
       0,
       platformEvidence?.platform === "BountyHub"
         ? `BountyHub records a $${platformEvidence.promised_amount} pay-when-solved reward, but no platform-held/prepaid amount; creator approval and payout are not guaranteed.`
+        : platformEvidence?.platform === "Lightning Bounties"
+          ? `Lightning Bounties reports ${formatRewardAmount(platformEvidence.reclaimable_amount, "SATS")} as unlocked/reclaimable and no sats still secured; payout is not guaranteed.`
         : "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
       reward.evidenceUrl,
     ));

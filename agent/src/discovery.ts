@@ -3,7 +3,7 @@ import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const BOUNTY_DISCOVERY_DESCRIPTION =
-  "Should I work on this GitHub issue? GitHub bounty eligibility and claimability preflight for one public issue. Checks canonical state, whether already assigned or claimed, soft locks, trusted platform funding and competition, withdrawn, unverified, or non-cash rewards, one explicitly linked GitHub source issue, linked or failed PRs, attempt crowding, and AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, bounded newest windows, and truncation.";
+  "Should I work on this GitHub issue? Bounty eligibility and claimability preflight for one public issue. Checks canonical status, whether already assigned or claimed, soft locks, transfer-safe Algora records, Lightning Bounties secured versus reclaimable sats, trusted funding, withdrawn or non-cash rewards, linked source issues and PRs, attempt crowding, and AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, bounded newest windows, and truncation.";
 
 export const exampleVerdict = {
   product: "BountyVerdict",

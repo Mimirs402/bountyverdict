@@ -152,6 +152,40 @@ function withIssueHunt(base: typeof fetch, pageOverrides: Record<string, unknown
   };
 }
 
+function withLightningBounties(
+  base: typeof fetch,
+  overrides: Record<string, unknown> = {},
+): typeof fetch {
+  const record = {
+    id: "9035b808-41cf-4d64-b251-f0871cd0dd20",
+    repository_id: "1eb2d4eb-eee0-4188-bfb4-d17ae9b41b0d",
+    github_id: 4_727_309_482,
+    issue_number: 4,
+    html_url: "https://github.com/acme/widget/issues/4",
+    is_closed: false,
+    winner_id: null,
+    claimed_at: null,
+    repository_data: {
+      id: "1eb2d4eb-eee0-4188-bfb4-d17ae9b41b0d",
+      full_name: "acme/widget",
+    },
+    total_rewards: 1,
+    total_reward_sats: 50_000,
+    unlocked_total_rewards: 0,
+    unexpired_total_rewards: 50_000,
+    ...overrides,
+  };
+  const payload = `8:${JSON.stringify(["$", "main", null, { issues: [record] }])}`;
+  const page = `<script>self.__next_f.push(${JSON.stringify([1, payload])})</script>`;
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (url.origin === "https://app.lightningbounties.com") {
+      return new Response(page, { headers: { "content-type": "text/html" } });
+    }
+    return base(input, init);
+  };
+}
+
 const bountyHubComment = {
   body: "A public listing exists at https://www.bountyhub.dev/en/bounty/view/5bd7b660-5c46-4686-bead-39a53699e98d",
   author_association: "NONE",
@@ -321,6 +355,45 @@ test("verifies funded IssueHunt evidence and hard-stops submitted outputs", asyn
   assert.ok(result.signals.some((signal) =>
     signal.label === "Bounty platform reports submitted outputs" && signal.hard_stop &&
     signal.evidence_url === "https://github.com/acme/widget/pull/12"
+  ));
+});
+
+test("verifies locked Lightning Bounties sats without relabeling them as USD", async () => {
+  const lightningIssue = { ...issue, id: 4_727_309_482, comments: 0 };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLightningBounties(githubMock([], null, lightningIssue)),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.platform, "Lightning Bounties");
+  assert.equal(result.reward.amount, 50_000);
+  assert.equal(result.reward.currency, "SATS");
+  const listing = result.signals.find((signal) => signal.label === "Trusted platform listing found");
+  assert.match(listing?.detail || "", /50,000 sats/);
+  assert.doesNotMatch(listing?.detail || "", /\$50000 USD/);
+});
+
+test("hard-stops an awarded Lightning bounty", async () => {
+  const winnerId = "4f7e48ca-54db-4c14-bd95-e635a0973994";
+  const lightningIssue = { ...issue, id: 4_727_309_482, comments: 0 };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLightningBounties(githubMock([], null, lightningIssue), {
+      is_closed: true,
+      winner_id: winnerId,
+      claimed_at: "2026-07-20T12:00:00Z",
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.reward.state, "PAID_OR_AWARDED");
+  assert.equal(result.reward.platform, "Lightning Bounties");
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Bounty platform reports reward awarded" && signal.hard_stop
   ));
 });
 
@@ -1360,6 +1433,118 @@ test("a transferred issue uses only its canonical destination repository", async
   assert.equal(result.issue.transferred, true);
   assert.equal(result.issue.repository, "newco/gadget");
   assert.ok(!requested.some((url) => /\/repos\/acme\/widget(?:$|\/contents|\/issues\/4\/(?:comments|timeline))/.test(url)));
+});
+
+function transferredAlgoraMock(actorId: number, pageIssueUrl: string, requested: string[]): typeof fetch {
+  const transferredIssue = {
+    ...issue,
+    id: 4727309482,
+    number: 4,
+    comments: 1,
+    repository_url: "https://api.github.com/repos/newco/gadget",
+    html_url: "https://github.com/newco/gadget/issues/4",
+    title: "$100 transferred Algora bounty",
+  };
+  const comment = {
+    id: 1585654789,
+    body: "💎 **$100** bounty created by @McPizza0\n" +
+      "👉 To claim this bounty, https://console.algora.io/bounties/cliq08aod000cl60fo6yqmsu2\n" +
+      "🙏 Thank you for contributing to acme/widget!",
+    html_url: "https://github.com/newco/gadget/issues/4#issuecomment-1585654789",
+    created_at: "2023-06-10T13:00:36Z",
+    updated_at: "2023-06-10T13:00:36Z",
+    author_association: "NONE",
+    performed_via_github_app: null,
+    user: { id: actorId, login: "algora-pbc", type: "User" },
+  };
+  return (async (input) => {
+    const url = new URL(String(input));
+    requested.push(url.href);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (url.pathname === "/repos/acme/widget/issues/4" ||
+        url.pathname === "/repos/newco/gadget/issues/4") {
+      return Response.json(transferredIssue, { headers });
+    }
+    if (url.pathname === "/repos/newco/gadget") {
+      return Response.json({
+        ...repository,
+        id: 987654,
+        full_name: "newco/gadget",
+        html_url: "https://github.com/newco/gadget",
+      }, { headers });
+    }
+    if (url.pathname === "/repos/newco/gadget/issues/4/comments") {
+      return Response.json([comment], { headers });
+    }
+    if (url.pathname === "/repos/newco/gadget/issues/4/timeline") {
+      return Response.json([], { headers });
+    }
+    if (url.pathname.startsWith("/repos/newco/gadget/contents/")) {
+      return Response.json({ message: "not found" }, { status: 404, headers });
+    }
+    if (url.origin === "https://algora.io" && url.pathname === "/McPizza0/bounties") {
+      return new Response(`<table><tr>
+        <td><div class="font-extrabold text-emerald-300">$100</div>
+          <a href="${pageIssueUrl}" class="group/issue inline-flex">Issue</a></td>
+        <td><div phx-click="toggle-claims" phx-value-id="cliq08aod000cl60fo6yqmsu2">
+          <div>1 claim</div></div></td>
+      </tr></table>`, { headers: { "content-type": "text/html" } });
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+}
+
+test("a transferred issue recovers Algora funding and claims from a strongly bound legacy record", async () => {
+  const requested: string[] = [];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    transferredAlgoraMock(136125894, "https://github.com/acme/widget/issues/4", requested),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.issue.transferred, true);
+  assert.equal(result.reward.platform, "Algora");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.amount, 100);
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Bounty platform reports active competition" && signal.hard_stop
+  ));
+  assert.ok(requested.includes("https://algora.io/McPizza0/bounties?status=open"));
+});
+
+test("a canonical transferred destination follows the exact legacy Algora repository reference", async () => {
+  const requested: string[] = [];
+  const result = await checkGithubIssue(
+    "https://github.com/newco/gadget/issues/4",
+    {},
+    transferredAlgoraMock(136125894, "https://github.com/acme/widget/issues/4", requested),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.issue.transferred, false);
+  assert.equal(result.reward.platform, "Algora");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.verdict, "AVOID");
+});
+
+test("legacy Algora login or wrong issue route alone cannot authenticate a platform listing", async () => {
+  const wrongActor = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    transferredAlgoraMock(1, "https://github.com/acme/widget/issues/4", []),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.notEqual(wrongActor.reward.platform, "Algora");
+  assert.notEqual(wrongActor.reward.verification, "TRUSTED_PLATFORM_API");
+
+  const wrongRoute = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    transferredAlgoraMock(136125894, "https://github.com/other/project/issues/4", []),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.notEqual(wrongRoute.reward.platform, "Algora");
+  assert.notEqual(wrongRoute.reward.verification, "TRUSTED_PLATFORM_API");
 });
 
 function transferredIssueHuntPage(repositoryGithubId: string): string {

@@ -1,3 +1,6 @@
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { THE402_PRODUCTS, type The402Product } from "../src/the402.ts";
 import { THE402_API, THE402_LISTINGS } from "../src/the402-catalog.ts";
 
@@ -5,6 +8,9 @@ const api = THE402_API;
 const apiKey = process.env.THE402_API_KEY;
 const participantId = process.env.THE402_PARTICIPANT_ID;
 const enabled = process.env.THE402_CREATE === "YES";
+const webhookUrl = "https://bountyverdict-agent-production.mimirslab.workers.dev/api/the402/webhook";
+const configFile = process.env.THE402_CONFIG_FILE ||
+  `${homedir()}/.config/bountyverdict/the402.env`;
 
 if (!enabled) throw new Error("Set THE402_CREATE=YES to create or update marketplace listings.");
 if (!apiKey || apiKey.length < 16) throw new Error("THE402_API_KEY is missing or invalid.");
@@ -30,6 +36,54 @@ async function platformFetch(path: string, init?: RequestInit): Promise<Response
     },
     signal: AbortSignal.timeout(30_000),
   });
+}
+
+function findString(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object") return null;
+  if (!Array.isArray(value) && typeof (value as Record<string, unknown>)[key] === "string") {
+    return (value as Record<string, string>)[key];
+  }
+  for (const nested of Object.values(value)) {
+    const found = findString(nested, key);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function persistWebhookSecret(secret: string): Promise<void> {
+  if (!/^whsec_[A-Za-z0-9_-]{8,}$/.test(secret)) {
+    throw new Error("the402 participant update returned an invalid webhook secret.");
+  }
+  const existing = await readFile(configFile, "utf8");
+  const next = /^THE402_WEBHOOK_SECRET=.*$/m.test(existing)
+    ? existing.replace(/^THE402_WEBHOOK_SECRET=.*$/m, `THE402_WEBHOOK_SECRET=${secret}`)
+    : `${existing.trimEnd()}\nTHE402_WEBHOOK_SECRET=${secret}\n`;
+  await mkdir(dirname(configFile), { recursive: true, mode: 0o700 });
+  const temporary = `${configFile}.${process.pid}.tmp`;
+  await writeFile(temporary, next, { mode: 0o600 });
+  await rename(temporary, configFile);
+}
+
+async function ensureWebhook(): Promise<"updated" | "unchanged"> {
+  const response = await platformFetch(`/participants/${encodeURIComponent(participantId!)}`, {
+    method: "PUT",
+    body: JSON.stringify({ webhook_url: webhookUrl }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`the402 webhook registration returned HTTP ${response.status}: ${error.slice(0, 500)}`);
+  }
+  const payload = await response.json();
+  const returnedUrl = findString(payload, "webhook_url");
+  if (returnedUrl && returnedUrl !== webhookUrl) {
+    throw new Error("the402 participant update returned an unexpected webhook URL.");
+  }
+  const secret = findString(payload, "webhook_secret");
+  if (secret) {
+    await persistWebhookSecret(secret);
+    return "updated";
+  }
+  return "unchanged";
 }
 
 type ExistingService = { id: string; name: string };
@@ -68,6 +122,7 @@ function serviceId(payload: any): string {
   return value;
 }
 
+const webhook = await ensureWebhook();
 const existing = await existingServices();
 const map: Record<string, The402Product> = {};
 const results: Array<{ product: The402Product; service_id: string; action: "created" | "updated" }> = [];
@@ -99,4 +154,9 @@ for (const definition of definitions) {
   results.push({ product: definition.product, service_id: id, action: previous ? "updated" : "created" });
 }
 
-console.log(JSON.stringify({ participant_id: participantId, service_map: map, services: results }, null, 2));
+console.log(JSON.stringify({
+  participant_id: participantId,
+  webhook: { url: webhookUrl, secret: "stored_outside_repository", action: webhook },
+  service_map: map,
+  services: results,
+}, null, 2));

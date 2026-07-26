@@ -309,6 +309,25 @@ test("question-shaped MCP selection copy gets an isolated v7 checkpoint after th
   assert.equal(activationTemplate.target_tools_list, 25);
 });
 
+test("free selection router gets a dedicated zero-prefix post-release experiment", async () => {
+  const distribution = await readFile(distributionUrl, "utf8");
+  const activationTemplate = JSON.parse(await readFile(new URL(
+    "../agent/config/free-selection-router-experiment.activation.template.json",
+    import.meta.url,
+  ), "utf8"));
+  assert.match(distribution, /FREE_SELECTION_ROUTER_EXPERIMENT_ID/);
+  assert.match(distribution, /FREE_SELECTION_ROUTER_EXPERIMENT_ACTIVATION_FILE/);
+  assert.match(distribution, /experiments\/mcp-free-selection-router-v1\.json/);
+  assert.match(distribution, /persistedFreeSelectionRouterExperiment \|\|\s+previousReport\.funnel\?\.mcp_free_selection_router_experiment \|\| null/);
+  assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+freeSelectionRouterExperimentStateFile/s);
+  assert.match(distribution, /mcp_free_selection_router_experiment: mcpFreeSelectionRouterExperiment/);
+  assert.match(distribution, /first report at or above N=25 is immutable/);
+  assert.match(distribution, /a free selection is not payment intent, a purchase, or revenue/);
+  assert.equal(activationTemplate.experiment_id, "mcp-free-selection-router-v1");
+  assert.equal(activationTemplate.measurement_epoch_id, 0);
+  assert.equal(activationTemplate.target_tools_list, 25);
+});
+
 test("distribution monitoring reports MCP conversion from the active trusted epoch", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /trustedMcpDelta\(state, trustedBaseline\.mcp\)/);

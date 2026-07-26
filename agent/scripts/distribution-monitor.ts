@@ -67,6 +67,7 @@ import {
 import { updateUnknownToolRecoveryExperiment } from "../src/recovery-experiment.ts";
 import {
   AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
   updateTaskLeadingDescriptionExperiment,
 } from "../src/task-leading-description-experiment.ts";
@@ -178,6 +179,8 @@ const taskLeadingDescriptionExperimentStateFile = process.env.TASK_LEADING_DESCR
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v2.json`;
 const agentQuestionDescriptionExperimentStateFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-agent-question-descriptions-v7.json`;
+const freeSelectionRouterExperimentStateFile = process.env.FREE_SELECTION_ROUTER_EXPERIMENT_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-free-selection-router-v1.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
@@ -194,6 +197,8 @@ const taskLeadingDescriptionActivationFile = process.env.TASK_LEADING_DESCRIPTIO
   `${homedir()}/.config/bountyverdict/task-leading-description-experiment.activation.json`;
 const agentQuestionDescriptionActivationFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE ||
   `${homedir()}/.config/bountyverdict/agent-question-description-experiment-v7.activation.json`;
+const freeSelectionRouterActivationFile = process.env.FREE_SELECTION_ROUTER_EXPERIMENT_ACTIVATION_FILE ||
+  `${homedir()}/.config/bountyverdict/free-selection-router-v1.activation.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = configuration.trackedCostsUsdc;
 const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";
@@ -1892,6 +1897,7 @@ async function funnelStatus(
   previousRecoveryExperiment: unknown,
   previousTaskLeadingDescriptionExperiment: unknown,
   previousAgentQuestionDescriptionExperiment: unknown,
+  previousFreeSelectionRouterExperiment: unknown,
 ): Promise<Record<string, unknown>> {
   try {
     const readDescriptionActivation = async (path: string, label: string): Promise<unknown> => {
@@ -1921,6 +1927,10 @@ async function funnelStatus(
     const agentQuestionDescriptionActivation = await readDescriptionActivation(
       agentQuestionDescriptionActivationFile,
       "Agent-question description",
+    );
+    const freeSelectionRouterActivation = await readDescriptionActivation(
+      freeSelectionRouterActivationFile,
+      "Free selection router",
     );
     const monotonicDelta = (current: unknown, baseline: unknown, label: string): number => {
       const currentValue = Number(current || 0);
@@ -2159,6 +2169,17 @@ async function funnelStatus(
       trustedRotation: epochRotation,
       previous: previousAgentQuestionDescriptionExperiment,
     });
+    const mcpFreeSelectionRouterExperiment = updateTaskLeadingDescriptionExperiment({
+      experimentId: FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+      observedAt: new Date().toISOString(),
+      activation: freeSelectionRouterActivation,
+      currentEpochId: Number(trustedBaseline.epoch_id || 1),
+      measurementEligible,
+      cleanEpochDelta: effectiveTrustedMcp?.buyer_candidate_totals || null,
+      trustedBaselineInitializedAt: trustedBaseline.initialized_at,
+      trustedRotation: epochRotation,
+      previous: previousFreeSelectionRouterExperiment,
+    });
     const trustedBuyerCandidateDiscovery = trustedBuyerCandidateDiscoveryDelta(state, trustedBaseline);
     const effectiveBuyerCandidateDiscovery = measurementEligible
       ? trustedBuyerCandidateDiscovery
@@ -2257,6 +2278,7 @@ async function funnelStatus(
       mcp_unknown_tool_recovery_experiment: mcpUnknownToolRecoveryExperiment,
       mcp_task_leading_description_experiment: mcpTaskLeadingDescriptionExperiment,
       mcp_agent_question_description_experiment: mcpAgentQuestionDescriptionExperiment,
+      mcp_free_selection_router_experiment: mcpFreeSelectionRouterExperiment,
       mcp_learning_stage: mcpLearningStage,
       trusted_mcp_learning_stage: trustedMcpLearningStage,
       mcp_by_source: state.mcp_by_source,
@@ -2362,6 +2384,8 @@ function renderMonitorNote(report: Record<string, any>): string {
   const mcpTaskLeadingDescriptionDelta = mcpTaskLeadingDescriptionExperiment.eligible_delta || {};
   const mcpAgentQuestionDescriptionExperiment = funnel.mcp_agent_question_description_experiment || {};
   const mcpAgentQuestionDescriptionDelta = mcpAgentQuestionDescriptionExperiment.eligible_delta || {};
+  const mcpFreeSelectionRouterExperiment = funnel.mcp_free_selection_router_experiment || {};
+  const mcpFreeSelectionRouterDelta = mcpFreeSelectionRouterExperiment.eligible_delta || {};
   const ratio = (value: unknown) => value !== null && value !== undefined && Number.isFinite(Number(value))
     ? `${Number(value)}%`
     : "not yet measurable";
@@ -2489,6 +2513,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **MCP unknown-tool recovery experiment:** ${funnel.available ? `${mcpRecoveryExperiment.status || "unavailable"} on exact epoch ${Number(mcpRecoveryExperiment.measurement_epoch_id || 46)}; eligible zero-prefix delta ${Number(mcpRecoveryDelta.initialize || 0)} initialize / ${Number(mcpRecoveryDelta.tools_list || 0)} tools/list / ${Number(mcpRecoveryDelta.protocol_error || 0)} protocol error / ${Number(mcpRecoveryDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpRecoveryDelta.validation_error || 0)} invalid input / ${Number(mcpRecoveryDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpRecoveryDelta.payment_required || 0)} valid unpaid / ${Number(mcpRecoveryDelta.payment_present || 0)} payment presented / ${Number(mcpRecoveryDelta.paid_success || 0)} paid success / ${Number(mcpRecoveryDelta.paid_error || 0)} paid error; ${Number(mcpRecoveryExperiment.remaining_eligible_tools_list || 0)} eligible lists remaining; decision ${mcpRecoveryExperiment.decision || "pending"}` : "unavailable"} (first report at or above 25 eligible epoch-46 tools/list events is immutable; aggregate counters have no session/retry linkage and never establish a causal recovery rate, unique agents, purchases, or revenue)
 - **MCP task-leading description experiment:** ${funnel.available ? `${mcpTaskLeadingDescriptionExperiment.status || "unavailable"}; exact fresh epoch ${mcpTaskLeadingDescriptionExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpTaskLeadingDescriptionDelta.initialize || 0)} initialize / ${Number(mcpTaskLeadingDescriptionDelta.tools_list || 0)} tools/list / ${Number(mcpTaskLeadingDescriptionDelta.protocol_error || 0)} protocol error / ${Number(mcpTaskLeadingDescriptionDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpTaskLeadingDescriptionDelta.validation_error || 0)} invalid input / ${Number(mcpTaskLeadingDescriptionDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpTaskLeadingDescriptionDelta.payment_required || 0)} valid unpaid / ${Number(mcpTaskLeadingDescriptionDelta.payment_present || 0)} payment presented / ${Number(mcpTaskLeadingDescriptionDelta.paid_success || 0)} paid success / ${Number(mcpTaskLeadingDescriptionDelta.paid_error || 0)} paid error; ${Number(mcpTaskLeadingDescriptionExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpTaskLeadingDescriptionExperiment.decision || "pending"}` : "unavailable"} (inactive until exact reviewed release, production activation, completed drain rotation, and fresh epoch coordinates match the trusted ledger; first report at or above N=25 is immutable; aggregate counters have no session/exposure linkage and never establish a causal copy conversion rate, unique agents, purchases, or revenue)
 - **MCP agent-question description experiment:** ${funnel.available ? `${mcpAgentQuestionDescriptionExperiment.status || "unavailable"}; exact fresh epoch ${mcpAgentQuestionDescriptionExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpAgentQuestionDescriptionDelta.initialize || 0)} initialize / ${Number(mcpAgentQuestionDescriptionDelta.tools_list || 0)} tools/list / ${Number(mcpAgentQuestionDescriptionDelta.protocol_error || 0)} protocol error / ${Number(mcpAgentQuestionDescriptionDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpAgentQuestionDescriptionDelta.validation_error || 0)} invalid input / ${Number(mcpAgentQuestionDescriptionDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpAgentQuestionDescriptionDelta.payment_required || 0)} valid unpaid / ${Number(mcpAgentQuestionDescriptionDelta.payment_present || 0)} payment presented / ${Number(mcpAgentQuestionDescriptionDelta.paid_success || 0)} paid success / ${Number(mcpAgentQuestionDescriptionDelta.paid_error || 0)} paid error; ${Number(mcpAgentQuestionDescriptionExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpAgentQuestionDescriptionExperiment.decision || "pending"}` : "unavailable"} (the completed v2 baseline and prior excluded question-description windows remain frozen; v7 starts from zero only when the exact current quality release, production activation, Agent Finder drain, and fresh epoch 55 match; aggregate counters are not unique agents, causal attribution, purchases, or revenue)
+- **MCP free selection router experiment:** ${funnel.available ? `${mcpFreeSelectionRouterExperiment.status || "unavailable"}; exact fresh epoch ${mcpFreeSelectionRouterExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpFreeSelectionRouterDelta.initialize || 0)} initialize / ${Number(mcpFreeSelectionRouterDelta.tools_list || 0)} tools/list / ${Number(mcpFreeSelectionRouterDelta.selection_preview || 0)} free selections / ${Number(mcpFreeSelectionRouterDelta.validation_error || 0)} invalid input / ${Number(mcpFreeSelectionRouterDelta.payment_required || 0)} valid unpaid / ${Number(mcpFreeSelectionRouterDelta.payment_present || 0)} payment presented / ${Number(mcpFreeSelectionRouterDelta.paid_success || 0)} paid success / ${Number(mcpFreeSelectionRouterDelta.paid_error || 0)} paid error; ${Number(mcpFreeSelectionRouterExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpFreeSelectionRouterExperiment.decision || "pending"}` : "unavailable"} (inactive until an exact v1.1.11 release, production activation, completed post-release drain rotation, and fresh eligible epoch are bound in the owner-private activation record; first report at or above N=25 is immutable; a free selection is not payment intent, a purchase, or revenue)
 - **MCP invalid-call learning:** ${funnel.available ? mcpValidationSummary : "unavailable"} (coarse categories only; no arguments, URLs, payloads, identities, or raw client names retained; pre-upgrade events remain legacy-unclassified)
 - **MCP directory-crawler activity:** ${funnel.available ? `${Number(mcpRegistryCrawler.initialize || 0)} initializations; ${Number(mcpRegistryCrawler.tools_list || 0)} tool-list requests; ${Number(mcpRegistryCrawler.payment_required || 0)} valid unpaid tool calls` : "unavailable"} (retained separately for distribution propagation, never treated as buyer intent)
 - **Kiro Power package:** repository contract published; registry submission not made because publisher terms require explicit acceptance; ${funnel.available ? `${Number(mcpKiroPower.initialize || 0)} declared-source initializations, ${Number(mcpKiroPower.tools_list || 0)} tool-list requests, ${Number(mcpKiroPower.payment_required || 0)} valid unpaid calls, ${Number(mcpKiroPower.payment_present || 0)} payment presentations` : "funnel unavailable"} (source marker is aggregate attribution, not proof of install, identity, or purchase)
@@ -2802,6 +2827,12 @@ const persistedAgentQuestionDescriptionExperiment = await readMeasurementExperim
 );
 const previousAgentQuestionDescriptionExperiment = persistedAgentQuestionDescriptionExperiment ||
   previousReport.funnel?.mcp_agent_question_description_experiment || null;
+const persistedFreeSelectionRouterExperiment = await readMeasurementExperimentCheckpoint(
+  freeSelectionRouterExperimentStateFile,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+);
+const previousFreeSelectionRouterExperiment = persistedFreeSelectionRouterExperiment ||
+  previousReport.funnel?.mcp_free_selection_router_experiment || null;
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, x402Manifest, mcpMetadata, openapi, llms] = await Promise.all([
@@ -3199,6 +3230,7 @@ funnel = await funnelStatus(
   previousRecoveryExperiment,
   previousTaskLeadingDescriptionExperiment,
   previousAgentQuestionDescriptionExperiment,
+  previousFreeSelectionRouterExperiment,
 );
 
 const currentRecoveryExperiment = funnel.mcp_unknown_tool_recovery_experiment;
@@ -3234,6 +3266,18 @@ await writeMeasurementExperimentCheckpoint(
   AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
   checkedAt,
   currentAgentQuestionDescriptionExperiment as Record<string, unknown>,
+);
+
+const currentFreeSelectionRouterExperiment = funnel.mcp_free_selection_router_experiment;
+if (!currentFreeSelectionRouterExperiment || typeof currentFreeSelectionRouterExperiment !== "object" ||
+  Array.isArray(currentFreeSelectionRouterExperiment)) {
+  throw new Error("Free selection router experiment state is missing from the funnel report.");
+}
+await writeMeasurementExperimentCheckpoint(
+  freeSelectionRouterExperimentStateFile,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+  checkedAt,
+  currentFreeSelectionRouterExperiment as Record<string, unknown>,
 );
 
 const taskmarketCommerce = (

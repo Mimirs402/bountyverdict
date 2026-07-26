@@ -741,7 +741,7 @@ test("a same-repository source link is not treated as a mirror", () => {
 });
 
 test("common source-issue and mirror labels are recognized", () => {
-  for (const prefix of ["Source issue:", "Mirror of", "Mirrored from"]) {
+  for (const prefix of ["Source issue:", "Mirror of", "Mirrored from", "| 原 URL |"]) {
     const output = analyzeBounty({
       issue: {
         ...healthyIssue,

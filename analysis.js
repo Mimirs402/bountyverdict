@@ -287,7 +287,7 @@ const OPEN_AVAILABILITY_PATTERNS = [
   /\b(?:claim\s+)?slots?\s+remaining\s*:\s*[1-9]\d*\b/i,
 ];
 
-const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
+const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接|原\s*(?:url|链接|issue))[^\n\r]{0,80}[\n\r\s:|>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
 
 export function externalSourceIssue(issue, repository) {
   const body = typeof issue?.body === "string" ? issue.body : "";

@@ -558,6 +558,35 @@ test("returns CAUTION when a maintainer-owned listing mirrors an external source
   assert.ok(result.signals.some((signal) => signal.label === "External source issue checked"));
 });
 
+test("a Chinese mirror resolves its closed canonical source", async () => {
+  const mirrored = {
+    ...issue,
+    title: "[upstream/project] [100 MRG] Solana token accounts",
+    body: "## 外部 Bounty 任务镜像\n\n| 字段 | 值 |\n|---|---|\n| 原 issue | #77 |\n| 原 URL | https://github.com/upstream/project/issues/77 |\n\n## 100 MRG\n\nImplement the bounded token-account task.",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLinkedSource(githubMock([], null, mirrored), {
+      ...issue,
+      state: "closed",
+      state_reason: "completed",
+      html_url: "https://github.com/upstream/project/issues/77",
+      author_association: "OWNER",
+      comments: 0,
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.linked_source.state, "CHECKED");
+  assert.equal(result.linked_source.url, "https://github.com/upstream/project/issues/77");
+  assert.equal(result.linked_source.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External source issue is not actionable" && signal.hard_stop
+  ));
+});
+
 test("returns AVOID when an explicitly linked source has no authorized bounty issuer", async () => {
   const mirrored = {
     ...issue,

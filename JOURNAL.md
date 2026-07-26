@@ -1,5 +1,45 @@
 # BountyVerdict Journey
 
+## 2026-07-26 — Held selector now reaches an executable quote
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Held release identity: **v1.1.11**
+- Release gate: **WAIT_BOUNDARY** until `2026-07-27T16:37:12.796Z`
+
+A normal-agent replay of `initialize -> tools/list -> choose -> paid tool`
+showed that the first free-selector draft still left too much reconstruction to
+the buyer. The held selector now returns a structured `next_call` with the exact
+tool, required fields, safe nested argument template, call strategy, explicit
+unsigned-quote continuation rule, and a reminder to preserve the same arguments
+on the authorized retry. Replacing every placeholder with valid public-shaped
+input reaches an exact x402 v2 quote for all six paid tools without signing or
+spending.
+
+Portfolio routing now uses the buyer's bounded candidate count and need for a
+ranked response. Two to seven independent issues use repeated $0.05 checks when
+that is economical and report the exact aggregate price—for example, seven
+cost **$0.35**, not a misleading $0.05—while eight to ten or any requested
+ranked response use the $0.40 portfolio. The most complex MCP-drift template
+now contains structurally valid `{name, inputSchema}` tool objects instead of
+string placeholders.
+
+The local Wrangler buyer replay exposed version `1.1.11`, the free selector
+first among seven tools, the exact 40,000-atomic testnet-USDC RunVerdict quote,
+and the executable Agentic Wallet argument vector. The public suite passes
+**194 / 194**, the Worker and operations suite passes **549 / 549**,
+typechecking, synchronized public contracts, workflow YAML parsing, dry Worker
+deployment, the production-verification assertions, zero-vulnerability Worker
+dependency audit, and `git diff --check` all pass. The root package has no
+lockfile or dependencies, so npm correctly has no root audit target.
+
+No production deployment, marketplace mutation, self-purchase, signed payment,
+or synthetic buyer event occurred. Direct paid-tool selection by generic MCP
+clients still depends on those clients treating the spec-shaped `isError` x402
+challenge as a continuation; changing paid-tool descriptions at the same time
+would mix treatments, so that remains the next isolated conversion hypothesis
+if the selector experiment does not produce downstream calls.
+
 ## 2026-07-23 — Free selection router prepared after zero downstream calls
 
 - Customer revenue: **$0.00**

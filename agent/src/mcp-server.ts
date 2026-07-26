@@ -188,6 +188,21 @@ function errorResult(product: DistributedProduct, code: string, message: string)
   };
 }
 
+function selectionErrorResult(message: string): ToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        error: "INVALID_SELECTION_CONTEXT",
+        message,
+        payment_required: false,
+        verdict_produced: false,
+      }),
+    }],
+    isError: true,
+  };
+}
+
 function omitStructuredContentFromError(result: ToolResult): ToolResult {
   if (!result.isError || result.structuredContent === undefined) return result;
   // SDK 1.29 clients validate error structuredContent against the success schema.
@@ -336,16 +351,32 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
 
   server.registerTool(FREE_SELECTION_TOOL_NAME, {
     title: "Choose the right GitHub agent decision tool for free",
-    description: "Which tool should I use for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change? Free deterministic router: returns the exact paid tool, price, sample, and required input. It does not inspect a URL, produce a verdict, request payment, or call another service.",
+    description: "Choose the economical next call for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change. Free deterministic router: returns total price, sample, exact required fields, a safe argument template, and payment-quote continuation semantics without inspecting the target.",
     inputSchema: z.object({
-      task: z.enum(FREE_SELECTION_TASKS).describe("Choose one exact task category; no URL, repository name, search text, or private data."),
+      task: z.enum(FREE_SELECTION_TASKS).describe("Exact task: one_bounty = claimability of one issue; bounty_portfolio = economical handling of 2-10 issues; repository_agent_instructions = pre-coding instruction audit; github_actions_root_cause = why a run failed; github_actions_retry_decision = retry once versus fix; mcp_tools_change = compatibility of complete tools/list snapshots."),
+      candidate_count: z.number().int().min(2).max(10).optional().describe("Required only for bounty_portfolio: exact number of distinct issue URLs."),
+      needs_ranked_response: z.boolean().optional().describe("For bounty_portfolio only. True when one ranked, partial-failure-aware response is worth the premium; otherwise 2-7 route to cheaper repeated single checks."),
     }).strict(),
     outputSchema: MCP_FREE_SELECTION_OUTPUT_SCHEMA,
     annotations: closedWorldAnnotations,
-  }, async ({ task }) => {
-    const route = freeSelectionRoute(task, origin);
+  }, async (selection) => {
+    if (selection.task === "bounty_portfolio" && selection.candidate_count === undefined) {
+      return selectionErrorResult("candidate_count is required for bounty_portfolio.");
+    }
+    if (selection.task !== "bounty_portfolio" && (selection.candidate_count !== undefined || selection.needs_ranked_response !== undefined)) {
+      return selectionErrorResult("Portfolio routing fields are allowed only for bounty_portfolio.");
+    }
+    const selectionRequest = selection.task === "bounty_portfolio"
+      ? {
+        task: selection.task,
+        candidate_count: selection.candidate_count as number,
+        needs_ranked_response: selection.needs_ranked_response ?? false,
+      } as const
+      : { task: selection.task } as const;
+    const route = freeSelectionRoute(selectionRequest, origin);
     emitMcpEvent("selection_preview", route.product_key, request);
-    return jsonResult(route);
+    const { product_key: _productKey, ...publicRoute } = route;
+    return jsonResult(publicRoute);
   });
 
   server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {

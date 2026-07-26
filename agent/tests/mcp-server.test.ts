@@ -81,9 +81,14 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
   assert.equal(body.result.tools.length, 7);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
   const router = body.result.tools.find((tool: any) => tool.name === FREE_SELECTION_TOOL_NAME);
-  assert.match(router.description, /^Which tool should I use/);
+  assert.match(router.description, /^Choose the economical next call/);
   assert.match(router.description, /Free deterministic router/);
   assert.deepEqual(router.inputSchema.properties.task.enum, FREE_SELECTION_TASKS);
+  assert.match(router.inputSchema.properties.task.description, /one_bounty = claimability/);
+  assert.equal(router.inputSchema.properties.candidate_count.minimum, 2);
+  assert.equal(router.inputSchema.properties.candidate_count.maximum, 10);
+  assert.match(router.inputSchema.properties.needs_ranked_response.description, /cheaper repeated single checks/);
+  assert.deepEqual(router.inputSchema.required, ["task"]);
   assert.equal(router.inputSchema.additionalProperties, false);
   assert.equal(router.outputSchema.additionalProperties, false);
   assert.deepEqual(router.annotations, {
@@ -152,12 +157,12 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
 
 test("free router maps every bounded task without payment, network access, or a verdict", async () => {
   const expected = {
-    one_bounty: ["single", "check_github_bounty", "0.05", "/api/sample"],
-    bounty_portfolio: ["portfolio", "rank_github_bounties", "0.40", "/api/portfolio/sample"],
-    repository_agent_instructions: ["harness", "audit_agent_harness", "0.03", "/api/harness/sample"],
-    github_actions_root_cause: ["run", "diagnose_github_actions_run", "0.04", "/api/run/sample"],
-    github_actions_retry_decision: ["flake", "classify_github_actions_flake", "0.07", "/api/flake/sample"],
-    mcp_tools_change: ["mcpdrift", "check_mcp_tool_drift", "0.02", "/api/mcp-drift/sample"],
+    one_bounty: ["single", "check_github_bounty", "0.05", "/api/sample", ["issue_url"]],
+    bounty_portfolio: ["portfolio", "rank_github_bounties", "0.40", "/api/portfolio/sample", ["issue_urls"]],
+    repository_agent_instructions: ["harness", "audit_agent_harness", "0.03", "/api/harness/sample", ["repo_url"]],
+    github_actions_root_cause: ["run", "diagnose_github_actions_run", "0.04", "/api/run/sample", ["run_url"]],
+    github_actions_retry_decision: ["flake", "classify_github_actions_flake", "0.07", "/api/flake/sample", ["run_url"]],
+    mcp_tools_change: ["mcpdrift", "check_mcp_tool_drift", "0.02", "/api/mcp-drift/sample", ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]],
   } as const;
   const originalFetch = globalThis.fetch;
   const logs: string[] = [];
@@ -166,26 +171,49 @@ test("free router maps every bounded task without payment, network access, or a 
   console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
   try {
     for (const task of FREE_SELECTION_TASKS) {
+      const args = task === "bounty_portfolio"
+        ? { task, candidate_count: 8, needs_ranked_response: false }
+        : { task };
       const response = await app.request(`${origin}/mcp`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: FREE_SELECTION_TOOL_NAME, arguments: { task } } }),
+        body: JSON.stringify({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: FREE_SELECTION_TOOL_NAME, arguments: args } }),
       }, {});
       assert.equal(response.status, 200);
       const body = await response.json() as any;
       assert.equal(body.result.isError, undefined);
       const route = body.result.structuredContent;
-      const [productKey, toolName, price, samplePath] = expected[task];
+      const [productKey, toolName, price, samplePath, requiredFields] = expected[task];
       assert.equal(route.task, task);
-      assert.equal(route.product_key, productKey);
-      assert.equal(route.tool_name, toolName);
-      assert.equal(route.price_usdc, price);
-      assert.equal(route.currency, "USDC");
+      assert.equal(route.product, PRODUCT_SELECTION_PREVIEWS[productKey].product);
+      assert.equal(route.total_price_usdc, price);
       assert.equal(route.free_sample, `${origin}${samplePath}`);
       assert.equal(route.payment_required, false);
-      assert.equal(route.verdict_produced, false);
-      assert.match(route.next_step, new RegExp(`Call ${toolName}`));
+      assert.equal(route.next_call.tool_name, toolName);
+      assert.equal(route.next_call.call_strategy, "single_call");
+      assert.deepEqual(route.next_call.required_fields, requiredFields);
+      assert.deepEqual(Object.keys(route.next_call.arguments_template), requiredFields);
+      assert.equal(route.next_call.unsigned_result, "x402_quote_is_error_continue");
+      assert.equal(route.next_call.preserve_arguments_on_retry, true);
       assert.doesNotMatch(JSON.stringify(body), /"accepts"|x402Version|payment-response/);
+
+      const placeholderResponse = await app.request(`${origin}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 47,
+          method: "tools/call",
+          params: {
+            name: route.next_call.tool_name,
+            arguments: route.next_call.arguments_template,
+          },
+        }),
+      }, {});
+      const placeholderBody = await placeholderResponse.json() as any;
+      assert.equal(placeholderBody.result.isError, true);
+      assert.equal(placeholderBody.result.structuredContent, undefined);
+      assert.doesNotMatch(placeholderBody.result.content[0].text, /"accepts"|x402Version|payment-response/);
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -193,8 +221,80 @@ test("free router maps every bounded task without payment, network access, or a 
   }
   const events = logs.flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } })
     .filter((event) => event.type === "bountyverdict_mcp_funnel");
-  assert.deepEqual(events.map((event) => [event.stage, event.product]), FREE_SELECTION_TASKS.map((task) => ["selection_preview", expected[task][0]]));
+  assert.deepEqual(
+    events.filter((event) => event.stage === "selection_preview").map((event) => [event.stage, event.product]),
+    FREE_SELECTION_TASKS.map((task) => ["selection_preview", expected[task][0]]),
+  );
+  assert.equal(events.some((event) => event.stage === "payment_required"), false);
   assert.equal(logs.some((line) => FREE_SELECTION_TASKS.some((task) => line.includes(task))), false);
+});
+
+test("free router chooses the economical bounty portfolio strategy from bounded context", async () => {
+  const cheaper = await rpcBody(42, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: false },
+  });
+  assert.equal(cheaper.result.isError, undefined);
+  assert.equal(cheaper.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.single.product);
+  assert.equal(cheaper.result.structuredContent.total_price_usdc, "0.35");
+  assert.equal(cheaper.result.structuredContent.next_call.tool_name, "check_github_bounty");
+  assert.equal(cheaper.result.structuredContent.next_call.call_strategy, "repeat_for_each_issue");
+
+  const premium = await rpcBody(43, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: true },
+  });
+  assert.equal(premium.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.portfolio.product);
+  assert.equal(premium.result.structuredContent.total_price_usdc, "0.40");
+  assert.equal(premium.result.structuredContent.next_call.tool_name, "rank_github_bounties");
+
+  const twoSingles = await rpcBody(47, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 2, needs_ranked_response: false },
+  });
+  assert.equal(twoSingles.result.structuredContent.total_price_usdc, "0.10");
+
+  const unitEconomical = await rpcBody(44, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 8, needs_ranked_response: false },
+  });
+  assert.equal(unitEconomical.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.portfolio.product);
+  assert.equal(unitEconomical.result.structuredContent.total_price_usdc, "0.40");
+  assert.equal(unitEconomical.result.structuredContent.next_call.arguments_template.issue_urls.length, 8);
+});
+
+test("every selector template leads to a valid unsigned x402 quote after replacing placeholders", async () => {
+  const requests = [
+    ["one_bounty", { task: "one_bounty" }, { issue_url: "https://github.com/owner/repo/issues/1" }],
+    ["bounty_portfolio", { task: "bounty_portfolio", candidate_count: 8, needs_ranked_response: false }, {
+      issue_urls: Array.from({ length: 8 }, (_, index) => `https://github.com/owner/repo/issues/${index + 1}`),
+    }],
+    ["repository_agent_instructions", { task: "repository_agent_instructions" }, { repo_url: "https://github.com/owner/repo" }],
+    ["github_actions_root_cause", { task: "github_actions_root_cause" }, { run_url: "https://github.com/owner/repo/actions/runs/1" }],
+    ["github_actions_retry_decision", { task: "github_actions_retry_decision" }, { run_url: "https://github.com/owner/repo/actions/runs/1" }],
+    ["mcp_tools_change", { task: "mcp_tools_change" }, mcpDriftExampleInput],
+  ] as const;
+
+  for (const [task, selection, validArguments] of requests) {
+    const selected = await rpcBody(48, "tools/call", {
+      name: FREE_SELECTION_TOOL_NAME,
+      arguments: selection,
+    });
+    const template = selected.result.structuredContent.next_call.arguments_template;
+    assert.deepEqual(Object.keys(template), Object.keys(validArguments), task);
+    if (task === "mcp_tools_change") {
+      assert.deepEqual(Object.keys(template.baseline.tools[0]), ["name", "inputSchema"]);
+      assert.deepEqual(Object.keys(template.current.tools[0]), ["name", "inputSchema"]);
+    }
+
+    const quoted = await rpcBody(49, "tools/call", {
+      name: selected.result.structuredContent.next_call.tool_name,
+      arguments: validArguments,
+    });
+    assert.equal(quoted.result.isError, true, task);
+    assert.equal(quoted.result.structuredContent, undefined, task);
+    assert.equal(JSON.parse(quoted.result.content[0].text).x402Version, 2, task);
+  }
 });
 
 test("free router rejects arbitrary task text before its handler", async () => {
@@ -215,6 +315,22 @@ test("free router rejects arbitrary task text before its handler", async () => {
   assert.doesNotMatch(body.result.content[0].text, /accepts|x402Version/);
   assert.equal(logs.some((line) => /inspect private repo|leak this text/.test(line)), false);
   assert.equal(logs.some((line) => /"stage":"protocol_error"/.test(line)), true);
+});
+
+test("free router rejects missing or misplaced portfolio routing context", async () => {
+  const missingCount = await rpcBody(45, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", needs_ranked_response: false },
+  });
+  assert.equal(missingCount.result.isError, true);
+  assert.equal(missingCount.result.structuredContent, undefined);
+
+  const misplaced = await rpcBody(46, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "one_bounty", candidate_count: 2 },
+  });
+  assert.equal(misplaced.result.isError, true);
+  assert.equal(misplaced.result.structuredContent, undefined);
 });
 
 test("MCP success contracts stay within the catalog context budget", async () => {

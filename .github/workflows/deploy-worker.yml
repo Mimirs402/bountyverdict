@@ -389,11 +389,26 @@ jobs:
           if (!freeResponse.ok || freeResponse.headers.has("PAYMENT-REQUIRED")) process.exit(1);
           const freeCalled = await freeResponse.json();
           const freeRoute = freeCalled.result?.structuredContent;
-          if (freeCalled.result?.isError || freeRoute?.tool_name !== "diagnose_github_actions_run") process.exit(1);
-          if (freeRoute?.payment_required !== false || freeRoute?.verdict_produced !== false || "verdict" in freeRoute) process.exit(1);
-          if (freeRoute?.price_usdc !== "0.04" || freeRoute?.required_input !== "run_url") process.exit(1);
+          if (freeCalled.result?.isError || freeRoute?.next_call?.tool_name !== "diagnose_github_actions_run") process.exit(1);
+          if (freeRoute?.payment_required !== false || "verdict" in freeRoute) process.exit(1);
+          if (freeRoute?.total_price_usdc !== "0.04" || JSON.stringify(freeRoute?.next_call?.required_fields) !== JSON.stringify(["run_url"])) process.exit(1);
+          if (freeRoute?.next_call?.unsigned_result !== "x402_quote_is_error_continue" || freeRoute?.next_call?.preserve_arguments_on_retry !== true) process.exit(1);
           const freeText = JSON.parse(freeCalled.result?.content?.[0]?.text || "null");
           if (JSON.stringify(freeText) !== JSON.stringify(freeRoute) || freeText?.accepts !== undefined) process.exit(1);
+          const economicalPortfolio = await rpc(23, "tools/call", {
+            name: "choose_github_agent_decision",
+            arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: false },
+          });
+          const economicalRoute = economicalPortfolio.result?.structuredContent;
+          if (economicalPortfolio.result?.isError || economicalRoute?.next_call?.tool_name !== "check_github_bounty") process.exit(1);
+          if (economicalRoute?.next_call?.call_strategy !== "repeat_for_each_issue" || economicalRoute?.total_price_usdc !== "0.35") process.exit(1);
+          const rankedPortfolio = await rpc(24, "tools/call", {
+            name: "choose_github_agent_decision",
+            arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: true },
+          });
+          const rankedRoute = rankedPortfolio.result?.structuredContent;
+          if (rankedPortfolio.result?.isError || rankedRoute?.next_call?.tool_name !== "rank_github_bounties") process.exit(1);
+          if (rankedRoute?.next_call?.call_strategy !== "single_call" || rankedRoute?.total_price_usdc !== "0.40") process.exit(1);
           const calls = [
             ["check_github_bounty", { issue_url: "https://github.com/owner/repo/issues/1" }, "50000", "/api/bounty-preflight", "POST"],
             ["rank_github_bounties", { issue_urls: ["https://github.com/owner/repo/issues/1", "https://github.com/owner/repo/issues/2"] }, "400000", "/api/portfolio", "POST"],

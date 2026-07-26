@@ -1,6 +1,6 @@
 # MCPize post-v7 release packet
 
-Status: prepared only. Do not submit, test the production endpoint, merge, or deploy this branch before the active `mcp-agent-question-descriptions-v7` experiment freezes its 25-event epoch-55 boundary.
+Status: prepared only. Do not submit, test the production endpoint, merge, or deploy this branch before the separate earned-placement experiment freezes after `2026-07-27T16:37:12.796Z` and v1.1.11 is live.
 
 ## Why this is the next channel
 
@@ -24,7 +24,7 @@ Official references:
 
 Description:
 
-> Should I work on this GitHub bounty, trust this repository's agent instructions, retry this failed Actions run, or accept an MCP tool change? BountyVerdict gives agents read-only, evidence-linked decisions for public GitHub work before they spend coding time, retries, or trust. Six bounded MCP tools return typed verdicts and exact reuse guidance; invalid inputs are rejected before payment.
+> Should I work on this GitHub bounty, trust this repository's agent instructions, retry this failed Actions run, or accept an MCP tool change? BountyVerdict gives agents read-only, evidence-linked decisions for public GitHub work before they spend coding time, retries, or trust. One free selector routes the task; six bounded paid MCP tools return typed verdicts and exact reuse guidance. Invalid inputs are rejected before payment.
 
 Representative agent questions:
 
@@ -41,8 +41,8 @@ The existing origin already issues x402 challenges and settles exact per-tool pr
 
 Before publishing:
 
-1. Freeze the v7 N=25 result and begin an excluded distribution drain.
-2. Merge and deploy the reviewed quality release, including the `mcpize` telemetry channel.
+1. Verify the earned-placement terminal snapshot and begin an excluded distribution drain.
+2. Merge and deploy the reviewed v1.1.11 release, including the free selector and `mcpize` telemetry channel.
 3. Use MCPize's `Connect Existing URL` flow only during that drain.
 4. Start on Base Sepolia as MCPize recommends. Verify one unpaid call, one paid call, the final tool output, the amount charged, the recipient, and the number of signatures and settlements.
 5. Reject the channel if the buyer would pay twice, if MCPize cannot forward the origin's x402 challenge, if it requires an unauthenticated free upstream bypass, or if successful calls cannot be distinguished from MCPize's own connection tests.
@@ -52,7 +52,7 @@ Before publishing:
 ## Measurement contract
 
 - `initialize`, `tools/list`, and protocol errors carrying the exact `source=mcpize` marker are marketplace inspection, not buyer demand.
-- Unknown-tool, validation, payment-required, payment-present, paid-success, and paid-error stages remain buyer-funnel evidence.
+- Free selection-preview, unknown-tool, validation, payment-required, payment-present, paid-success, and paid-error stages remain buyer-funnel evidence.
 - A customer purchase still requires the existing exact Base USDC settlement accounting; marketplace analytics alone are not revenue proof.
 - Owner/test payments remain excluded from genuine purchases and customer revenue.
 

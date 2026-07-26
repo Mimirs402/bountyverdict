@@ -757,6 +757,7 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(funnel, /declaredSource === "vscode-deeplink"/);
   assert.match(funnel, /declaredSource === "openhands-integrations"/);
   assert.match(funnel, /declaredSource === "goose-extensions"/);
+  assert.match(funnel, /declaredSource === "mcpize"/);
   assert.match(funnel, /\? "agent_skills_marketplace"/);
   assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);

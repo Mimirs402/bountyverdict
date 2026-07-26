@@ -134,15 +134,18 @@ Its `info.payment` object contains the equivalent protected HTTP x402 request:
 - the validated JSON body and its SHA-256 for POST tools;
 - the immutable atomic USDC cap;
 - the request-binding limitation and retry rules;
+- a directly callable Coinbase Agentic Wallet MCP tool name and argument object;
 - a safe Coinbase Agentic Wallet CLI argument vector.
 
-This lets a standard MCP host hand the exact HTTP request to a separately installed x402 wallet tool. Coinbase Agentic Wallet MCP provides a “Make an x402 request” capability:
+This gives an agent/runtime a structured request it can pass to a separately installed x402 wallet tool when that tool is exposed; the custom extension does not make cross-server dispatch automatic in every MCP host. Coinbase Agentic Wallet MCP provides the declared `make_http_request_with_x402` tool:
 
 ```bash
 npx @coinbase/payments-mcp
 ```
 
 Wallet authentication, funding, and spending limits are buyer-controlled prerequisites for paid calls. An agent may use the handoff only when it is already authorized to spend and every field matches the original selected tool call. Otherwise it must return the payment requirement and stop.
+
+If an authorized runtime has Coinbase Agentic Wallet MCP, call `info.payment.coinbase_wallet_mcp.tool_name` with `info.payment.coinbase_wallet_mcp.arguments` unchanged. This performs the equivalent paid REST request; it is not a retry of the original MCP tool call.
 
 If an authorized runtime uses the CLI fallback, execute `info.payment.agentic_wallet.executable` with `info.payment.agentic_wallet.argv` as an argument vector. Never join the values into a shell string, never raise `max_amount_atomic` silently, and resend the exact normalized POST body.
 

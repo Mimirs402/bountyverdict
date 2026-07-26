@@ -282,7 +282,11 @@ type UnpaidDecisionPreview = {
   legacyTransport?: boolean;
 };
 
-async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPRequestContext) {
+async function unpaidDecisionBody(
+  preview: UnpaidDecisionPreview,
+  context: HTTPRequestContext,
+  x402Network: string,
+) {
   const requestUrl = context.adapter.getUrl();
   const selection = PRODUCT_SELECTION_PREVIEWS[preview.productKey];
   const requestBody = preview.method === "POST" && context.adapter.getBody
@@ -303,7 +307,7 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
     method: preview.method,
     url: requestUrl,
     ...(requestBody === undefined ? {} : { body: requestBody }),
-  }, catalog.amountAtomic.toString());
+  }, catalog.amountAtomic.toString(), x402Network);
   return {
     contentType: "application/json",
     body: {
@@ -346,7 +350,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "single",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const portfolioRouteConfig: RouteConfig = {
     accepts: {
@@ -363,7 +367,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "portfolio",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacySingleRouteConfig: RouteConfig = {
     ...routeConfig,
@@ -371,7 +375,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "single",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const harnessRouteConfig: RouteConfig = {
     accepts: {
@@ -388,7 +392,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "harness",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyHarnessRouteConfig: RouteConfig = {
     ...harnessRouteConfig,
@@ -396,7 +400,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "harness",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const skillRouteConfig: RouteConfig = {
     accepts: {
@@ -413,7 +417,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "skill",
       method: "GET",
-    }, context),
+    }, context, network),
   };
   const runRouteConfig: RouteConfig = {
     accepts: {
@@ -430,7 +434,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "run",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyRunRouteConfig: RouteConfig = {
     ...runRouteConfig,
@@ -438,7 +442,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "run",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const flakeRouteConfig: RouteConfig = {
     accepts: {
@@ -455,7 +459,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "flake",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyFlakeRouteConfig: RouteConfig = {
     ...flakeRouteConfig,
@@ -463,7 +467,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "flake",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const mcpDriftRouteConfig: RouteConfig = {
     accepts: {
@@ -480,7 +484,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "mcpdrift",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const middleware = paymentMiddleware(
     {

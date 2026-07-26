@@ -81,8 +81,11 @@ for (const preview of cases) {
     assert.equal(body.skill, `https://mimirs402.github.io/bountyverdict/skills/${preview.skill}/SKILL.md`);
     assert.equal(body.documentation, "https://mimirs402.github.io/bountyverdict/agents.html");
     assert.equal(body.payment.protocol, "x402 v2");
-    assert.equal(body.payment.network, "Base");
+    assert.equal(body.payment.network, "Base Sepolia");
     assert.equal(body.payment.asset, "USDC");
+    assert.equal(body.payment.charge_state, "unsigned_not_charged");
+    assert.match(body.payment.next_action, /This unsigned response did not charge/);
+    assert.match(body.payment.next_action, /stop and request authorization/);
     assert.equal(body.payment.inspect_challenge_before_signing, true);
     assert.match(body.payment.max_amount_atomic, /^\d+$/);
     assert.equal(body.payment.exact_request.method, preview.method);
@@ -90,6 +93,24 @@ for (const preview of cases) {
     if (preview.method === "POST") assert.deepEqual(body.payment.exact_request.body, preview.body);
     if (preview.method === "POST") assert.match(body.payment.exact_request.normalized_body_sha256, /^sha256:[a-f0-9]{64}$/);
     assert.equal(body.payment.authorization_scope, preview.method === "POST" ? "resource_url_not_post_body" : "resource_url");
+    const paymentUrl = new URL(body.payment.exact_request.url);
+    assert.equal(body.payment.coinbase_wallet_mcp.tool_name, "make_http_request_with_x402");
+    assert.equal(body.payment.coinbase_wallet_mcp.execution_kind, "equivalent_rest_request");
+    assert.equal(body.payment.coinbase_wallet_mcp.arguments.baseURL, paymentUrl.origin);
+    assert.equal(body.payment.coinbase_wallet_mcp.arguments.path, paymentUrl.pathname);
+    assert.equal(body.payment.coinbase_wallet_mcp.arguments.method, preview.method);
+    assert.equal(body.payment.coinbase_wallet_mcp.arguments.maxAmountPerRequest, Number(body.payment.max_amount_atomic));
+    assert.equal(body.payment.coinbase_wallet_mcp.arguments.preferredNetwork, "base-sepolia");
+    if (preview.method === "POST") {
+      assert.deepEqual(body.payment.coinbase_wallet_mcp.arguments.body, preview.body);
+      assert.equal(body.payment.coinbase_wallet_mcp.arguments.queryParams, undefined);
+    } else {
+      assert.deepEqual(
+        body.payment.coinbase_wallet_mcp.arguments.queryParams,
+        Object.fromEntries(paymentUrl.searchParams.entries()),
+      );
+      assert.equal(body.payment.coinbase_wallet_mcp.arguments.body, undefined);
+    }
     assert.equal(body.payment.agentic_wallet.executable, "npx");
     assert.deepEqual(body.payment.agentic_wallet.argv.slice(0, 4), [
       "awal@2.12.0",
@@ -104,6 +125,7 @@ for (const preview of cases) {
     ]);
     assert.equal(body.payment.agentic_wallet.execute_as_argument_vector, true);
     assert.equal(body.payment.agentic_wallet.do_not_join_into_shell_string, true);
+    assert.equal(body.payment.retry_semantics.transport, "rest_http");
     assert.equal(body.payment.retry_semantics.payment_header, "Payment-Signature");
     assert.equal(body.payment.retry_semantics.never_raise_max_amount_without_new_authorization, true);
     assert.match(body.payment.execution_risk, /does not guarantee upstream success/);

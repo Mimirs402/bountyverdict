@@ -48,6 +48,7 @@ interface McpEnvironment extends X402ServerEnvironment {
 interface PaymentContext {
   resourceServer: ReturnType<typeof createX402ServerContext>["resourceServer"];
   accepts: Record<DistributedProduct, PaymentRequirements[]>;
+  network: `${string}:${string}`;
 }
 
 interface RequestClassification {
@@ -101,7 +102,7 @@ const TOOL_RECOVERY_TASKS = Object.freeze({
   check_mcp_tool_drift: "compare complete MCP tools/list snapshots",
 } as const satisfies Record<string, string>);
 
-const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free payment quote, selection summary, and payment handoff. Only an authorized signed retry can settle. Never call with missing, invented, or placeholder arguments.";
+const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free payment quote, selection summary, and payment handoff. Only an authorized continuation can settle: either the native x402 MCP retry or the declared equivalent REST wallet request. Never call with missing, invented, or placeholder arguments.";
 
 const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   check_github_bounty: "Is this public GitHub issue bounty still claimable, or is someone already working on it? Checks current status, reward evidence, competing work, and maintainer signals; returns AVOID, CAUTION, or VIABLE. For 2-7 issues, repeated single checks cost less unless one ranked response is worth the premium; use rank_github_bounties for 8-10.",
@@ -267,7 +268,11 @@ async function getPaymentContext(env: McpEnvironment): Promise<PaymentContext> {
       const entries = await Promise.all((Object.keys(PRODUCT_CATALOG) as ProductKey[])
         .filter((product): product is DistributedProduct => product !== "skill")
         .map(async (product) => [product, await context.resourceServer.buildPaymentRequirements({ scheme: "exact", network: context.network, payTo: context.payTo, price: PRODUCT_CATALOG[product].priceUsd, maxTimeoutSeconds: 300 })] as const));
-      return { resourceServer: context.resourceServer, accepts: Object.fromEntries(entries) as Record<DistributedProduct, PaymentRequirements[]> };
+      return {
+        resourceServer: context.resourceServer,
+        accepts: Object.fromEntries(entries) as Record<DistributedProduct, PaymentRequirements[]>,
+        network: context.network,
+      };
     })().catch((error) => { PAYMENT_CACHE.delete(context.cacheKey); throw error; });
     PAYMENT_CACHE.set(context.cacheKey, pending);
   }
@@ -291,7 +296,12 @@ async function paidCall(
   execute: () => Promise<ToolResult>,
 ): Promise<ToolResult> {
   const argumentsHash = await sha256(JSON.stringify(normalizedArgs));
-  const httpPaymentHandoff = await declareMcpHttpPaymentHandoff(origin, product, normalizedArgs);
+  const httpPaymentHandoff = await declareMcpHttpPaymentHandoff(
+    origin,
+    product,
+    normalizedArgs,
+    payment.network,
+  );
   const paymentPresent = hasPayment(extra);
   emitMcpEvent(paymentPresent ? "payment_present" : "payment_required", product, request);
   const wrapped = createPaymentWrapper(payment.resourceServer, {

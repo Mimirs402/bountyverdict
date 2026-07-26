@@ -33,6 +33,9 @@ test("public guidance states the real wallet boundary and exact handoff contract
   assert.match(guide, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);
   assert.match(guide, /exact method and fully encoded URL/);
   assert.match(guide, /validated JSON body and its SHA-256/);
+  assert.match(guide, /`make_http_request_with_x402`/);
+  assert.match(guide, /does not make cross-server dispatch automatic in every MCP host/);
+  assert.match(guide, /equivalent paid REST request; it is not a retry of the original MCP tool call/);
   assert.match(guide, /Never join the values into a shell string/);
   assert.match(guide, /never raise `max_amount_atomic` silently/);
   assert.match(guide, /Wallet authentication, funding, and spending limits are buyer-controlled prerequisites/);

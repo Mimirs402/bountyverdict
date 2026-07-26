@@ -895,10 +895,15 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(distribution, /reuse the same receipt transfer evidence/);
   assert.match(distribution, /reported worker earnings do not equal the sum of uniquely verified settlement records/);
   assert.match(distribution, /pending opportunity totals do not equal the pending submission records/);
+  assert.match(distribution, /pending opportunity buckets do not reconcile with their records or legacy totals/);
+  assert.match(distribution, /pending submission phase disagrees with its window and expiry/);
   assert.match(distribution, /Pending Taskmarket opportunity estimate \(not revenue\)/);
+  assert.match(distribution, /Live submission windows/);
+  assert.match(distribution, /Expired awaiting requester finalization/);
+  assert.match(distribution, /expiry closes new submissions but does not itself revoke requester award actions/i);
   assert.match(distribution, /explicitly operator-estimated from submitted record types/);
   assert.match(distribution, /settled_worker_earnings_usdc/);
-  assert.match(distribution, /API award rows alone remain zero purchases and zero revenue/);
+  assert.match(distribution, /API award rows, or expiry alone remain zero purchases and zero revenue/);
   assert.match(distribution, /Public funded-demand watcher/);
   assert.doesNotMatch(service, /EnvironmentFile/);
 });

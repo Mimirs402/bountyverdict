@@ -1370,6 +1370,9 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   for (const field of [
     "tracked_submissions", "pending_submissions", "rejected_submissions", "not_awarded_submissions",
     "unverified_award_submissions", "settled_submissions",
+    "submission_window_open_pending_submissions",
+    "expired_awaiting_finalization_pending_submissions",
+    "pre_expiry_window_closed_pending_submissions",
   ]) {
     if (!Number.isSafeInteger(taskmarketTracked[field]) || taskmarketTracked[field] < 0) {
       throw new Error(`Taskmarket tracked counter ${field} is invalid.`);
@@ -1390,13 +1393,25 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   let settledWorkerAtomic = 0n;
   let pendingGrossAtomic = 0n;
   let pendingNetAtomic = 0n;
+  let submissionWindowOpenPending = 0;
+  let submissionWindowOpenGrossAtomic = 0n;
+  let submissionWindowOpenNetAtomic = 0n;
+  let expiredAwaitingFinalizationPending = 0;
+  let expiredAwaitingFinalizationGrossAtomic = 0n;
+  let expiredAwaitingFinalizationNetAtomic = 0n;
+  let preExpiryWindowClosedPending = 0;
+  let preExpiryWindowClosedGrossAtomic = 0n;
+  let preExpiryWindowClosedNetAtomic = 0n;
+  const snapshotMs = Date.parse(state.checked_at);
   const consumedReceiptEvidence = new Set<string>();
   const consumedCanonicalEvents = new Set<string>();
   for (const record of taskmarketTracked.submissions as Array<Record<string, any>>) {
     if (!/^0x[a-f0-9]{64}$/i.test(record.task_id || "") ||
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(record.submission_id || "") ||
       !/^0x[a-f0-9]{64}$/i.test(record.submit_tx_hash || "") ||
-      !["pending_award", "rejected", "not_awarded", "award_unverified", "settled_award"].includes(record.submission_state)) {
+      !["pending_award", "rejected", "not_awarded", "award_unverified", "settled_award"].includes(record.submission_state) ||
+      typeof record.task_expiry_at !== "string" || !Number.isFinite(Date.parse(record.task_expiry_at)) ||
+      typeof record.submission_window_open !== "boolean") {
       throw new Error("Taskmarket tracked submission record is malformed.");
     }
     const recordEscrowReward = taskmarketUsdcAtomic(record.escrow_reward_usdc);
@@ -1411,6 +1426,30 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     if (record.submission_state === "pending_award") {
       pendingGrossAtomic += recordGrossPotential;
       pendingNetAtomic += recordNetPotential;
+      const expiryMs = Date.parse(record.task_expiry_at);
+      const expectedPendingPhase = record.submission_window_open && expiryMs > snapshotMs
+        ? "submission_window_open"
+        : expiryMs <= snapshotMs
+          ? "expired_awaiting_finalization"
+          : "pre_expiry_window_closed_awaiting_finalization";
+      if (record.pending_phase !== expectedPendingPhase) {
+        throw new Error("Taskmarket pending submission phase disagrees with its window and expiry.");
+      }
+      if (expectedPendingPhase === "submission_window_open") {
+        submissionWindowOpenPending += 1;
+        submissionWindowOpenGrossAtomic += recordGrossPotential;
+        submissionWindowOpenNetAtomic += recordNetPotential;
+      } else if (expectedPendingPhase === "expired_awaiting_finalization") {
+        expiredAwaitingFinalizationPending += 1;
+        expiredAwaitingFinalizationGrossAtomic += recordGrossPotential;
+        expiredAwaitingFinalizationNetAtomic += recordNetPotential;
+      } else {
+        preExpiryWindowClosedPending += 1;
+        preExpiryWindowClosedGrossAtomic += recordGrossPotential;
+        preExpiryWindowClosedNetAtomic += recordNetPotential;
+      }
+    } else if (record.pending_phase !== null) {
+      throw new Error("Taskmarket non-pending submission contains a pending phase.");
     }
     if (record.submission_state === "settled_award") {
       settledRecords += 1;
@@ -1496,6 +1535,40 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   if (reportedPendingGrossAtomic === null || reportedPendingNetAtomic === null ||
     reportedPendingGrossAtomic !== pendingGrossAtomic || reportedPendingNetAtomic !== pendingNetAtomic) {
     throw new Error("Taskmarket pending opportunity totals do not equal the pending submission records.");
+  }
+  const pendingBuckets = [
+    {
+      count: taskmarketTracked.submission_window_open_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.submission_window_open_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.submission_window_open_net_potential_usdc),
+      expectedCount: submissionWindowOpenPending,
+      expectedGross: submissionWindowOpenGrossAtomic,
+      expectedNet: submissionWindowOpenNetAtomic,
+    },
+    {
+      count: taskmarketTracked.expired_awaiting_finalization_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.expired_awaiting_finalization_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc),
+      expectedCount: expiredAwaitingFinalizationPending,
+      expectedGross: expiredAwaitingFinalizationGrossAtomic,
+      expectedNet: expiredAwaitingFinalizationNetAtomic,
+    },
+    {
+      count: taskmarketTracked.pre_expiry_window_closed_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.pre_expiry_window_closed_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc),
+      expectedCount: preExpiryWindowClosedPending,
+      expectedGross: preExpiryWindowClosedGrossAtomic,
+      expectedNet: preExpiryWindowClosedNetAtomic,
+    },
+  ];
+  if (pendingBuckets.some(({ count, gross, net, expectedCount, expectedGross, expectedNet }) =>
+    count !== expectedCount || gross === null || net === null || gross !== expectedGross || net !== expectedNet
+  ) ||
+    pendingBuckets.reduce((sum, bucket) => sum + Number(bucket.count), 0) !== taskmarketTracked.pending_submissions ||
+    pendingBuckets.reduce((sum, bucket) => sum + (bucket.gross || 0n), 0n) !== reportedPendingGrossAtomic ||
+    pendingBuckets.reduce((sum, bucket) => sum + (bucket.net || 0n), 0n) !== reportedPendingNetAtomic) {
+    throw new Error("Taskmarket pending opportunity buckets do not reconcile with their records or legacy totals.");
   }
   return {
     healthy: true,
@@ -2494,7 +2567,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Security action required:** revoke the x402.jobs API key that appeared in the tracked example file during local investigation; it was removed before commit or push and was never used. Store any future replacement only in an ignored mode-0600 user configuration after body-aware endpoint verification is supported.
 - **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
-- **Pending Taskmarket opportunity estimate (not revenue):** ${Number(taskmarketTracked.pending_submissions || 0)} submissions; $${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net if awarded (pool-task net is explicitly operator-estimated from submitted record types; gross is scaled by that task's live reward/net contract, never the full escrow)
+- **Pending Taskmarket opportunity estimate (not revenue):** ${Number(taskmarketTracked.pending_submissions || 0)} submissions; $${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net if awarded. Live submission windows: ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} / $${String(taskmarketTracked.submission_window_open_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net. Expired awaiting requester finalization: ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} / $${String(taskmarketTracked.expired_awaiting_finalization_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net. Pre-expiry closed awaiting finalization: ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} / $${String(taskmarketTracked.pre_expiry_window_closed_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net. Expiry closes new submissions but does not itself revoke requester award actions; every bucket remains potential, never revenue. Pool-task net is explicitly operator-estimated from submitted record types; gross is scaled by that task's live reward/net contract, never the full escrow.
 - **Autonomous work safety gate (2026-07-21 snapshot):** minia2a gas task rejected after 79 competing submissions; minia2a CAPTCHA rejected for insufficient authorization, live request/price drift, duplicate payment choices, and unsafe public token delivery; BountyBook excluded because all 32 API-verified jobs reported payout failure, no payout transaction hash, and contract job ID 0. No payment or claim was made.
 - **Tollbooth compatibility probe:** submitted_unverified; its verifier parsed the exact $0.05 x402 v2 Base-USDC challenge and payee but the paid replay stayed at HTTP 402 with no settlement proof. The listing has zero calls and zero revenue; do not retry or weaken the production protocol until Tollbooth demonstrates compatible v2 payment replay.
 - **Smithery marketplace:** ${smitherySummary} at [mimirs402/bountyverdict](https://smithery.ai/servers/mimirs402/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
@@ -2556,7 +2629,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **Payan exact-fit demand capture:** ${payanDemand.healthy ? "enabled and healthy" : "unavailable or degraded"}; ${Number(payanDemand.open_requests_seen || 0)} open seen, ${Number(payanDemand.exact_matches || 0)} exact fits, ${Number(payanDemand.tracked_requests || 0)} tracked bids, ${Number(payanDemand.accepted || 0)} accepted, ${Number(payanDemand.fulfilled || 0)} fulfilled, ${Number(payanDemand.approved || 0)} approved (never bids on incomplete or mismatched briefs)
 - **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits; Taskmarket ${Number(taskmarketDemand.api_escrow_backed_open_tasks || 0)} API escrow-backed / $${String(taskmarketDemand.api_escrow_backed_reward_usdc || "0")} USDC and ${Number(taskmarketDemand.exact_candidate_count || 0)} exact existing-product fits (inventory is never revenue)
-- **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.pending_submissions || 0)} pending ($${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (submissions, submit transactions, and API award rows alone remain zero purchases and zero revenue)
+- **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} live-window pending ($${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} expired awaiting requester finalization ($${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} pre-expiry closed awaiting finalization ($${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (all pending amounts are potential, and submissions, submit transactions, API award rows, or expiry alone remain zero purchases and zero revenue)
 - **Agentic Market automatic directory:** ${report.marketplaces?.agentic_market?.exact_contracts_verified ? `${report.marketplaces.agentic_market.endpoint_count} / 7 exact contracts indexed` : "unavailable or drifted"}${agenticMissing.length ? `; pending ${agenticMissing.join(", ")}` : ""}
 - **Agent402 open router:** ${report.acquisition?.agent402?.listed ? `listed and ${report.acquisition.agent402.routable ? "routable" : "not routable"}; ${report.acquisition.agent402.observed_tool_count ?? "unknown"} indexed operations versus ${report.acquisition.agent402.expected_paid_tool_count ?? 7} paid products; scope ${report.acquisition.agent402.indexed_scope_status || "unknown"}` : "unavailable or missing"} (${report.acquisition?.agent402?.listing_source || "unknown source"}; passive cached index health only, not impressions or demand; semantic owner-query monitoring disabled)
 - **x402scan registry:** ${report.acquisition?.x402scan?.listed_resources ?? "unavailable"} / ${report.acquisition?.x402scan?.expected_resources ?? 7} paid endpoints (${report.acquisition?.x402scan?.status || "unavailable"}; registry presence only, never a purchase)

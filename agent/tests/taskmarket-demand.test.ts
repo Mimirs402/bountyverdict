@@ -511,15 +511,77 @@ test("Taskmarket submission and submit transaction remain zero revenue without a
     tracked,
     payloads: [{ task_id: taskId, detail: rawTask(), submissions: [rawSubmission()] }],
     agent_stats: rawStats(),
+    now_ms: now,
   });
   assert.equal(result.tracked_submissions, 1);
   assert.equal(result.pending_submissions, 1);
   assert.equal(result.pending_gross_potential_usdc, "0.15");
   assert.equal(result.pending_net_potential_usdc, "0.13875");
+  assert.equal(result.submission_window_open_pending_submissions, 1);
+  assert.equal(result.submission_window_open_gross_potential_usdc, "0.15");
+  assert.equal(result.submission_window_open_net_potential_usdc, "0.13875");
+  assert.equal(result.expired_awaiting_finalization_pending_submissions, 0);
+  assert.equal(result.pre_expiry_window_closed_pending_submissions, 0);
   assert.equal(result.settled_submissions, 0);
   assert.equal(result.settled_worker_earnings_usdc, "0");
-  assert.equal((result.submissions as Array<Record<string, unknown>>)[0].accounting_state, "submission_only_not_purchase_or_revenue");
+  const record = (result.submissions as Array<Record<string, unknown>>)[0];
+  assert.equal(record.pending_phase, "submission_window_open");
+  assert.equal(record.task_expiry_at, "2026-07-23T00:00:00.000Z");
+  assert.equal(record.submission_window_open, true);
+  assert.equal(record.accounting_state, "submission_only_not_purchase_or_revenue");
   assert.doesNotMatch(JSON.stringify(result), /must-not-be-persisted/);
+});
+
+test("Taskmarket separates expired and pre-expiry closed submissions without inventing a rejection", () => {
+  const expired = reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked,
+    payloads: [{
+      task_id: taskId,
+      detail: rawTask({
+        expiryTime: "2026-07-20T00:00:00.000Z",
+        submissionWindowOpen: false,
+      }),
+      submissions: [rawSubmission()],
+    }],
+    agent_stats: rawStats(),
+    now_ms: now,
+  });
+  const expiredRecord = (expired.submissions as Array<Record<string, unknown>>)[0];
+  assert.equal(expired.pending_submissions, 1);
+  assert.equal(expired.expired_awaiting_finalization_pending_submissions, 1);
+  assert.equal(expired.expired_awaiting_finalization_gross_potential_usdc, "0.15");
+  assert.equal(expired.expired_awaiting_finalization_net_potential_usdc, "0.13875");
+  assert.equal(expired.submission_window_open_pending_submissions, 0);
+  assert.equal(expiredRecord.submission_state, "pending_award");
+  assert.equal(expiredRecord.pending_phase, "expired_awaiting_finalization");
+  assert.equal(expiredRecord.platform_award, null);
+  assert.equal(expiredRecord.settlement, null);
+
+  const closedBeforeExpiry = reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked,
+    payloads: [{
+      task_id: taskId,
+      detail: rawTask({ submissionWindowOpen: false }),
+      submissions: [rawSubmission()],
+    }],
+    agent_stats: rawStats(),
+    now_ms: now,
+  });
+  const closedRecord = (closedBeforeExpiry.submissions as Array<Record<string, unknown>>)[0];
+  assert.equal(closedBeforeExpiry.pre_expiry_window_closed_pending_submissions, 1);
+  assert.equal(closedBeforeExpiry.pre_expiry_window_closed_gross_potential_usdc, "0.15");
+  assert.equal(closedBeforeExpiry.pre_expiry_window_closed_net_potential_usdc, "0.13875");
+  assert.equal(closedRecord.pending_phase, "pre_expiry_window_closed_awaiting_finalization");
+
+  assert.throws(() => reconcileTaskmarketTracked({
+    worker_address: worker,
+    tracked,
+    payloads: [{ task_id: taskId, detail: rawTask(), submissions: [rawSubmission()] }],
+    agent_stats: rawStats(),
+    now_ms: Number.NaN,
+  }), /reconciliation time is invalid/);
 });
 
 test("Taskmarket validates the third submission's public testnet proof without treating it as revenue", () => {
@@ -593,12 +655,14 @@ test("Taskmarket keeps an API award at zero until the Base receipt proves task a
       submissions: [rawSubmission()],
     }],
     agent_stats: rawStats({ completedTasks: 1, totalEarnings: "138750" }),
+    now_ms: now,
   });
   assert.equal(unverified.pending_submissions, 0);
   assert.equal(unverified.unverified_award_submissions, 1);
   assert.equal(unverified.settled_submissions, 0);
   assert.equal(unverified.settled_worker_earnings_usdc, "0");
   assert.equal((unverified.submissions as Array<Record<string, any>>)[0].submission_state, "award_unverified");
+  assert.equal((unverified.submissions as Array<Record<string, any>>)[0].pending_phase, null);
   assert.equal((unverified.submissions as Array<Record<string, any>>)[0].settlement, null);
 
   const result = reconcileTaskmarketTracked({
@@ -611,6 +675,7 @@ test("Taskmarket keeps an API award at zero until the Base receipt proves task a
       settlement_receipts: [{ transaction_hash: settlementTx, receipt: successfulSettlementReceipt() }],
     }],
     agent_stats: rawStats({ completedTasks: 1, totalEarnings: "138750" }),
+    now_ms: now,
   });
   assert.equal(result.pending_submissions, 0);
   assert.equal(result.unverified_award_submissions, 0);
@@ -618,6 +683,7 @@ test("Taskmarket keeps an API award at zero until the Base receipt proves task a
   assert.equal(result.settled_worker_earnings_usdc, "0.13875");
   assert.equal((result.submissions as Array<Record<string, any>>)[0].settlement.settlement_tx_hash, settlementTx);
   assert.equal((result.submissions as Array<Record<string, any>>)[0].settlement.onchain_evidence.verified, true);
+  assert.equal((result.submissions as Array<Record<string, any>>)[0].pending_phase, null);
   assert.equal(result.stats_correlate_with_tracked_settlements, true);
 
   assert.throws(() => reconcileTaskmarketTracked({

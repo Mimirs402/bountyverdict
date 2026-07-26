@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy --env production",
     "deploy:testnet": "wrangler deploy --env=''",
     "deploy:dry": "wrangler deploy --dry-run --env=''",
+    "release:verify-boundary": "node --experimental-strip-types scripts/verify-post-boundary-release-gate.ts",
     "payment:inspect": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/payment-smoke.ts",
     "payment:smoke": "EXECUTE_PAYMENT=YES node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/payment-smoke.ts",
     "wallet:test": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cdp-test-wallet.ts",

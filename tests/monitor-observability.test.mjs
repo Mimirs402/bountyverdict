@@ -955,6 +955,23 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.doesNotMatch(snapshotService, /ExecStart=.*scripts\/(?:directory|distribution)-monitor\.ts/);
 });
 
+test("post-boundary release readiness is a one-shot read-only evidence gate", async () => {
+  const [service, timer, packageJson] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-release-readiness.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-release-readiness.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-acquisition-snapshot\.service/);
+  assert.match(service, /scripts\/verify-post-boundary-release-gate\.ts/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX/);
+  assert.doesNotMatch(service, /(?:curl|wrangler|gh |deploy|publish|rollback)/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:37:16 Europe\/Bucharest/);
+  assert.match(timer, /Persistent=true/);
+  assert.match(packageJson, /"release:verify-boundary": "node --experimental-strip-types scripts\/verify-post-boundary-release-gate\.ts"/);
+});
+
 test("broad retrieval audits share a bounded six-hour measurement window", async () => {
   const [directoryTimer, marketplaceTimer] = await Promise.all([
     readFile(directoryTimerUrl, "utf8"),

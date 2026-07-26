@@ -1,0 +1,12 @@
+[Unit]
+Description=Verify BountyVerdict release readiness after the acquisition snapshot
+
+[Timer]
+OnCalendar=2026-07-27 19:37:16 Europe/Bucharest
+AccuracySec=1s
+Persistent=true
+Unit=bountyverdict-release-readiness.service
+
+[Install]
+WantedBy=timers.target
+

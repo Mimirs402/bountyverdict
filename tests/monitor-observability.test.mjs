@@ -65,6 +65,31 @@ test("directory monitoring retains public AgentSkill and GitHub Skill conversion
   assert.match(directory, /name: "search_servers"/);
 });
 
+test("the scheduled acquisition snapshot has no marketplace mutation request path", async () => {
+  const [runner, directory, distribution, service] = await Promise.all([
+    readFile(auditedRunnerUrl, "utf8"),
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot.service", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=directory /);
+  assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=distribution /);
+  assert.match(runner, /if \(monitor === "directory"\) await import\("\.\/directory-monitor\.ts"\)/);
+  assert.match(runner, /else await import\("\.\/distribution-monitor\.ts"\)/);
+
+  assert.doesNotMatch(directory, /api\/skills\/submit|submitAgentSkill|AGENTSKILL_FORCE_SUBMIT/);
+  assert.equal((directory.match(/method:\s*"POST",\s*headers:/g) || []).length, 2);
+  assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
+  assert.match(directory, /name: "search_servers"/);
+
+  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 8);
+  assert.equal((distribution.match(/method:\s*"(?:PUT|PATCH|DELETE)"/g) || []).length, 0);
+  assert.equal((distribution.match(/params: \{ name: "(?:get|search_live)"/g) || []).length, 2);
+  assert.match(distribution, /validatePaymentChallenge\(challenge, \{\s+maximumAtomic: expectedAmount,\s+executePayment: false,/);
+  assert.doesNotMatch(distribution, /method:\s*"POST"[\s\S]{0,240}(?:\/bids?|\/fulfill|\/approve|\/publish|\/register|\/submit)/);
+});
+
 test("Skills.sh keeps canonical business discovery separate from the frozen legacy counter series", async () => {
   const [directory, distribution] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),

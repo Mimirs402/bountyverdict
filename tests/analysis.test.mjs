@@ -81,6 +81,24 @@ test("qualified rewarded labels never fabricate a paid hard stop", () => {
   }
 });
 
+test("markdown emphasis does not erase an explicit USDC reward denomination", () => {
+  for (const amount of ["**$3 USDC**", "*$3 USDC*", "__$3 USDC__", "_$3 USDC_"]) {
+    const output = analyzeBounty({
+      issue: {
+        ...healthyIssue,
+        title: "Add Algora bounty discovery",
+        body: `## Reward\n\n${amount} on Base chain upon merge.`,
+      },
+      repository: healthyRepo,
+      now,
+    });
+
+    assert.equal(output.reward.state, "PROMISED", amount);
+    assert.equal(output.reward.amount, 3, amount);
+    assert.equal(output.reward.currency, "USDC", amount);
+  }
+});
+
 test("only explicit affirmative rewarded status labels hard-stop the bounty", () => {
   for (const label of ["Rewarded", "💰 Rewarded", "Bounty: Rewarded", "Reward - Rewarded"]) {
     const output = analyzeBounty({

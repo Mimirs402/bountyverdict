@@ -667,7 +667,7 @@ function platformClaimState(comments, openPulls, opire, reward, platformEvidence
 
 function amountFromText(text) {
   const match = String(text ?? "").match(
-    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(USDC|USD))?(?=\s|[.,;:)\]}]|$)/i,
+    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(USDC|USD))?(?=\s|[.,;:)\]}]|(?:\*{1,3}|_{1,3})(?=\s|[.,;:)\]}]|$)|$)/i,
   );
   if (!match) return { amount: null, currency: null };
   const multiplier = match[2] ? 1_000 : 1;

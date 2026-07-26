@@ -22,6 +22,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Require exact main release head
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+          EXPECTED_RELEASE_REF: ${{ github.ref }}
+        run: |
+          [[ "$EXPECTED_RELEASE_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_MAIN_SHA" ]]
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.1
@@ -418,6 +428,13 @@ jobs:
             if (!state.checks?.some(({ product, ok }) => product === "flake" && ok === true)) process.exit(1);
             if (!state.checks?.some(({ product, ok }) => product === "mcpdrift" && ok === true)) process.exit(1);
           ' "$canary_state"
+
+      - name: Reconfirm exact main release head
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
 
       - name: Roll back failed production deployment
         if: ${{ failure() && steps.deploy.outcome != 'skipped' && steps.previous.outputs.version_id != '' }}

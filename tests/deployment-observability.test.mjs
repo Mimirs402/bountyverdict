@@ -32,6 +32,11 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /npx wrangler rollback "\$PREVIOUS_WORKER_VERSION"/);
   assert.match(workflow, /failure\(\) && steps\.deploy\.outcome != 'skipped'/);
   assert.match(workflow, /EXPECTED_MAIN_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /\[\[ "\$EXPECTED_RELEASE_REF" == "refs\/heads\/main" \]\]/);
+  assert.equal(
+    (workflow.match(/git fetch --no-tags origin refs\/heads\/main:refs\/remotes\/origin\/main/g) || []).length,
+    3,
+  );
   assert.match(workflow, /git rev-parse refs\/remotes\/origin\/main\)" == "\$EXPECTED_MAIN_SHA"/);
   assert.doesNotMatch(workflow, /push .*--force/);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import app from "../src/index.ts";
 import {
   parseThe402JobDispatch,
   parseThe402ServiceMap,
@@ -145,4 +146,16 @@ test("the402 result callback cannot redirect or leave the platform API", async (
     status: "failed",
     notes: "failed",
   }), /callback_url/);
+});
+
+test("the402 automation is fail-closed unless explicitly enabled", async () => {
+  for (const env of [{}, { THE402_AUTOMATION_ENABLED: "yes" }]) {
+    const response = await app.request("/api/the402/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }, env);
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "NOT_FOUND" });
+  }
 });

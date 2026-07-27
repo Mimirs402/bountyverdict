@@ -83,6 +83,17 @@ export type McpDirectoryStatus = {
   skillverdict_contamination_risk: boolean;
 };
 
+export type McpRepositoryPageStatus = {
+  listed: boolean;
+  contract_verified: boolean;
+  repository_metadata_verified: boolean;
+  documentation_metadata_verified: boolean;
+  legacy_personal_reference_present: boolean;
+  repository: string;
+  documentation: string;
+  title: string | null;
+};
+
 export type ClineMarketplaceStatus = {
   listed: boolean;
   contract_verified: boolean;
@@ -462,6 +473,80 @@ export function parseDockerMcpHubPage(
       !skillverdictContaminationRisk,
     endpoint: expectedEndpoint,
     skillverdict_contamination_risk: skillverdictContaminationRisk,
+  };
+}
+
+export function parseMcpRepositoryPage(
+  html: unknown,
+  expectedRepository: string,
+  expectedDocumentation: string,
+): McpRepositoryPageStatus {
+  if (typeof html !== "string" || html.length > 1_000_000) {
+    throw new Error("MCPRepository listing page is invalid or unbounded.");
+  }
+  const lines = html.split("\n");
+  if (lines.length > 25_000 || lines.some((line) => line.length > 200_000)) {
+    throw new Error("MCPRepository listing page lines are unbounded.");
+  }
+
+  const parseExpectedUrl = (value: string, label: string): URL => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error(`MCPRepository expected ${label} URL is invalid.`);
+    }
+    if (url.protocol !== "https:" || url.username || url.password || url.hash || url.search) {
+      throw new Error(`MCPRepository expected ${label} URL is invalid.`);
+    }
+    return url;
+  };
+  const expectedRepositoryUrl = parseExpectedUrl(expectedRepository, "repository");
+  const expectedDocumentationUrl = parseExpectedUrl(expectedDocumentation, "documentation");
+  const normalizePath = (pathname: string): string =>
+    (pathname.replace(/\/+$/, "") || "/").toLowerCase();
+  const matchesExpectedLink = (candidate: URL, expected: URL): boolean => {
+    const query = [...candidate.searchParams.entries()];
+    const allowedTrackingQuery = query.length === 0 ||
+      (query.length === 1 && query[0][0] === "ref" && query[0][1] === "mcprepository.com");
+    return candidate.protocol === expected.protocol &&
+      candidate.hostname.toLowerCase() === expected.hostname.toLowerCase() &&
+      normalizePath(candidate.pathname) === normalizePath(expected.pathname) &&
+      allowedTrackingQuery && !candidate.username && !candidate.password && !candidate.hash;
+  };
+
+  const hrefs: URL[] = [];
+  const hrefPattern = /\bhref\s*=\s*(["'])([^"'<>]{1,4096})\1/gi;
+  for (let match = hrefPattern.exec(html); match; match = hrefPattern.exec(html)) {
+    if (hrefs.length >= 10_000) throw new Error("MCPRepository listing page links are unbounded.");
+    try {
+      hrefs.push(new URL(match[2].replaceAll("&amp;", "&"), "https://mcprepository.com"));
+    } catch {
+      // Ignore malformed unrelated links; the exact provenance links still fail closed below.
+    }
+  }
+
+  const titles = [...html.matchAll(/<title[^>]*>([^<]{1,500})<\/title>/gi)]
+    .map((match) => match[1].trim());
+  const title = titles.find((candidate) => /\bBountyVerdict\b/i.test(candidate)) || null;
+  const repositoryMetadataVerified = hrefs.some((href) => matchesExpectedLink(href, expectedRepositoryUrl));
+  const documentationMetadataVerified = hrefs.some((href) => matchesExpectedLink(href, expectedDocumentationUrl));
+  const legacyPersonalReferencePresent = hrefs.some((href) =>
+    href.protocol === "https:" &&
+    href.hostname.toLowerCase() === "github.com" &&
+    normalizePath(href.pathname) === "/cristianmoroaica/bountyverdict"
+  );
+  const listed = title !== null && repositoryMetadataVerified;
+
+  return {
+    listed,
+    contract_verified: listed && documentationMetadataVerified && !legacyPersonalReferencePresent,
+    repository_metadata_verified: repositoryMetadataVerified,
+    documentation_metadata_verified: documentationMetadataVerified,
+    legacy_personal_reference_present: legacyPersonalReferencePresent,
+    repository: expectedRepository,
+    documentation: expectedDocumentation,
+    title,
   };
 }
 

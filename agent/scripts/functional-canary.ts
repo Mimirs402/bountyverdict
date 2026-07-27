@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { CANARY_PRODUCTS, isCanaryProduct, type CanaryProduct } from "../src/canary.ts";
+import { runMcpContractCanary } from "../src/mcp-functional-canary.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const TIMEOUT_MS = 120_000;
@@ -63,13 +64,18 @@ for (const product of products) {
   }
 }
 
+const mcpContract = requestedProduct && requestedProduct !== "all"
+  ? null
+  : await runMcpContractCanary(api, { timeoutMs: TIMEOUT_MS });
 const report = {
   product: "BountyVerdict functional canaries",
   checked_at: new Date().toISOString(),
   production_api: api,
-  healthy: checks.length === products.length && checks.every(({ ok }) => ok === true),
+  healthy: checks.length === products.length && checks.every(({ ok }) => ok === true) &&
+    (mcpContract === null || mcpContract.healthy),
   products_checked: [...products],
   checks,
+  ...(mcpContract === null ? {} : { mcp_contract: mcpContract }),
 };
 
 await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 });

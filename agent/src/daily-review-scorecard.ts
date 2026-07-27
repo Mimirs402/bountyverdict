@@ -1,0 +1,388 @@
+import { createHash } from "node:crypto";
+import {
+  MCP_FUNNEL_STAGES,
+  discoveryBuyerCandidateTotals,
+  loadFunnelSnapshot,
+  mcpBuyerCandidateTotals,
+  type FunnelCounters,
+  type McpFunnelCounters,
+} from "./funnel-telemetry.ts";
+
+export const DAILY_REVIEW_SCORECARD_MAX_BYTES = 10_240;
+export const DAILY_REVIEW_SCORECARD_SCHEMA_VERSION = 1 as const;
+
+export type DailyReviewState = {
+  distribution?: unknown;
+  funnel?: unknown;
+  functional?: unknown;
+  demand?: unknown;
+  acquisitionExperiment?: unknown;
+  taskmarket?: unknown;
+  payan?: unknown;
+  clawlancer?: unknown;
+};
+
+export type DailyReviewScorecard = {
+  schema_version: typeof DAILY_REVIEW_SCORECARD_SCHEMA_VERSION;
+  generated_at: string;
+  healthy: boolean;
+  accounting: {
+    genuine_purchases: number;
+    customer_revenue_usdc: string;
+    tracked_costs_usdc: string;
+    authority: string;
+  };
+  reliability: {
+    monitor_healthy: boolean;
+    monitor_errors: string[];
+    functional_healthy: boolean;
+    rest_products_ok: number;
+    mcp_contract_healthy: boolean;
+    mcp_checks_ok: number;
+    payment_or_signing_attempted: boolean | null;
+  };
+  funnel: {
+    provenance: "raw_funnel_with_owner_exclusions" | "distribution_precomputed_owner_exclusions" | "unavailable";
+    measurement_eligible: boolean | null;
+    learning_stage: string | null;
+    mcp_learning_stage: string | null;
+    discovery: Pick<FunnelCounters, "requests" | "challenges_402" | "signed_requests" | "signed_successes">;
+    mcp: McpFunnelCounters;
+  };
+  experiment: {
+    name: string;
+    status: string | null;
+    decision: string | null;
+    selection_preview: number;
+    payment_required: number;
+    paid_success: number;
+  } | null;
+  acquisition_experiment: {
+    name: string;
+    status: "scheduled" | "running" | "expired_unreviewed" | "terminal";
+  } | null;
+  autonomous_work: {
+    demand_errors: number | null;
+    taskmarket: string | null;
+    payan_records: number | null;
+    clawlancer: string | null;
+  };
+  alerts: string[];
+  material_fingerprint: string;
+};
+
+export type DailyReviewGate = {
+  action: "skip_codex" | "invoke_codex";
+  reason: "healthy_baseline_created" | "healthy_materially_unchanged" | "material_change" | "unhealthy";
+  changed_paths: string[];
+  prompt: string | null;
+};
+
+function object(value: unknown): Record<string, any> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, any>
+    : {};
+}
+
+function safeCount(value: unknown): number {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
+}
+
+function safeMoney(value: unknown): string {
+  if ((typeof value !== "string" && typeof value !== "number") || !Number.isFinite(Number(value))) return "unavailable";
+  return Number(value).toFixed(6).replace(/\.?0+$/, "") || "0";
+}
+
+function safeString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function emptyFunnelCounters(): FunnelCounters {
+  return {
+    requests: 0,
+    challenges_402: 0,
+    signed_requests: 0,
+    signed_successes: 0,
+    unsigned_successes: 0,
+    preflight_rejections: 0,
+    rate_limited: 0,
+    server_errors: 0,
+    other: 0,
+  };
+}
+
+function emptyMcpCounters(): McpFunnelCounters {
+  return Object.fromEntries(
+    ["events", ...MCP_FUNNEL_STAGES].map((key) => [key, 0]),
+  ) as McpFunnelCounters;
+}
+
+function compactMcpCounters(value: unknown): McpFunnelCounters {
+  const source = object(value);
+  const counters = emptyMcpCounters();
+  for (const key of ["events", ...MCP_FUNNEL_STAGES] as const) counters[key] = safeCount(source[key]);
+  return counters;
+}
+
+function compactDiscoveryCounters(value: unknown): FunnelCounters {
+  const source = object(value);
+  return {
+    ...emptyFunnelCounters(),
+    requests: safeCount(source.requests),
+    challenges_402: safeCount(source.challenges_402),
+    signed_requests: safeCount(source.signed_requests),
+    signed_successes: safeCount(source.signed_successes),
+  };
+}
+
+function materialBucket(value: number): number {
+  const thresholds = [0, 1, 10, 25, 100, 500, 1_000, 5_000, 10_000, 50_000];
+  return thresholds.reduce((bucket, threshold) => value >= threshold ? threshold : bucket, 0);
+}
+
+function materialProjection(
+  scorecard: Omit<DailyReviewScorecard, "material_fingerprint"> | DailyReviewScorecard,
+): unknown {
+  const {
+    generated_at: _generatedAt,
+    material_fingerprint: _materialFingerprint,
+    ...stable
+  } = scorecard as DailyReviewScorecard;
+  return {
+    ...stable,
+    funnel: {
+      ...stable.funnel,
+      discovery: {
+        requests: materialBucket(stable.funnel.discovery.requests),
+        challenges_402: stable.funnel.discovery.challenges_402,
+        signed_requests: stable.funnel.discovery.signed_requests,
+        signed_successes: stable.funnel.discovery.signed_successes,
+      },
+      mcp: Object.fromEntries(
+        Object.entries(stable.funnel.mcp).map(([key, value]) => [
+          key,
+          ["payment_required", "payment_present", "paid_success", "paid_error", "selection_preview"].includes(key)
+            ? value
+            : materialBucket(value),
+        ]),
+      ),
+    },
+  };
+}
+
+function fingerprint(value: unknown): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+}
+
+function boundedStrings(value: unknown, maximum = 8): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string").slice(0, maximum)
+    : [];
+}
+
+export function buildDailyReviewScorecard(
+  input: DailyReviewState,
+  generatedAt = new Date().toISOString(),
+): DailyReviewScorecard {
+  if (!Number.isFinite(Date.parse(generatedAt))) throw new Error("Daily review generated_at is invalid.");
+  const distribution = object(input.distribution);
+  const commerce = object(distribution.commerce);
+  const distributionFunnel = object(distribution.funnel);
+  const functional = Object.keys(object(input.functional)).length
+    ? object(input.functional)
+    : object(distribution.functional);
+  const functionalChecks = Array.isArray(functional.checks) ? functional.checks : [];
+  const mcpContract = object(functional.mcp_contract);
+  const mcpChecks = Array.isArray(mcpContract.checks) ? mcpContract.checks : [];
+  const monitorErrors = boundedStrings(distribution.errors);
+
+  const rawFunnel = loadFunnelSnapshot(input.funnel, generatedAt);
+  const funnelProvenance = rawFunnel
+    ? "raw_funnel_with_owner_exclusions" as const
+    : Object.keys(distributionFunnel).length
+      ? "distribution_precomputed_owner_exclusions" as const
+      : "unavailable" as const;
+  const discovery = rawFunnel
+    ? discoveryBuyerCandidateTotals(rawFunnel)
+    : compactDiscoveryCounters(
+      distributionFunnel.trusted_buyer_candidate_discovery ||
+      distributionFunnel.buyer_candidate_discovery,
+    );
+  const mcp = rawFunnel
+    ? mcpBuyerCandidateTotals(rawFunnel)
+    : compactMcpCounters(
+      distributionFunnel.trusted_mcp_buyer_candidate ||
+      distributionFunnel.mcp_buyer_candidate,
+    );
+  const experimentState = object(distributionFunnel.mcp_free_selection_router_experiment);
+  const experimentDelta = object(experimentState.eligible_delta || experimentState.delta);
+  const experiment = Object.keys(experimentState).length ? {
+    name: safeString(experimentState.experiment_id) || "free_selection_router_v1",
+    status: safeString(experimentState.status),
+    decision: safeString(experimentState.decision),
+    selection_preview: safeCount(experimentDelta.selection_preview),
+    payment_required: safeCount(experimentDelta.payment_required),
+    paid_success: safeCount(experimentDelta.paid_success),
+  } : null;
+  const acquisitionExperiment = object(input.acquisitionExperiment);
+  const acquisitionExperimentName = safeString(acquisitionExperiment.name);
+  const acquisitionExperimentStatus = (() => {
+    if (!acquisitionExperimentName) return null;
+    if (acquisitionExperiment.terminal_result !== null && acquisitionExperiment.terminal_result !== undefined) {
+      return "terminal" as const;
+    }
+    const generated = Date.parse(generatedAt);
+    const starts = Date.parse(String(acquisitionExperiment.started_at || ""));
+    const ends = Date.parse(String(acquisitionExperiment.ends_at || ""));
+    if (Number.isFinite(starts) && generated < starts) return "scheduled" as const;
+    if (Number.isFinite(ends) && generated > ends) return "expired_unreviewed" as const;
+    return "running" as const;
+  })();
+  const demand = object(input.demand);
+  const taskmarket = object(input.taskmarket);
+  const payan = object(input.payan);
+  const clawlancer = object(input.clawlancer);
+  const demandErrors = Array.isArray(demand.errors)
+    ? demand.errors.length
+    : typeof demand.errors === "number" ? safeCount(demand.errors) : null;
+
+  const monitorHealthy = distribution.healthy === true;
+  const functionalHealthy = functional.healthy === true;
+  const mcpContractHealthy = mcpContract.healthy === true &&
+    mcpContract.payment_or_signing_attempted === false;
+  const alerts: string[] = [];
+  if (!monitorHealthy) alerts.push("distribution_monitor_unhealthy_or_missing");
+  if (monitorErrors.length) alerts.push("distribution_monitor_errors");
+  if (!functionalHealthy) alerts.push("functional_canary_unhealthy_or_missing");
+  if (!mcpContractHealthy) alerts.push("unsigned_mcp_contract_canary_unhealthy_or_missing");
+  if (funnelProvenance === "unavailable") alerts.push("buyer_funnel_unavailable");
+  if (demandErrors !== null && demandErrors > 0) alerts.push("demand_watch_errors");
+
+  const withoutFingerprint: Omit<DailyReviewScorecard, "material_fingerprint"> = {
+    schema_version: DAILY_REVIEW_SCORECARD_SCHEMA_VERSION,
+    generated_at: generatedAt,
+    healthy: alerts.length === 0,
+    accounting: {
+      genuine_purchases: safeCount(commerce.genuine_purchases),
+      customer_revenue_usdc: safeMoney(commerce.customer_revenue_usdc),
+      tracked_costs_usdc: safeMoney(commerce.tracked_costs_usdc),
+      authority: "distribution commerce from verified non-owner settlement only; telemetry is never revenue",
+    },
+    reliability: {
+      monitor_healthy: monitorHealthy,
+      monitor_errors: monitorErrors,
+      functional_healthy: functionalHealthy,
+      rest_products_ok: functionalChecks.filter((check) => object(check).ok === true).length,
+      mcp_contract_healthy: mcpContractHealthy,
+      mcp_checks_ok: mcpChecks.filter((check) => object(check).ok === true).length,
+      payment_or_signing_attempted: typeof mcpContract.payment_or_signing_attempted === "boolean"
+        ? mcpContract.payment_or_signing_attempted
+        : null,
+    },
+    funnel: {
+      provenance: funnelProvenance,
+      measurement_eligible: typeof distributionFunnel.trusted_measurement_eligible === "boolean"
+        ? distributionFunnel.trusted_measurement_eligible
+        : null,
+      learning_stage: safeString(distributionFunnel.trusted_learning_stage || distributionFunnel.learning_stage),
+      mcp_learning_stage: safeString(
+        distributionFunnel.trusted_mcp_learning_stage || distributionFunnel.mcp_learning_stage,
+      ),
+      discovery: {
+        requests: discovery.requests,
+        challenges_402: discovery.challenges_402,
+        signed_requests: discovery.signed_requests,
+        signed_successes: discovery.signed_successes,
+      },
+      mcp,
+    },
+    experiment,
+    acquisition_experiment: acquisitionExperimentName && acquisitionExperimentStatus ? {
+      name: acquisitionExperimentName,
+      status: acquisitionExperimentStatus,
+    } : null,
+    autonomous_work: {
+      demand_errors: demandErrors,
+      taskmarket: safeString(taskmarket.pitch_status || taskmarket.task_status || taskmarket.state),
+      payan_records: Array.isArray(payan.records) ? payan.records.length : null,
+      clawlancer: safeString(clawlancer.status),
+    },
+    alerts,
+  };
+  const scorecard: DailyReviewScorecard = {
+    ...withoutFingerprint,
+    material_fingerprint: fingerprint(materialProjection(withoutFingerprint)),
+  };
+  const bytes = Buffer.byteLength(JSON.stringify(scorecard));
+  if (bytes > DAILY_REVIEW_SCORECARD_MAX_BYTES) {
+    throw new Error(`Daily review scorecard exceeds ${DAILY_REVIEW_SCORECARD_MAX_BYTES} bytes (${bytes}).`);
+  }
+  return scorecard;
+}
+
+function changedPaths(left: unknown, right: unknown, prefix = "", found: string[] = []): string[] {
+  if (found.length >= 16 || Object.is(left, right)) return found;
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object" ||
+    Array.isArray(left) || Array.isArray(right)) {
+    found.push(prefix || "$");
+    return found;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(leftRecord), ...Object.keys(rightRecord)])].sort();
+  for (const key of keys) {
+    changedPaths(leftRecord[key], rightRecord[key], prefix ? `${prefix}.${key}` : key, found);
+    if (found.length >= 16) break;
+  }
+  return found;
+}
+
+export function buildDailyReviewGate(
+  scorecard: DailyReviewScorecard,
+  previous: DailyReviewScorecard | null,
+): DailyReviewGate {
+  if (!scorecard.healthy) {
+    const changes = previous
+      ? changedPaths(materialProjection(previous), materialProjection(scorecard))
+      : [];
+    return {
+      action: "invoke_codex",
+      reason: "unhealthy",
+      changed_paths: changes,
+      prompt: compactReviewPrompt(scorecard, changes),
+    };
+  }
+  if (!previous) {
+    return {
+      action: "skip_codex",
+      reason: "healthy_baseline_created",
+      changed_paths: [],
+      prompt: null,
+    };
+  }
+  if (previous.material_fingerprint === scorecard.material_fingerprint) {
+    return {
+      action: "skip_codex",
+      reason: "healthy_materially_unchanged",
+      changed_paths: [],
+      prompt: null,
+    };
+  }
+  const changes = changedPaths(materialProjection(previous), materialProjection(scorecard));
+  return {
+    action: "invoke_codex",
+    reason: "material_change",
+    changed_paths: changes,
+    prompt: compactReviewPrompt(scorecard, changes),
+  };
+}
+
+function compactReviewPrompt(scorecard: DailyReviewScorecard, changes: string[]): string {
+  return [
+    "Review only this compact BountyVerdict alert/delta scorecard; do not scan the repository or other state.",
+    `Material paths: ${changes.length ? changes.join(", ") : "health alerts only"}.`,
+    "Return exactly one evidence-backed reliability, conversion, product, or autonomous-work recommendation using the required JSON schema.",
+    "Set actionable=true only for a high-confidence critical/high local change. Do not recommend a listing, price, positioning, or production change that contaminates a running experiment. Never browse, contact, bid, buy, sign, spend, deploy, push, merge, or count telemetry as revenue.",
+    JSON.stringify(scorecard),
+  ].join("\n");
+}

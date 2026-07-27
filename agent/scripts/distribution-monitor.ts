@@ -1838,6 +1838,7 @@ async function functionalStatus(): Promise<Record<string, unknown>> {
     production_api?: unknown;
     products_checked?: unknown;
     checks?: unknown;
+    mcp_contract?: unknown;
   };
   if (typeof state.checked_at !== "string" || !Number.isFinite(Date.parse(state.checked_at))) {
     throw new Error("Functional canary state has no valid checked_at timestamp.");
@@ -1870,12 +1871,31 @@ async function functionalStatus(): Promise<Record<string, unknown>> {
   if (new Set(checkProducts).size !== EXPECTED_PRODUCTS.length) {
     throw new Error("Functional canary state contains duplicate or unexpected checks.");
   }
+  const mcpContract = state.mcp_contract as Record<string, unknown> | null;
+  if (!mcpContract || mcpContract.healthy !== true ||
+    mcpContract.endpoint !== `${api}/mcp` || mcpContract.payment_or_signing_attempted !== false) {
+    throw new Error("Functional canary state does not prove the unsigned MCP contract.");
+  }
+  const mcpChecks = Array.isArray(mcpContract.checks)
+    ? mcpContract.checks as Array<Record<string, unknown>>
+    : [];
+  const expectedMcpKinds = ["free_selector", "unsigned_paid_handoff_v2"];
+  for (const kind of expectedMcpKinds) {
+    const matching = mcpChecks.filter((check) => check.kind === kind);
+    if (matching.length !== 1 || matching[0].ok !== true || matching[0].contract !== "1.0") {
+      throw new Error(`Functional canary state must contain one successful ${kind} MCP check.`);
+    }
+  }
+  if (mcpChecks.length !== expectedMcpKinds.length) {
+    throw new Error("Functional canary state contains duplicate or unexpected MCP checks.");
+  }
   return {
     healthy: true,
     checked_at: state.checked_at,
     age_seconds: Math.round(ageMs / 1000),
     products_checked: checked,
     checks,
+    mcp_contract: mcpContract,
   };
 }
 

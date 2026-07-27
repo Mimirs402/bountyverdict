@@ -31,5 +31,4 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 UMask=0077

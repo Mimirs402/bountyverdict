@@ -18,6 +18,7 @@ ProtectHome=read-only
 ReadWritePaths=%h/Projects/sandbox/bountyverdict
 ReadWritePaths=%h/.local/state/bountyverdict
 ReadWritePaths=%h/.config/bountyverdict
+ReadWritePaths=%h/.config/systemd/user/bountyverdict-distribution-monitor.service.d
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes

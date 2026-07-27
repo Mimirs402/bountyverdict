@@ -1031,6 +1031,7 @@ test("post-boundary release execution stays review-bound, exact-head, and retry-
   assert.match(service, /ProtectSystem=strict/);
   assert.match(service, /ProtectHome=read-only/);
   assert.match(service, /ReadWritePaths=%h\/Projects\/sandbox\/bountyverdict/);
+  assert.match(service, /ReadWritePaths=%h\/\.config\/systemd\/user\/bountyverdict-distribution-monitor\.service\.d/);
   assert.match(service, /CapabilityBoundingSet=\n/);
   assert.match(service, /RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/);
   assert.match(timer, /OnCalendar=2026-07-27 19:42:00 Europe\/Bucharest/);
@@ -1046,7 +1047,15 @@ test("post-boundary release execution stays review-bound, exact-head, and retry-
   assert.match(script, /FREE_SELECTION_ROUTER_DRAIN_ROTATION_ID: POST_BOUNDARY_DRAIN_ID/);
   assert.match(script, /activationResult\.measurement_epoch_id !== 57/);
   assert.match(script, /"merge", "--ff-only", "refs\/remotes\/origin\/main"/);
+  assert.match(script, /writeDistributionMonitorDropIn/);
+  assert.match(script, /\["--user", "daemon-reload"\]/);
+  assert.match(script, /\["--user", "start", distributionMonitorService\]/);
+  assert.match(script, /validateDistributionMonitorHandoff/);
+  assert.ok(script.lastIndexOf("Canonical main did not fast-forward") <
+    script.lastIndexOf("handoffDistributionMonitor("));
   assert.match(source, /POST_BOUNDARY_PULL_REQUEST = 11/);
+  assert.match(source, /bountyverdict\/agent/);
+  assert.match(source, /mcp_free_selection_router_experiment/);
   assert.match(source, /More than one \$\{expected\.workflowName\} run exists/);
   assert.match(source, /github-actions\[bot\]/);
   assert.match(source, /agent-manifest\.json/);

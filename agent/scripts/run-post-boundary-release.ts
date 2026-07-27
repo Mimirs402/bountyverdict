@@ -1,15 +1,21 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 import { readPrivateJson } from "../src/agent-question-v6-activation.ts";
 import { acquireExclusiveRun } from "../src/exclusive-run.ts";
 import {
   POST_BOUNDARY_PULL_REQUEST,
   POST_BOUNDARY_REPOSITORY,
+  DISTRIBUTION_MONITOR_WORKING_DIRECTORY,
   exactWorkflowRun,
   selectExactWorkflowRun,
   validateActivatedManifest,
   validateActivationCommit,
+  validateDistributionMonitorHandoff,
   validateMergedReleasePullRequest,
   validateOpenReleasePullRequest,
   type ExactWorkflowRun,
@@ -32,6 +38,13 @@ const stateDirectory = `${homedir()}/.local/state/bountyverdict`;
 const lockPath = `${stateDirectory}/post-boundary-release.lock`;
 const freeRouterActivationPath =
   `${homedir()}/.config/bountyverdict/free-selection-router-v1.activation.json`;
+const distributionMonitorDropInPath =
+  `${homedir()}/.config/systemd/user/bountyverdict-distribution-monitor.service.d/50-current-monitor.conf`;
+const distributionMonitorReportPath =
+  `${homedir()}/.local/state/bountyverdict/distribution-status.json`;
+const distributionMonitorService = "bountyverdict-distribution-monitor.service";
+const distributionMonitorDropIn =
+  "[Service]\nWorkingDirectory=%h/Projects/sandbox/bountyverdict/agent\n";
 const runFields = "workflowName,status,conclusion,event,headBranch,headSha,databaseId,url,createdAt,updatedAt";
 const pullFields = "number,state,baseRefName,baseRefOid,headRefName,headRefOid,mergeStateStatus,statusCheckRollup,mergedAt,mergeCommit";
 
@@ -187,6 +200,68 @@ async function exactFreeRouterActivation(
   return activation;
 }
 
+async function writeDistributionMonitorDropIn(): Promise<void> {
+  const parentPath = dirname(distributionMonitorDropInPath);
+  await mkdir(parentPath, { recursive: true, mode: 0o755 });
+  const parent = await lstat(parentPath);
+  const expectedUid = process.getuid?.() ?? -1;
+  if (expectedUid < 0 || !parent.isDirectory() || parent.isSymbolicLink() ||
+      parent.uid !== expectedUid) {
+    throw new Error("Distribution monitor drop-in parent is not a trusted owner directory.");
+  }
+  try {
+    if (await readFile(distributionMonitorDropInPath, "utf8") === distributionMonitorDropIn) return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const temporary = `${distributionMonitorDropInPath}.${process.pid}.${randomUUID()}.tmp`;
+  const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+  try {
+    await handle.writeFile(distributionMonitorDropIn);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(temporary, distributionMonitorDropInPath);
+}
+
+async function handoffDistributionMonitor(
+  releaseCommit: string,
+  activationCommit: string,
+  productionActivatedAt: string,
+) {
+  await writeDistributionMonitorDropIn();
+  await run("systemctl", ["--user", "daemon-reload"]);
+  const [workingDirectory, needDaemonReload] = await Promise.all([
+    run("systemctl", [
+      "--user", "show", distributionMonitorService,
+      "--property=WorkingDirectory", "--value",
+    ]),
+    run("systemctl", [
+      "--user", "show", distributionMonitorService,
+      "--property=NeedDaemonReload", "--value",
+    ]),
+  ]);
+  if (workingDirectory !== DISTRIBUTION_MONITOR_WORKING_DIRECTORY || needDaemonReload !== "no") {
+    throw new Error("Distribution monitor did not load the canonical released worktree.");
+  }
+  const notBefore = new Date().toISOString();
+  await run("systemctl", ["--user", "start", distributionMonitorService],
+    RELEASE_CANDIDATE_WORKTREE, 5 * 60_000);
+  const report = await readPrivateJson(distributionMonitorReportPath, 2 * 1024 * 1024);
+  if (!report) throw new Error("Post-release distribution monitor report is missing.");
+  return validateDistributionMonitorHandoff({
+    working_directory: workingDirectory,
+    need_daemon_reload: needDaemonReload,
+    report,
+  }, {
+    releaseCommit,
+    productionActivationCommit: activationCommit,
+    productionActivatedAt,
+    notBefore,
+  });
+}
+
 async function main() {
   const releaseLock = await acquireExclusiveRun(lockPath, { staleAfterMs: 35 * 60_000 });
   try {
@@ -223,12 +298,18 @@ async function main() {
         manifest.activatedAt,
       );
       const evidence = await releaseWorkflowEvidence(releaseMergeCommit, activationCommit);
+      const monitor = await handoffDistributionMonitor(
+        releaseMergeCommit,
+        activationCommit,
+        manifest.activatedAt,
+      );
       return {
         status: "already_released",
         release_candidate_commit: releaseCommit,
         release_merge_commit: releaseMergeCommit,
         production_activation_commit: activationCommit,
         measurement_epoch_id: 57,
+        distribution_monitor_checkpoint: monitor,
         deployment_run: evidence.deployment.url,
         registry_run: evidence.registry.url,
       };
@@ -335,12 +416,18 @@ async function main() {
     if (await git(SNAPSHOT_SOURCE_WORKTREE, "rev-parse", "HEAD") !== activationCommit) {
       throw new Error("Canonical main did not fast-forward to the production activation.");
     }
+    const monitor = await handoffDistributionMonitor(
+      releaseMergeCommit,
+      activationCommit,
+      manifest.activatedAt,
+    );
     return {
       status: "released",
       release_candidate_commit: releaseCommit,
       release_merge_commit: releaseMergeCommit,
       production_activation_commit: activationCommit,
       measurement_epoch_id: 57,
+      distribution_monitor_checkpoint: monitor,
       deployment_run: deployment.url,
       registry_run: registry.url,
     };

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   POST_BOUNDARY_PULL_REQUEST,
+  DISTRIBUTION_MONITOR_WORKING_DIRECTORY,
   exactWorkflowRun,
   selectExactWorkflowRun,
   validateActivatedManifest,
   validateActivationCommit,
+  validateDistributionMonitorHandoff,
   validateMergedReleasePullRequest,
   validateOpenReleasePullRequest,
 } from "../src/post-boundary-release.ts";
@@ -120,4 +122,68 @@ test("accepts only the exact active production manifest and canonical activation
     ...manifest,
     updated_at: "2026-07-27T17:00:00Z",
   }), /not canonical/);
+});
+
+test("requires the live monitor to checkpoint the exact clean epoch-57 experiment", () => {
+  const coordinates = {
+    releaseCommit: merge,
+    productionActivationCommit: activation,
+    productionActivatedAt: "2026-07-27T17:00:00.000Z",
+    notBefore: "2026-07-27T17:01:00.000Z",
+  };
+  const handoff = {
+    working_directory: DISTRIBUTION_MONITOR_WORKING_DIRECTORY,
+    need_daemon_reload: "no",
+    report: {
+      checked_at: "2026-07-27T17:01:01.000Z",
+      mode: "report_only_without_semantic_retrieval",
+      funnel: {
+        mcp_free_selection_router_experiment: {
+          id: "mcp-free-selection-router-v1",
+          status: "running_clean_epoch",
+          activation_verified: true,
+          measurement_epoch_id: 57,
+          activation: {
+            release_commit: merge,
+            production_activation_commit: activation,
+            production_activated_at: coordinates.productionActivatedAt,
+            measurement_epoch_id: 57,
+          },
+        },
+      },
+    },
+  };
+  assert.deepEqual(validateDistributionMonitorHandoff(handoff, coordinates), {
+    checkedAt: handoff.report.checked_at,
+    status: "running_clean_epoch",
+    measurementEpochId: 57,
+  });
+  for (const brokenExperiment of [
+    { status: "awaiting_activation_coordinates" },
+    { activation_verified: false },
+    { measurement_epoch_id: 56 },
+    { activation: { ...handoff.report.funnel.mcp_free_selection_router_experiment.activation,
+      release_commit: "d".repeat(40) } },
+  ]) {
+    assert.throws(() => validateDistributionMonitorHandoff({
+      ...handoff,
+      report: {
+        ...handoff.report,
+        funnel: {
+          mcp_free_selection_router_experiment: {
+            ...handoff.report.funnel.mcp_free_selection_router_experiment,
+            ...brokenExperiment,
+          },
+        },
+      },
+    }, coordinates), /exact epoch-57/);
+  }
+  assert.throws(() => validateDistributionMonitorHandoff({
+    ...handoff,
+    working_directory: "/home/mcr/Projects/sandbox/bountyverdict-monitor-current/agent",
+  }, coordinates), /canonical released worktree/);
+  assert.throws(() => validateDistributionMonitorHandoff({
+    ...handoff,
+    report: { ...handoff.report, checked_at: "2026-07-27T17:00:59.999Z" },
+  }, coordinates), /stale or not report-only/);
 });

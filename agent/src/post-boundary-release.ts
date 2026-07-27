@@ -1,7 +1,10 @@
 import { RELEASE_CANDIDATE_BRANCH, SNAPSHOT_SOURCE_COMMIT } from "./post-boundary-release-gate.ts";
+import { FREE_SELECTION_ROUTER_EXPERIMENT_ID } from "./task-leading-description-experiment.ts";
 
 export const POST_BOUNDARY_REPOSITORY = "Mimirs402/bountyverdict";
 export const POST_BOUNDARY_PULL_REQUEST = 11;
+export const DISTRIBUTION_MONITOR_WORKING_DIRECTORY =
+  "/home/mcr/Projects/sandbox/bountyverdict/agent";
 
 type WorkflowExpectation = {
   workflowName: string;
@@ -148,4 +151,56 @@ export function validateActivatedManifest(value: unknown): string {
     throw new Error("Activated agent manifest updated_at is not canonical.");
   }
   return updatedAt;
+}
+
+export function validateDistributionMonitorHandoff(
+  value: unknown,
+  coordinates: {
+    releaseCommit: string;
+    productionActivationCommit: string;
+    productionActivatedAt: string;
+    notBefore: string;
+  },
+): {
+  checkedAt: string;
+  status: string;
+  measurementEpochId: number;
+} {
+  const handoff = record(value, "Distribution monitor handoff");
+  if (handoff.working_directory !== DISTRIBUTION_MONITOR_WORKING_DIRECTORY ||
+      handoff.need_daemon_reload !== "no") {
+    throw new Error("Distribution monitor did not load the canonical released worktree.");
+  }
+  const report = record(handoff.report, "Distribution monitor report");
+  const checkedAt = timestamp(report.checked_at, "Distribution monitor checked_at");
+  const notBefore = timestamp(coordinates.notBefore, "Distribution monitor handoff boundary");
+  if (new Date(checkedAt).toISOString() !== checkedAt ||
+      new Date(notBefore).toISOString() !== notBefore ||
+      Date.parse(checkedAt) < Date.parse(notBefore) ||
+      report.mode !== "report_only_without_semantic_retrieval") {
+    throw new Error("Distribution monitor report is stale or not report-only.");
+  }
+  const funnel = record(report.funnel, "Distribution monitor funnel");
+  const experiment = record(
+    funnel.mcp_free_selection_router_experiment,
+    "Free selection router experiment",
+  );
+  const activation = record(experiment.activation, "Free selection router activation");
+  if (experiment.id !== FREE_SELECTION_ROUTER_EXPERIMENT_ID ||
+      experiment.activation_verified !== true ||
+      experiment.measurement_epoch_id !== 57 ||
+      (experiment.status !== "running_clean_epoch" && experiment.status !== "completed") ||
+      activation.release_commit !== commit(coordinates.releaseCommit, "Release commit") ||
+      activation.production_activation_commit !==
+        commit(coordinates.productionActivationCommit, "Production activation commit") ||
+      activation.production_activated_at !==
+        timestamp(coordinates.productionActivatedAt, "Production activated_at") ||
+      activation.measurement_epoch_id !== 57) {
+    throw new Error("Distribution monitor did not checkpoint the exact epoch-57 free router experiment.");
+  }
+  return {
+    checkedAt,
+    status: experiment.status,
+    measurementEpochId: 57,
+  };
 }

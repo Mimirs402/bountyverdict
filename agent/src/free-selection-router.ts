@@ -136,13 +136,15 @@ export function freeSelectionRoute(request: FreeSelectionRequest, origin: string
     not_for: preview.notFor,
     decision_returned: [...preview.decisionReturned],
     free_sample: `${origin}${preview.samplePath}`,
-    payment_required: false as const,
+    selector_call_payment_required: false as const,
     next_call: {
       tool_name: route.toolName,
       call_strategy: route.callStrategy,
       required_fields: [...route.requiredFields],
       arguments_template: argumentsTemplate(route, request),
-      unsigned_result: "x402_quote_is_error_continue" as const,
+      payment_required: true as const,
+      authorization_required_before_settlement: true as const,
+      unsigned_call_action: "inspect_quote_then_authorize_or_stop" as const,
       preserve_arguments_on_retry: true as const,
     },
   };

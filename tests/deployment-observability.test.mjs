@@ -23,8 +23,13 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /payment\?\.agentic_wallet\?\.execute_as_argument_vector !== true/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.tool_name !== "diagnose_github_actions_run"/);
   assert.match(workflow, /freeRoute\?\.total_price_usdc !== "0\.04"/);
-  assert.match(workflow, /freeRoute\?\.next_call\?\.unsigned_result !== "x402_quote_is_error_continue"/);
+  assert.match(workflow, /freeRoute\?\.selector_call_payment_required !== false/);
+  assert.match(workflow, /freeRoute\?\.next_call\?\.payment_required !== true/);
+  assert.match(workflow, /freeRoute\?\.next_call\?\.authorization_required_before_settlement !== true/);
+  assert.match(workflow, /freeRoute\?\.next_call\?\.unsigned_call_action !== "inspect_quote_then_authorize_or_stop"/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.preserve_arguments_on_retry !== true/);
+  assert.match(workflow, /called\.result\?\.content\?\.length !== 2/);
+  assert.match(workflow, /\/\^PAYMENT REQUIRED:\//);
   assert.match(workflow, /economicalRoute\?\.next_call\?\.call_strategy !== "repeat_for_each_issue".*economicalRoute\?\.total_price_usdc !== "0\.35"/);
   assert.match(workflow, /rankedRoute\?\.next_call\?\.call_strategy !== "single_call".*rankedRoute\?\.total_price_usdc !== "0\.40"/);
   assert.match(canary, /"User-Agent": "bountyverdict-owner-audit\/1\.0"/);

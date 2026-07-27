@@ -106,7 +106,7 @@ const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real can
 
 const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   check_github_bounty: "Is this public GitHub issue bounty still claimable, or is someone already working on it? Checks current status, reward evidence, competing work, and maintainer signals; returns AVOID, CAUTION, or VIABLE. For 2-7 issues, repeated single checks cost less unless one ranked response is worth the premium; use rank_github_bounties for 8-10.",
-  rank_github_bounties: "Which public GitHub bounty should I work on next? Compares 2-10 issue URLs, chooses the strongest non-AVOID candidate or recommends none, and returns cited evidence plus partial failures. It is unit-price economical for 8-10; repeated check_github_bounty calls cost less for 2-7 when ranked orchestration is unnecessary.",
+  rank_github_bounties: "Which public GitHub bounty should I work on next? Compares 2-10 issue URLs, chooses the strongest non-AVOID candidate or recommends none, and returns cited evidence plus partial failures. Its $0.40 price equals eight $0.05 single checks and is cheaper per candidate at 9-10; repeated check_github_bounty calls cost less for 2-7 when ranked orchestration is unnecessary.",
   audit_agent_harness: "Can a coding agent safely work in this public repository without missing project instructions? Audits AGENTS.md, CLAUDE.md, and related instructions at an immutable commit; does not diagnose CI.",
   diagnose_github_actions_run: "Why did this public GitHub Actions run fail, and what should I fix? Uses bounded failed-job logs and redacted evidence. Use classify_github_actions_flake only for retry-once versus fix.",
   classify_github_actions_flake: "Is this failed GitHub Actions run flaky—should I retry it once or fix the code? Uses the current attempt and bounded history. Use diagnose_github_actions_run for root cause.",
@@ -210,6 +210,28 @@ function omitStructuredContentFromError(result: ToolResult): ToolResult {
   // x402 requires the identical JSON text fallback, so keep that and omit only this field.
   const { structuredContent: _structuredContent, ...compatible } = result;
   return compatible;
+}
+
+function appendPlainPaymentInstruction(result: ToolResult): ToolResult {
+  if (!result.isError || !Array.isArray(result.content) || result.content.length === 0) return result;
+  const first = result.content[0];
+  if (first.type !== "text" || typeof first.text !== "string") return result;
+  try {
+    const challenge = JSON.parse(first.text) as Record<string, unknown>;
+    if (challenge.x402Version !== 2 || !Array.isArray(challenge.accepts)) return result;
+  } catch {
+    return result;
+  }
+  return {
+    ...result,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: "PAYMENT REQUIRED: No successful settlement is reported by this response. Read content[0] as the x402 v2 requirement. Continue only with explicit authorization, preserve the exact arguments and declared maximum, and use @x402/mcp or the declared HTTP wallet handoff; otherwise stop.",
+      },
+    ],
+  };
 }
 
 export function classifyMcpClientFamily(value: unknown, ownerAutomation = false): McpClientFamily {
@@ -324,7 +346,7 @@ async function paidCall(
       const settled = Boolean(result._meta?.["x402/payment-response"]);
       emitMcpEvent(settled && !result.isError ? "paid_success" : "paid_error", product, request);
     }
-    return omitStructuredContentFromError(result);
+    return appendPlainPaymentInstruction(omitStructuredContentFromError(result));
   } catch (error) {
     if (paymentPresent) emitMcpEvent("paid_error", product, request);
     throw error;
@@ -354,7 +376,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     description: "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
     websiteUrl: "https://mimirs402.github.io/bountyverdict/",
   }, {
-    instructions: `Unsure which tool fits? Call ${FREE_SELECTION_TOOL_NAME} first; it is free and returns the exact paid tool, price, sample, and required input without producing a verdict. Choose directly by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. The six decision tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful paid call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
+    instructions: `Unsure which tool fits? Call ${FREE_SELECTION_TOOL_NAME} first; it is free and returns the exact paid tool, price, sample, and required input without producing a verdict. Choose directly by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; at 8 candidates its $0.40 price equals eight single checks, while 9-10 are cheaper per candidate; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. The six decision tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful paid call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
   });
   const githubAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const closedWorldAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };

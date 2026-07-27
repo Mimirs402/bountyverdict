@@ -390,9 +390,10 @@ jobs:
           const freeCalled = await freeResponse.json();
           const freeRoute = freeCalled.result?.structuredContent;
           if (freeCalled.result?.isError || freeRoute?.next_call?.tool_name !== "diagnose_github_actions_run") process.exit(1);
-          if (freeRoute?.payment_required !== false || "verdict" in freeRoute) process.exit(1);
+          if (freeRoute?.selector_call_payment_required !== false || "verdict" in freeRoute) process.exit(1);
           if (freeRoute?.total_price_usdc !== "0.04" || JSON.stringify(freeRoute?.next_call?.required_fields) !== JSON.stringify(["run_url"])) process.exit(1);
-          if (freeRoute?.next_call?.unsigned_result !== "x402_quote_is_error_continue" || freeRoute?.next_call?.preserve_arguments_on_retry !== true) process.exit(1);
+          if (freeRoute?.next_call?.payment_required !== true || freeRoute?.next_call?.authorization_required_before_settlement !== true) process.exit(1);
+          if (freeRoute?.next_call?.unsigned_call_action !== "inspect_quote_then_authorize_or_stop" || freeRoute?.next_call?.preserve_arguments_on_retry !== true) process.exit(1);
           const freeText = JSON.parse(freeCalled.result?.content?.[0]?.text || "null");
           if (JSON.stringify(freeText) !== JSON.stringify(freeRoute) || freeText?.accepts !== undefined) process.exit(1);
           const economicalPortfolio = await rpc(23, "tools/call", {
@@ -422,6 +423,8 @@ jobs:
             const called = await rpc(3, "tools/call", { name, arguments: args });
             const challenge = JSON.parse(called.result?.content?.[0]?.text || "null");
             if (!called.result?.isError || called.result?.structuredContent !== undefined) process.exit(1);
+            if (called.result?.content?.length !== 2 || !/^PAYMENT REQUIRED:/.test(called.result?.content?.[1]?.text || "")) process.exit(1);
+            if (!/explicit authorization/.test(called.result.content[1].text) || !/otherwise stop/.test(called.result.content[1].text)) process.exit(1);
             if (challenge?.accepts?.[0]?.amount !== amount || challenge?.accepts?.[0]?.network !== "eip155:8453") process.exit(1);
             if (challenge?.resource?.url !== `mcp://tool/${name}` || challenge?.extensions?.bazaar?.info?.input?.toolName !== name) process.exit(1);
             const handoff = challenge?.extensions?.[handoffKey]?.info;

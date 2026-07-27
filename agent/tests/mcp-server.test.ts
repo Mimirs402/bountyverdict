@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { x402Client } from "@x402/core/client";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { x402MCPClient } from "@x402/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { privateKeyToAccount } from "viem/accounts";
 import app from "../src/index.ts";
 import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME } from "../src/free-selection-router.ts";
 import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES, MCP_PAID_TOOL_NAMES } from "../src/mcp-server.ts";
@@ -188,12 +190,14 @@ test("free router maps every bounded task without payment, network access, or a 
       assert.equal(route.product, PRODUCT_SELECTION_PREVIEWS[productKey].product);
       assert.equal(route.total_price_usdc, price);
       assert.equal(route.free_sample, `${origin}${samplePath}`);
-      assert.equal(route.payment_required, false);
+      assert.equal(route.selector_call_payment_required, false);
       assert.equal(route.next_call.tool_name, toolName);
       assert.equal(route.next_call.call_strategy, "single_call");
       assert.deepEqual(route.next_call.required_fields, requiredFields);
       assert.deepEqual(Object.keys(route.next_call.arguments_template), requiredFields);
-      assert.equal(route.next_call.unsigned_result, "x402_quote_is_error_continue");
+      assert.equal(route.next_call.payment_required, true);
+      assert.equal(route.next_call.authorization_required_before_settlement, true);
+      assert.equal(route.next_call.unsigned_call_action, "inspect_quote_then_authorize_or_stop");
       assert.equal(route.next_call.preserve_arguments_on_retry, true);
       assert.doesNotMatch(JSON.stringify(body), /"accepts"|x402Version|payment-response/);
 
@@ -340,7 +344,7 @@ test("MCP success contracts stay within the catalog context budget", async () =>
     bytes: Buffer.byteLength(JSON.stringify(tool.outputSchema)),
   }));
   for (const { name, bytes } of sizes) assert.ok(bytes <= 2_048, `${name} output schema is ${bytes} bytes`);
-  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_000);
+  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_288);
 });
 
 test("MCP rejects invalid semantic input before producing payment requirements", async () => {
@@ -503,6 +507,10 @@ for (const [name, args, amount] of challengeCases) {
     const body = await rpcBody(10, "tools/call", { name, arguments: args });
     assert.equal(body.result.isError, true);
     assert.equal(body.result.structuredContent, undefined);
+    assert.equal(body.result.content.length, 2);
+    assert.match(body.result.content[1].text, /^PAYMENT REQUIRED:/);
+    assert.match(body.result.content[1].text, /explicit authorization/);
+    assert.match(body.result.content[1].text, /otherwise stop/);
     const challenge = JSON.parse(body.result.content[0].text);
     assert.equal(challenge.x402Version, 2);
     assert.equal(challenge.resource.url, `mcp://tool/${name}`);
@@ -656,6 +664,13 @@ test("official MCP and x402 clients can read an unpaid challenge after output di
     assert.equal(tools.tools.every((tool) => tool.outputSchema?.type === "object"), true);
 
     const paidClient = new x402MCPClient(client, new x402Client(), { autoPayment: false });
+    const plain = await client.callTool({
+      name: "check_github_bounty",
+      arguments: { issue_url: "https://github.com/owner/repo/issues/1" },
+    });
+    assert.equal(plain.isError, true);
+    assert.equal(plain.content.length, 2);
+    assert.match((plain.content[1] as { text: string }).text, /use @x402\/mcp or the declared HTTP wallet handoff/);
     const challenge = await paidClient.getToolPaymentRequirements("check_github_bounty", {
       issue_url: "https://github.com/owner/repo/issues/1",
     });
@@ -667,6 +682,88 @@ test("official MCP and x402 clients can read an unpaid challenge after output di
     );
   } finally {
     await client.close();
+  }
+});
+
+test("selector to signed x402 MCP retry settles and returns a typed verdict hermetically", async () => {
+  const originalFetch = globalThis.fetch;
+  const facilitatorCalls: string[] = [];
+  const payer = privateKeyToAccount(
+    `0x${"11".repeat(32)}`,
+  );
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url !== "https://facilitator.invalid/verify" && url !== "https://facilitator.invalid/settle") {
+      throw new Error(`Unexpected hermetic network request: ${url}`);
+    }
+    const body = JSON.parse(String(init?.body)) as any;
+    assert.equal(init?.method, "POST");
+    assert.equal(body.x402Version, 2);
+    assert.equal(body.paymentRequirements.amount, "20000");
+    assert.equal(body.paymentRequirements.network, "eip155:84532");
+    assert.equal(body.paymentRequirements.payTo, payTo);
+    assert.equal(body.paymentPayload.accepted.amount, "20000");
+    assert.equal(body.paymentPayload.accepted.payTo, payTo);
+    assert.equal(body.paymentPayload.payload.authorization.from.toLowerCase(), payer.address.toLowerCase());
+    assert.equal(body.paymentPayload.payload.authorization.to, payTo);
+    assert.equal(body.paymentPayload.payload.authorization.value, "20000");
+    assert.match(body.paymentPayload.payload.signature, /^0x[a-f0-9]{130}$/);
+    facilitatorCalls.push(new URL(url).pathname);
+    if (url.endsWith("/verify")) {
+      return Response.json({ isValid: true, payer: payer.address });
+    }
+    return Response.json({
+      success: true,
+      payer: payer.address,
+      transaction: `0x${"ab".repeat(32)}`,
+      network: "eip155:84532",
+      amount: "20000",
+    });
+  };
+
+  const client = new Client({ name: "hermetic-x402-buyer", version: "1.0.0" });
+  const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+    requestInit: { headers: { "User-Agent": "bountyverdict-owner-audit/1.0" } },
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const forwardedHeaders = new Headers(request.headers);
+      forwardedHeaders.set("User-Agent", "bountyverdict-owner-audit/1.0");
+      return app.fetch(new Request(request, { headers: forwardedHeaders }), env);
+    },
+  });
+  const paymentClient = new x402Client()
+    .register("eip155:84532", new ExactEvmScheme(payer));
+  const paidClient = new x402MCPClient(client, paymentClient, {
+    autoPayment: true,
+    onPaymentRequested: ({ paymentRequired }) => {
+      assert.equal(paymentRequired.accepts[0]?.amount, "20000");
+      return true;
+    },
+  });
+  try {
+    await paidClient.connect(transport);
+    const selected = await paidClient.callTool(FREE_SELECTION_TOOL_NAME, { task: "mcp_tools_change" });
+    assert.equal(selected.paymentMade, false);
+    const route = JSON.parse((selected.content[0] as { text: string }).text);
+    assert.equal(route.selector_call_payment_required, false);
+    assert.equal(route.next_call.payment_required, true);
+    assert.equal(route.next_call.authorization_required_before_settlement, true);
+    assert.equal(route.next_call.tool_name, "check_mcp_tool_drift");
+
+    const paid = await paidClient.callTool(route.next_call.tool_name, mcpDriftExampleInput);
+    assert.equal(paid.paymentMade, true);
+    assert.equal(paid.isError, undefined);
+    assert.equal(paid.paymentResponse?.success, true);
+    assert.equal(paid.paymentResponse?.amount, "20000");
+    assert.equal(paid.paymentResponse?.network, "eip155:84532");
+    const verdict = JSON.parse((paid.content[0] as { text: string }).text);
+    assert.equal(verdict.service, "MCPDriftVerdict");
+    assert.equal(verdict.verdict, "SAFE_ADDITIVE");
+    assert.equal(verdict.action, "ACCEPT_CURRENT");
+    assert.deepEqual(facilitatorCalls, ["/verify", "/settle"]);
+  } finally {
+    await paidClient.close();
+    globalThis.fetch = originalFetch;
   }
 });
 

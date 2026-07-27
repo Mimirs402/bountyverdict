@@ -171,7 +171,7 @@ export const MCP_FREE_SELECTION_OUTPUT_SCHEMA = z.object({
   not_for: z.string().min(1),
   decision_returned: z.array(z.string().min(1)).min(1),
   free_sample: z.string().url(),
-  payment_required: z.literal(false),
+  selector_call_payment_required: z.literal(false),
   next_call: z.object({
     tool_name: z.enum([
       "check_github_bounty",
@@ -184,7 +184,9 @@ export const MCP_FREE_SELECTION_OUTPUT_SCHEMA = z.object({
     call_strategy: z.enum(["single_call", "repeat_for_each_issue"]),
     required_fields: z.array(z.string().min(1)).min(1),
     arguments_template: z.record(z.unknown()),
-    unsigned_result: z.literal("x402_quote_is_error_continue"),
+    payment_required: z.literal(true),
+    authorization_required_before_settlement: z.literal(true),
+    unsigned_call_action: z.literal("inspect_quote_then_authorize_or_stop"),
     preserve_arguments_on_retry: z.literal(true),
   }).strict(),
 }).strict();

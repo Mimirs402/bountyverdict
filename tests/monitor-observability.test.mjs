@@ -40,7 +40,10 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(auditedRunner, /if \(monitor === "distribution"\) loadDistributionMonitorConfiguration\(process\.env\)/);
   assert.match(auditedRunner, /process\.env\.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE = monitor/);
   assert.match(auditedRunner, /if \(monitor === "directory"\).*directory-monitor/s);
-  assert.match(auditedRunner, /else await import\("\.\/distribution-monitor\.ts"\)/);
+  assert.match(
+    auditedRunner,
+    /else if \(monitor === "distribution"\) await import\("\.\/distribution-monitor\.ts"\)/,
+  );
   assert.match(directory, /BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory"/);
 });
 
@@ -77,7 +80,10 @@ test("the scheduled acquisition snapshot has no marketplace mutation request pat
   assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=directory /);
   assert.match(service, /ExecStart=\/usr\/bin\/env AUDITED_MONITOR=distribution /);
   assert.match(runner, /if \(monitor === "directory"\) await import\("\.\/directory-monitor\.ts"\)/);
-  assert.match(runner, /else await import\("\.\/distribution-monitor\.ts"\)/);
+  assert.match(
+    runner,
+    /else if \(monitor === "distribution"\) await import\("\.\/distribution-monitor\.ts"\)/,
+  );
 
   assert.doesNotMatch(directory, /api\/skills\/submit|submitAgentSkill|AGENTSKILL_FORCE_SUBMIT/);
   assert.equal((directory.match(/method:\s*"POST",\s*headers:/g) || []).length, 2);

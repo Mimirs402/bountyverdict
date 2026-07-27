@@ -1,0 +1,12 @@
+[Unit]
+Description=Check every five minutes for the frozen BountyVerdict N=25 owner journey gate
+
+[Timer]
+OnActiveSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=bountyverdict-owner-buyer-journey.service
+
+[Install]
+WantedBy=timers.target

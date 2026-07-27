@@ -22,6 +22,7 @@
     "funnel:tail": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cloudflare-funnel-tail.ts",
     "funnel:epoch": "node --experimental-strip-types scripts/start-funnel-epoch.ts",
     "monitor:audited": "node --experimental-strip-types scripts/run-audited-monitor.ts",
+    "owner-journey": "AUDITED_MONITOR=owner-journey node --experimental-strip-types scripts/run-audited-monitor.ts",
     "the402:onboard": "node --experimental-strip-types scripts/the402-onboard.ts",
     "the402:plan": "node --experimental-strip-types scripts/the402-plan.ts",
     "the402:subscribe": "node --experimental-strip-types scripts/the402-subscribe.ts",

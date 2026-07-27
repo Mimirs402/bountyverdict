@@ -12,6 +12,7 @@ const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.u
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
+const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
 const taskmarketPitchServiceUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.service", import.meta.url);
 const taskmarketPitchTimerUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.timer", import.meta.url);
 const geminiExtensionUrl = new URL("../gemini-extension.json", import.meta.url);
@@ -988,6 +989,14 @@ test("the normal distribution timer is report-only and retains explicit accounti
   assert.match(service, /Environment=START_BLOCK=48876000/);
   assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.012/);
   assert.doesNotMatch(service, /run-audited-monitor/);
+});
+
+test("the functional canary schedules a fresh run after every timer activation", async () => {
+  const timer = await readFile(functionalCanaryTimerUrl, "utf8");
+  assert.match(timer, /OnActiveSec=1min/);
+  assert.match(timer, /OnUnitActiveSec=6h/);
+  assert.match(timer, /Persistent=true/);
+  assert.doesNotMatch(timer, /OnBootSec=/);
 });
 
 test("the exact AgentWork pitch is polled read-only with private state", async () => {

@@ -426,10 +426,15 @@ jobs:
             if (challenge?.resource?.url !== `mcp://tool/${name}` || challenge?.extensions?.bazaar?.info?.input?.toolName !== name) process.exit(1);
             const handoff = challenge?.extensions?.[handoffKey]?.info;
             const payment = handoff?.payment;
-            if (handoff?.version !== "1" || handoff?.direct_mcp?.automatic_payment_requires !== "@x402/mcp") process.exit(1);
-            if (handoff?.wallet_mcp?.capability !== "make_x402_request" || handoff?.wallet_mcp?.use_exact_request !== true) process.exit(1);
+            const walletMcp = handoff?.wallet_mcp;
+            if (handoff?.version !== "2" || handoff?.direct_mcp?.automatic_payment_requires !== "@x402/mcp") process.exit(1);
+            if (walletMcp?.tool_name !== "make_http_request_with_x402" || walletMcp?.execution_kind !== "equivalent_rest_request") process.exit(1);
+            if (JSON.stringify(walletMcp) !== JSON.stringify(payment?.coinbase_wallet_mcp)) process.exit(1);
             if (payment?.max_amount_atomic !== amount || payment?.exact_request?.method !== method) process.exit(1);
-            if (new URL(payment?.exact_request?.url || "invalid").pathname !== path) process.exit(1);
+            const exactUrl = new URL(payment?.exact_request?.url || "invalid");
+            if (exactUrl.pathname !== path || walletMcp?.arguments?.baseURL !== exactUrl.origin || walletMcp?.arguments?.path !== path) process.exit(1);
+            if (walletMcp?.arguments?.method !== method || walletMcp?.arguments?.maxAmountPerRequest !== Number(amount) || walletMcp?.arguments?.preferredNetwork !== "base") process.exit(1);
+            if (method === "POST" && JSON.stringify(walletMcp?.arguments?.body) !== JSON.stringify(args)) process.exit(1);
             if (payment?.agentic_wallet?.executable !== "npx" || payment?.agentic_wallet?.execute_as_argument_vector !== true || payment?.agentic_wallet?.do_not_join_into_shell_string !== true) process.exit(1);
             const argv = payment?.agentic_wallet?.argv;
             if (!Array.isArray(argv) || JSON.stringify(argv.slice(0, 3)) !== JSON.stringify(["awal@2.12.0", "x402", "pay"])) process.exit(1);

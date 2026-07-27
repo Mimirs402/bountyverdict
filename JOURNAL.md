@@ -23,6 +23,15 @@ unpushed commit fails closed. The immutable acquisition snapshot remains bound
 separately to clean production `main` at `c25c3f5`; candidate validation cannot
 alter or substitute its measurement source.
 
+Auditing the next production stage found one more stale assertion before it
+could abort the release: the GitHub deployment workflow still expected the
+fictional version-one `make_x402_request` capability. Its live gate now requires
+handoff version two, Coinbase's exact `make_http_request_with_x402` tool,
+`equivalent_rest_request`, byte-equivalent top-level and payment wallet
+objects, the exact REST origin/path/method/body, the atomic cap as a safe
+integer, and Base mainnet as the preferred network. The separate pinned
+`awal@2.12.0` argument-vector checks remain intact.
+
 Focused gate tests, systemd contract tests, and TypeScript checking pass. The
 pre-boundary command still returns `WAIT_BOUNDARY` without deployment or
 mutation. No production release, experiment-state change, marketplace request,

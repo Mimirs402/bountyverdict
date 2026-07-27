@@ -14,6 +14,11 @@ test("every production deployment probe identifies as owner automation", async (
   assert.doesNotMatch(workflow, /\n\s+curl --(?:fail|silent|show-error)/);
   assert.match(workflow, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);
   assert.match(workflow, /automatic_payment_requires !== "@x402\/mcp"/);
+  assert.match(workflow, /handoff\?\.version !== "2"/);
+  assert.match(workflow, /walletMcp\?\.tool_name !== "make_http_request_with_x402"/);
+  assert.match(workflow, /walletMcp\?\.execution_kind !== "equivalent_rest_request"/);
+  assert.match(workflow, /JSON\.stringify\(walletMcp\) !== JSON\.stringify\(payment\?\.coinbase_wallet_mcp\)/);
+  assert.match(workflow, /walletMcp\?\.arguments\?\.preferredNetwork !== "base"/);
   assert.match(workflow, /payment\.exact_request\.normalized_body_sha256/);
   assert.match(workflow, /payment\?\.agentic_wallet\?\.execute_as_argument_vector !== true/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.tool_name !== "diagnose_github_actions_run"/);

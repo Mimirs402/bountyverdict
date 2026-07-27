@@ -1052,6 +1052,28 @@ test("post-boundary release execution stays review-bound, exact-head, and retry-
   assert.match(packageJson, /"release:post-boundary": "EXECUTE_POST_BOUNDARY_RELEASE=YES node --experimental-strip-types scripts\/run-post-boundary-release\.ts"/);
 });
 
+test("acquisition snapshot retries are bounded and cannot overwrite a successful freeze", async () => {
+  const [service, timer, script] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot-retry.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot-retry.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/retry-acquisition-snapshot.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-acquisition-snapshot\.service network-online\.target/);
+  assert.match(service, /Environment=RETRY_ACQUISITION_SNAPSHOT=YES/);
+  assert.match(service, /scripts\/retry-acquisition-snapshot\.ts/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:38:15 Europe\/Bucharest/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:41:15 Europe\/Bucharest/);
+  assert.equal((timer.match(/OnCalendar=/g) || []).length, 4);
+  assert.match(timer, /Persistent=true/);
+  assert.ok(script.indexOf("before.terminal_result") < script.indexOf('"systemctl"'));
+  assert.match(script, /\["--user", "start", snapshotService\]/);
+  assert.doesNotMatch(script, /run-audited-monitor|directory-monitor|distribution-monitor/);
+  assert.match(script, /Date\.now\(\) < Date\.parse\(EARNED_PLACEMENT_ENDS_AT\)/);
+});
+
 test("broad retrieval audits share a bounded six-hour measurement window", async () => {
   const [directoryTimer, marketplaceTimer] = await Promise.all([
     readFile(directoryTimerUrl, "utf8"),

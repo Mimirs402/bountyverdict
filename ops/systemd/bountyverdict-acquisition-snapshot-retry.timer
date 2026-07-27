@@ -1,0 +1,14 @@
+[Unit]
+Description=Bounded retries for an unfrozen BountyVerdict acquisition snapshot
+
+[Timer]
+OnCalendar=2026-07-27 19:38:15 Europe/Bucharest
+OnCalendar=2026-07-27 19:39:15 Europe/Bucharest
+OnCalendar=2026-07-27 19:40:15 Europe/Bucharest
+OnCalendar=2026-07-27 19:41:15 Europe/Bucharest
+AccuracySec=1s
+Persistent=true
+Unit=bountyverdict-acquisition-snapshot-retry.service
+
+[Install]
+WantedBy=timers.target

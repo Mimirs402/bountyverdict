@@ -1009,6 +1009,7 @@ test("post-boundary release readiness is a one-shot read-only evidence gate", as
   assert.match(service, /ProtectSystem=strict/);
   assert.match(service, /ProtectHome=read-only/);
   assert.match(service, /RestrictAddressFamilies=AF_UNIX/);
+  assert.doesNotMatch(service, /MemoryDenyWriteExecute=yes/);
   assert.doesNotMatch(service, /(?:curl|wrangler|gh |deploy|publish|rollback)/);
   assert.match(timer, /OnCalendar=2026-07-27 19:37:16 Europe\/Bucharest/);
   assert.match(timer, /Persistent=true/);

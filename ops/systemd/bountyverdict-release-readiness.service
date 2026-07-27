@@ -17,5 +17,4 @@ ProtectKernelTunables=yes
 RestrictAddressFamilies=AF_UNIX
 RestrictRealtime=yes
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 UMask=0077

@@ -1,5 +1,33 @@
 # BountyVerdict Journey
 
+## 2026-07-27 — Post-boundary gate now binds the actual combined release
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Immutable acquisition boundary: `2026-07-27T16:37:12.796Z`
+- Release candidate: `release/free-selector-executable-payment`
+- Production treatment: **unchanged before the boundary**
+
+The scheduled post-boundary readiness service still used the older
+`bountyverdict-router-release` worktree. It would therefore have validated the
+snapshot from the correct immutable production source but executed the gate
+from a superseded router-only candidate, omitting the executable wallet handoff
+and subsequent field-tested BountyVerdict quality fixes.
+
+The source and installed readiness unit now use the combined conversion-release
+worktree. The read-only gate also binds that worktree to the exact
+`release/free-selector-executable-payment` branch, requires a clean index and
+working tree, requires a full commit hash, and requires local HEAD to equal the
+business-owned `origin` tracking ref. A dirty candidate, wrong branch, or
+unpushed commit fails closed. The immutable acquisition snapshot remains bound
+separately to clean production `main` at `c25c3f5`; candidate validation cannot
+alter or substitute its measurement source.
+
+Focused gate tests, systemd contract tests, and TypeScript checking pass. The
+pre-boundary command still returns `WAIT_BOUNDARY` without deployment or
+mutation. No production release, experiment-state change, marketplace request,
+payment, or synthetic buyer event occurred.
+
 ## 2026-07-27 — Marketplace-originated Opire rewards retain exact platform evidence
 
 - Customer revenue: **$0.00**

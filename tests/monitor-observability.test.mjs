@@ -1003,6 +1003,8 @@ test("post-boundary release readiness is a one-shot read-only evidence gate", as
     readFile(new URL("../agent/package.json", import.meta.url), "utf8"),
   ]);
   assert.match(service, /After=bountyverdict-acquisition-snapshot\.service/);
+  assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-conversion-release\/agent/);
+  assert.doesNotMatch(service, /bountyverdict-router-release/);
   assert.match(service, /scripts\/verify-post-boundary-release-gate\.ts/);
   assert.match(service, /ProtectSystem=strict/);
   assert.match(service, /ProtectHome=read-only/);

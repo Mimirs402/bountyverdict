@@ -7,6 +7,8 @@ import {
   EARNED_PLACEMENT_PROVENANCE_GATE,
   POST_BOUNDARY_DRAIN_ID,
   POST_BOUNDARY_DRAIN_REASON,
+  RELEASE_CANDIDATE_BRANCH,
+  RELEASE_CANDIDATE_WORKTREE,
   SNAPSHOT_SERVICE_SHA256,
   SNAPSHOT_SOURCE_COMMIT,
   SNAPSHOT_SOURCE_WORKTREE,
@@ -114,6 +116,13 @@ const units = {
   service_sha256: SNAPSHOT_SERVICE_SHA256,
   timer_sha256: SNAPSHOT_TIMER_SHA256,
 };
+const releaseCandidate = {
+  worktree: RELEASE_CANDIDATE_WORKTREE,
+  branch: RELEASE_CANDIDATE_BRANCH,
+  head: "b".repeat(40),
+  remote_head: "b".repeat(40),
+  porcelain: "",
+};
 
 const verify = (overrides: Record<string, unknown> = {}) => verifyPostBoundaryReleaseGate({
   experiment,
@@ -123,6 +132,7 @@ const verify = (overrides: Record<string, unknown> = {}) => verifyPostBoundaryRe
   snapshotTimer: timer,
   snapshotSource: source,
   snapshotUnits: units,
+  releaseCandidate,
   ...overrides,
 });
 
@@ -139,6 +149,7 @@ test("accepts one exact healthy terminal snapshot after the immutable boundary",
     next_action: "expand_earned_reach",
     drain_rotation_id: POST_BOUNDARY_DRAIN_ID,
     drain_status: "draining",
+    release_candidate_commit: "b".repeat(40),
   });
 });
 
@@ -158,6 +169,15 @@ test("rejects early, inconclusive, unhealthy, stale, and service-failed snapshot
   assert.throws(() => verify({
     snapshotUnits: { ...units, service_sha256: "0".repeat(64) },
   }), /unit hashes drifted/);
+  assert.throws(() => verify({
+    releaseCandidate: { ...releaseCandidate, porcelain: " M agent/src/index.ts\n" },
+  }), /Release candidate is dirty/);
+  assert.throws(() => verify({
+    releaseCandidate: { ...releaseCandidate, remote_head: "c".repeat(40) },
+  }), /not synchronized/);
+  assert.throws(() => verify({
+    releaseCandidate: { ...releaseCandidate, branch: "main" },
+  }), /wrong branch/);
   assert.throws(() => verify({
     snapshotService: { ...service, completed_at: "2026-07-27T16:37:59.000Z" },
   }), /did not execute from the post-boundary timer/);

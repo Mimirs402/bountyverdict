@@ -35,6 +35,8 @@ export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-57";
 export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
 export const SNAPSHOT_SOURCE_COMMIT = "c25c3f5d1109a98850bb71745130e9e389b78296";
 export const SNAPSHOT_SOURCE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict";
+export const RELEASE_CANDIDATE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict-conversion-release";
+export const RELEASE_CANDIDATE_BRANCH = "release/free-selector-executable-payment";
 export const SNAPSHOT_SERVICE_SHA256 = "bd3401a1ca6a210c605729bc302404bd62d5b1cb05f43c727c713ecc50a4f105";
 export const SNAPSHOT_TIMER_SHA256 = "30cde8ebdc07a95b76fd703d44a59d1b7bed8d1d2a4ec56ba7be121ea0ad14f2";
 const MAXIMUM_FREEZE_LAG_MS = 5 * 60 * 1000;
@@ -86,6 +88,14 @@ export type SnapshotUnitEvidence = {
   timer_sha256: string;
 };
 
+export type ReleaseCandidateState = {
+  worktree: string;
+  branch: string;
+  head: string;
+  remote_head: string;
+  porcelain: string;
+};
+
 function record(value: unknown, label: string): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object.`);
@@ -125,6 +135,7 @@ export function verifyPostBoundaryReleaseGate(input: {
   snapshotTimer: SnapshotTimerState;
   snapshotSource: SnapshotSourceState;
   snapshotUnits: SnapshotUnitEvidence;
+  releaseCandidate: ReleaseCandidateState;
 }) {
   const experiment = record(input.experiment, "Acquisition experiment state");
   const report = record(input.distributionReport, "Distribution report");
@@ -133,6 +144,15 @@ export function verifyPostBoundaryReleaseGate(input: {
   const timer = record(input.snapshotTimer, "Snapshot timer state");
   const source = record(input.snapshotSource, "Snapshot source state");
   const units = record(input.snapshotUnits, "Snapshot unit evidence");
+  const candidate = record(input.releaseCandidate, "Release candidate state");
+
+  if (candidate.worktree !== RELEASE_CANDIDATE_WORKTREE ||
+      candidate.branch !== RELEASE_CANDIDATE_BRANCH ||
+      !/^[a-f0-9]{40}$/i.test(String(candidate.head)) ||
+      candidate.head !== candidate.remote_head ||
+      candidate.porcelain !== "") {
+    throw new Error("Release candidate is dirty, on the wrong branch, or not synchronized to the reviewed business remote.");
+  }
 
   if (service.Result !== "success" || Number(service.ExecMainStatus) !== 0 ||
       service.ActiveState !== "inactive" || service.SubState !== "dead") {
@@ -301,5 +321,6 @@ export function verifyPostBoundaryReleaseGate(input: {
     next_action: expectedNextAction,
     drain_rotation_id: POST_BOUNDARY_DRAIN_ID,
     drain_status: "draining",
+    release_candidate_commit: candidate.head as string,
   };
 }

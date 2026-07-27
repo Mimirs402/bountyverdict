@@ -6,6 +6,8 @@ import { isDeepStrictEqual, promisify } from "node:util";
 import { readPrivateJson } from "../src/agent-question-v6-activation.ts";
 import {
   EARNED_PLACEMENT_ENDS_AT,
+  RELEASE_CANDIDATE_BRANCH,
+  RELEASE_CANDIDATE_WORKTREE,
   SNAPSHOT_SOURCE_WORKTREE,
   verifyPostBoundaryReleaseGate,
   type SnapshotServiceState,
@@ -70,7 +72,20 @@ if (Date.now() < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
   process.exit(0);
 }
 
-const [experiment, distributionReport, trustedFunnelLedger, serviceOutput, timerOutput, sourceHead, sourceStatus, units] = await Promise.all([
+const [
+  experiment,
+  distributionReport,
+  trustedFunnelLedger,
+  serviceOutput,
+  timerOutput,
+  sourceHead,
+  sourceStatus,
+  releaseHead,
+  releaseRemoteHead,
+  releaseBranch,
+  releaseStatus,
+  units,
+] = await Promise.all([
   readPrivateJson(experimentPath, 64 * 1024),
   readPrivateJson(reportPath, 2 * 1024 * 1024),
   readPrivateJson(ledgerPath, 64 * 1024 * 1024),
@@ -105,6 +120,33 @@ const [experiment, distributionReport, trustedFunnelLedger, serviceOutput, timer
     env: commandEnvironment,
   }),
   execFile("git", ["-C", SNAPSHOT_SOURCE_WORKTREE, "status", "--porcelain=v1", "--untracked-files=all"], {
+    encoding: "utf8",
+    env: commandEnvironment,
+  }),
+  execFile("git", ["-C", RELEASE_CANDIDATE_WORKTREE, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+    env: commandEnvironment,
+  }),
+  execFile("git", [
+    "-C",
+    RELEASE_CANDIDATE_WORKTREE,
+    "rev-parse",
+    `refs/remotes/origin/${RELEASE_CANDIDATE_BRANCH}`,
+  ], {
+    encoding: "utf8",
+    env: commandEnvironment,
+  }),
+  execFile("git", ["-C", RELEASE_CANDIDATE_WORKTREE, "branch", "--show-current"], {
+    encoding: "utf8",
+    env: commandEnvironment,
+  }),
+  execFile("git", [
+    "-C",
+    RELEASE_CANDIDATE_WORKTREE,
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+  ], {
     encoding: "utf8",
     env: commandEnvironment,
   }),
@@ -166,6 +208,13 @@ const result = verifyPostBoundaryReleaseGate({
   snapshotTimer,
   snapshotSource,
   snapshotUnits: units as SnapshotUnitEvidence,
+  releaseCandidate: {
+    worktree: RELEASE_CANDIDATE_WORKTREE,
+    branch: releaseBranch.stdout.trim(),
+    head: releaseHead.stdout.trim(),
+    remote_head: releaseRemoteHead.stdout.trim(),
+    porcelain: releaseStatus.stdout,
+  },
 });
 const [experimentAfter, reportAfter, ledgerAfter] = await Promise.all([
   readPrivateJson(experimentPath, 64 * 1024),

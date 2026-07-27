@@ -4,6 +4,7 @@ import {
   POST_BOUNDARY_PULL_REQUEST,
   exactWorkflowRun,
   selectExactWorkflowRun,
+  validateActivatedManifest,
   validateActivationCommit,
   validateMergedReleasePullRequest,
   validateOpenReleasePullRequest,
@@ -100,4 +101,23 @@ test("accepts only a bot-authored manifest-only activation child", () => {
     ...payload,
     author: { login: "Mimirs402" },
   }, merge), /manifest-only child/);
+});
+
+test("accepts only the exact active production manifest and canonical activation time", () => {
+  const manifest = {
+    schema_version: "1.0",
+    product: "BountyVerdict",
+    status: "active",
+    production_api: "https://bountyverdict-agent-production.mimirslab.workers.dev",
+    updated_at: "2026-07-27T17:00:00.000Z",
+  };
+  assert.equal(validateActivatedManifest(manifest), manifest.updated_at);
+  assert.throws(() => validateActivatedManifest({
+    ...manifest,
+    production_api: "https://example.com",
+  }), /origin drifted/);
+  assert.throws(() => validateActivatedManifest({
+    ...manifest,
+    updated_at: "2026-07-27T17:00:00Z",
+  }), /not canonical/);
 });

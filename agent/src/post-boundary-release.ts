@@ -135,3 +135,17 @@ export function validateActivationCommit(value: unknown, releaseMergeCommit: str
   }
   return commit(activation.sha, "Production activation commit");
 }
+
+export function validateActivatedManifest(value: unknown): string {
+  const manifest = record(value, "Activated agent manifest");
+  if (manifest.schema_version !== "1.0" || manifest.product !== "BountyVerdict" ||
+      manifest.status !== "active" ||
+      manifest.production_api !== "https://bountyverdict-agent-production.mimirslab.workers.dev") {
+    throw new Error("Activated agent manifest identity or production origin drifted.");
+  }
+  const updatedAt = timestamp(manifest.updated_at, "Activated agent manifest updated_at");
+  if (new Date(updatedAt).toISOString() !== updatedAt) {
+    throw new Error("Activated agent manifest updated_at is not canonical.");
+  }
+  return updatedAt;
+}

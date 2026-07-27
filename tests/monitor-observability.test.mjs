@@ -1036,6 +1036,9 @@ test("post-boundary release execution stays review-bound, exact-head, and retry-
   assert.doesNotMatch(script, /"--admin"|--admin/);
   assert.match(script, /selectExactWorkflowRun/);
   assert.match(script, /acquireExclusiveRun\(lockPath/);
+  assert.match(script, /scripts\/activate-free-selection-router\.ts/);
+  assert.match(script, /FREE_SELECTION_ROUTER_DRAIN_ROTATION_ID: POST_BOUNDARY_DRAIN_ID/);
+  assert.match(script, /activationResult\.measurement_epoch_id !== 57/);
   assert.match(script, /"merge", "--ff-only", "refs\/remotes\/origin\/main"/);
   assert.match(source, /POST_BOUNDARY_PULL_REQUEST = 11/);
   assert.match(source, /More than one \$\{expected\.workflowName\} run exists/);

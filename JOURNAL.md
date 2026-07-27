@@ -1,5 +1,50 @@
 # BountyVerdict Journey
 
+## 2026-07-27 — Legacy reach measured; invocation and checkout treatment held
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Legacy personal-repository installs: **8**, unchanged from the fixed baseline
+- Latest clean trusted MCP cohort: **18 tools/list events / 0 valid calls**
+- Combined held release: **v1.1.11** at `d63ebed7103cfcd71790fb393ade85b7d22a6ccb`
+- Release gate: **WAIT_BOUNDARY** until `2026-07-27T16:37:12.796Z`
+
+The exact passive Skills.sh page for the retired
+`cristianmoroaica/bountyverdict` repository became readable again and still
+reports eight anonymous installs: two for the router and one for each
+specialist. It has produced no recognized non-owner settlement. This confirms
+limited historical discovery but no commercial conversion; the immutable
+seven-day snapshot still owns the terminal conclusion and remains scheduled
+for the exact boundary.
+
+Current production passed fresh authenticated functional canaries for all seven
+paid products. A reboot exposed that the six-hour canary timer could restart in
+an elapsed state with no next trigger, leaving the consolidated monitor stale.
+The installed timer now schedules its first run relative to every activation
+and then every six hours. The fix is isolated and pushed as
+`ops/functional-canary-reboot-schedule` at `15b3e72`; its source and installed
+unit hashes match, systemd verification passes, and the first automatic run
+completed successfully.
+
+The measured buyer funnel breaks before output quality or price can be tested:
+agents enumerate the catalog but have not made a valid selected call. The held
+free selector remains the narrow treatment for that break. A separate live
+checkout audit also proved that production's version-one handoff names a
+generic `make_x402_request` capability that Coinbase Agentic Wallet does not
+expose. The combined candidate keeps prices, payee, product handlers, payment
+verification, and settlement unchanged, while returning the real
+`make_http_request_with_x402` tool name and exact bounded arguments after a
+valid unpaid call.
+
+The combined candidate passes **195 / 195** public tests, **555 / 555** Worker
+and operations tests, Node `22.23.1` typechecking, synchronized public
+contracts, production and testnet dry Worker bundles, the real Glama bridge,
+zero high-severity production dependency findings, and `git diff --check`.
+It is pushed only to the business-owned
+`release/free-selector-executable-payment` branch. No production deployment,
+registry publication, marketplace mutation, signed payment, self-purchase, or
+synthetic buyer event occurred before the boundary.
+
 ## 2026-07-26 — Held selector now reaches an executable quote
 
 - Customer revenue: **$0.00**

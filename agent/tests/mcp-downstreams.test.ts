@@ -386,7 +386,7 @@ content:
 });
 
 test("recognizes bounded Agentage official-registry search and detail contracts", () => {
-  const slug = "io-github-cristianmoroaica-bountyverdict";
+  const slug = "io-github-mimirs402-bountyverdict";
   const response = (text: string) => ({
     jsonrpc: "2.0",
     id: 1,
@@ -432,8 +432,8 @@ test("recognizes bounded Agentage official-registry search and detail contracts"
 test("classifies exact MCP Observatory repository metadata without inventing agent readiness", () => {
   const payload = {
     server: {
-      id: "github:cristianmoroaica/bountyverdict",
-      name: "cristianmoroaica/bountyverdict",
+      id: "github:Mimirs402/bountyverdict",
+      name: "Mimirs402/bountyverdict",
       kind: "github-only",
       repoUrl: repository,
       firstSeen: "2026-07-20T15:21:42.873Z",

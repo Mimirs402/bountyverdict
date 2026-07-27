@@ -749,13 +749,17 @@ export function parseMcpObservatoryDetail(
   expectedId: string,
   expectedRepository: string,
 ): McpObservatoryStatus {
+  const expectedName = /^github:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/.exec(expectedId)?.[1];
+  if (!expectedName) {
+    throw new Error("MCP Observatory expected server identity is malformed.");
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("MCP Observatory detail is not an object.");
   }
   const payload = value as Record<string, any>;
   const server = payload.server;
   if (!server || typeof server !== "object" || Array.isArray(server) ||
-    server.id !== expectedId || server.name !== "cristianmoroaica/bountyverdict" ||
+    server.id !== expectedId || server.name !== expectedName ||
     server.repoUrl !== expectedRepository || server.kind !== "github-only" ||
     typeof server.firstSeen !== "string" || !Number.isFinite(Date.parse(server.firstSeen)) ||
     typeof server.lastSeen !== "string" || !Number.isFinite(Date.parse(server.lastSeen)) ||

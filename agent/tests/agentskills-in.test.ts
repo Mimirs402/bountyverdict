@@ -13,7 +13,7 @@ const exactEntry = {
   id: "public-id",
   name: AGENT_SKILLS_IN_SKILL_NAME,
   description: "Public routing adapter.",
-  author: "cristianmoroaica",
+  author: "Mimirs402",
   stars: 0,
   forks: 0,
   githubUrl: AGENT_SKILLS_IN_GITHUB_URL,

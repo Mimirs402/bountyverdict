@@ -1,6 +1,6 @@
-export const AGENT_SKILLS_IN_REPOSITORY = "cristianmoroaica/bountyverdict-mcp-skill";
+export const AGENT_SKILLS_IN_REPOSITORY = "Mimirs402/bountyverdict-mcp-skill";
 export const AGENT_SKILLS_IN_SKILL_NAME = "route-github-agent-decisions";
-export const AGENT_SKILLS_IN_SCOPED_NAME = `@cristianmoroaica/${AGENT_SKILLS_IN_SKILL_NAME}`;
+export const AGENT_SKILLS_IN_SCOPED_NAME = `@Mimirs402/${AGENT_SKILLS_IN_SKILL_NAME}`;
 export const AGENT_SKILLS_IN_SKILL_PATH = `skills/${AGENT_SKILLS_IN_SKILL_NAME}/SKILL.md`;
 export const AGENT_SKILLS_IN_GITHUB_URL =
   `https://github.com/${AGENT_SKILLS_IN_REPOSITORY}/tree/main/skills/${AGENT_SKILLS_IN_SKILL_NAME}`;
@@ -61,7 +61,7 @@ export function parseAgentSkillsInSearchPayload(value: unknown): Record<string, 
   const repoEntries = entries.filter(({ repoFullName }) => repoFullName === AGENT_SKILLS_IN_REPOSITORY);
   const exact = repoEntries.filter((entry) =>
     entry.name === AGENT_SKILLS_IN_SKILL_NAME &&
-    entry.author === "cristianmoroaica" &&
+    entry.author === "Mimirs402" &&
     entry.githubUrl === AGENT_SKILLS_IN_GITHUB_URL &&
     entry.scopedName === AGENT_SKILLS_IN_SCOPED_NAME &&
     entry.path === AGENT_SKILLS_IN_SKILL_PATH &&

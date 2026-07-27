@@ -134,9 +134,9 @@ const directory402Api = "https://402directory.com/api";
 const directory402SubmissionIds = Object.freeze([50, 51, 52, 53, 54, 55, 56]);
 const index402Api = "https://402index.io/api/v1/services";
 const agentSkillSearchUrl = "https://agentskill.sh/api/agent/search?q=bountyverdict&limit=20";
-const agentSkillsInSearchUrl = "https://www.agentskills.in/api/skills?name=route-github-agent-decisions&author=cristianmoroaica&limit=20";
-const agentSkillsInFallbackSearchUrl = "https://www.agentskills.in/api/skills?search=bountyverdict&author=cristianmoroaica&limit=50&offset=0&sortBy=recent";
-const agentSkillsInListingUrl = "https://www.agentskills.in/marketplace/%40cristianmoroaica/route-github-agent-decisions";
+const agentSkillsInSearchUrl = "https://www.agentskills.in/api/skills?name=route-github-agent-decisions&author=Mimirs402&limit=20";
+const agentSkillsInFallbackSearchUrl = "https://www.agentskills.in/api/skills?search=bountyverdict&author=Mimirs402&limit=50&offset=0&sortBy=recent";
+const agentSkillsInListingUrl = "https://www.agentskills.in/marketplace/%40Mimirs402/route-github-agent-decisions";
 const agentSkillsInSubmissionIssueNumber = 23;
 const agentSkillsInSubmissionIssueUrl =
   `https://github.com/Karanjot786/agent-skills-cli/issues/${agentSkillsInSubmissionIssueNumber}`;
@@ -183,16 +183,19 @@ const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bounty
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
 const githubSkillReleaseTag = "v1.1.11";
-const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
+const legacyRepository = "https://github.com/cristianmoroaica/bountyverdict";
+const mcpRepositoryUrl = "https://mcprepository.com/Mimirs402/bountyverdict";
+const mcpRepositoryLegacyUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
 const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
+const mcpRepositoryMigrationIssueUrl = "https://github.com/mcprepository/mcp-index/issues/3";
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
 const agentNdxIndexUrl = "https://agentndx.ai/api/servers.json";
 const agentNdxSubmittedAt = "2026-07-21T03:33:34Z";
-const mcpObservatoryServerId = "github:cristianmoroaica/bountyverdict";
+const mcpObservatoryServerId = "github:Mimirs402/bountyverdict";
 const mcpObservatoryUrl = `https://mcpobservatory.com/api/servers/${mcpObservatoryServerId}`;
 const lobeHubIssueNumber = 17401;
 const lobeHubIssueUrl = `https://github.com/lobehub/lobehub/issues/${lobeHubIssueNumber}`;
-const lobeHubListingId = "io-github-cristianmoroaica-bountyverdict";
+const lobeHubListingId = "io-github-mimirs402-bountyverdict";
 const lobeHubListingUrl = `https://market.lobehub.com/s/plugins/${lobeHubListingId}`;
 const awesomeMcpServersPrNumber = 10554;
 const awesomeMcpServersPrUrl = `https://github.com/punkpeye/awesome-mcp-servers/pull/${awesomeMcpServersPrNumber}`;
@@ -206,7 +209,7 @@ const tensorBlockPrUrl = `https://github.com/TensorBlock/awesome-mcp-servers/pul
 const tensorBlockIndexApi = "https://mcp-index.tensorblock.co";
 const tensorBlockServerId = "github-mimirs402-bountyverdict-0abea513";
 const agentageMcpUrl = "https://catalog.agentage.io/mcp";
-const agentageSlug = "io-github-cristianmoroaica-bountyverdict";
+const agentageSlug = "io-github-mimirs402-bountyverdict";
 const dockerMcpRegistryPrNumber = 4509;
 const dockerMcpRegistryPrUrl = `https://github.com/docker/mcp-registry/pull/${dockerMcpRegistryPrNumber}`;
 const dockerMcpRegistryDefinitionUrl = "https://raw.githubusercontent.com/docker/mcp-registry/main/servers/bountyverdict/server.yaml";
@@ -214,14 +217,15 @@ const dockerMcpHubUrl = "https://hub.docker.com/mcp/server/bountyverdict/overvie
 const mcpServersOrgSubmissionId = 4842;
 const mcpServersOrgSubmittedAt = "2026-07-21T05:32:29.746Z";
 const mcpServersOrgReceiptUrl = `https://mcpservers.org/submit-success?submission_id=${mcpServersOrgSubmissionId}`;
-const mcpServersOrgListingUrl = "https://mcpservers.org/servers/cristianmoroaica/bountyverdict";
+const mcpServersOrgListingUrl = "https://mcpservers.org/servers/Mimirs402/bountyverdict";
+const mcpServersOrgLegacyListingUrl = "https://mcpservers.org/servers/cristianmoroaica/bountyverdict";
 const mcpDirectorySubmittedAt = "2026-07-21T05:48:37Z";
 const mcpDirectoryListingUrl = "https://mcp.directory/servers/bountyverdict";
 const vaultPlaneSubmissionId = "8ffee7a8-d33b-486f-8eae-9483db40d75b";
 const vaultPlaneSubmittedAt = "2026-07-21T15:32:23.786Z";
 const vaultPlaneListingUrl = "https://www.vaultplane.com/skills/bountyverdict-agent-decision-router";
 const toolsForAgentsSubmittedAt = "2026-07-21T15:34:00Z";
-const toolsForAgentsListingUrl = "https://www.toolsforagents.dev/tools/cristianmoroaica/bountyverdict";
+const toolsForAgentsListingUrl = "https://www.toolsforagents.dev/tools/Mimirs402/bountyverdict";
 const mcpServerSpotSubmittedAt = "2026-07-21T15:36:00Z";
 const mcpServerSpotListingUrl = "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools";
 const clineMarketplaceSkillPrNumber = 15;
@@ -1178,6 +1182,44 @@ async function mcpServersOrgStatus(
   }
 }
 
+async function mcpServersOrgLegacyStatus(): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(mcpServersOrgLegacyListingUrl, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (![200, 404].includes(response.status)) {
+      throw new Error(`Legacy MCPServers.org listing returned HTTP ${response.status}.`);
+    }
+    const listing = response.status === 200
+      ? parseMcpServersOrgPage(await response.text(), legacyRepository, `${productionOrigin}/mcp`)
+      : null;
+    const listed = listing?.repository_metadata_verified === true;
+    return {
+      listing_url: mcpServersOrgLegacyListingUrl,
+      listing_http_status: response.status,
+      listing,
+      listed,
+      status: listed ? "legacy_personal_listing" : response.status === 404 ? "legacy_removed" : "legacy_contract_drift",
+      canonical_business_distribution: false,
+      excluded_from_acquisition: true,
+      superseded_by: mcpServersOrgListingUrl,
+      measurement: "legacy_listing_presence_only_not_canonical_distribution_impressions_tool_calls_purchases_or_revenue",
+    };
+  } catch (error) {
+    return {
+      listing_url: mcpServersOrgLegacyListingUrl,
+      listed: false,
+      status: "request_failed",
+      canonical_business_distribution: false,
+      excluded_from_acquisition: true,
+      superseded_by: mcpServersOrgListingUrl,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function mcpDirectoryStatus(
   previousStatus: Record<string, any>,
   observedAt: string,
@@ -2000,23 +2042,61 @@ async function mcpRepositoryStatus(): Promise<Record<string, unknown>> {
     const body = await response.text();
     if (body.length > 1_000_000) throw new Error("MCPRepository listing response is unbounded.");
     const title = body.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || "";
-    const exactRepositoryLink = /href="https:\/\/github\.com\/cristianmoroaica\/bountyverdict(?:\?ref=mcprepository\.com)?"/i.test(body);
+    const exactRepositoryLink = /href="https:\/\/github\.com\/Mimirs402\/bountyverdict(?:\?ref=mcprepository\.com)?"/i.test(body);
     const listed = response.ok && title.length > 0 && exactRepositoryLink;
     return {
       url: mcpRepositoryUrl,
       http_status: response.status,
       submitted_at: mcpRepositorySubmittedAt,
+      migration_issue_url: mcpRepositoryMigrationIssueUrl,
       listed,
       status: listed ? "listed" : response.ok || response.status === 404 ? "queued_validation" : "unexpected_response",
       title: listed ? title : null,
+      canonical_business_distribution: true,
       measurement: "submission_and_catalog_presence_not_impressions_installs_or_purchases",
     };
   } catch (error) {
     return {
       url: mcpRepositoryUrl,
       submitted_at: mcpRepositorySubmittedAt,
+      migration_issue_url: mcpRepositoryMigrationIssueUrl,
       listed: false,
       status: "request_failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function mcpRepositoryLegacyStatus(): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(mcpRepositoryLegacyUrl, {
+      headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await response.text();
+    if (body.length > 1_000_000) throw new Error("Legacy MCPRepository listing response is unbounded.");
+    const exactLegacyRepositoryLink =
+      /href="https:\/\/github\.com\/cristianmoroaica\/bountyverdict(?:\?ref=mcprepository\.com)?"/i.test(body);
+    const listed = response.ok && exactLegacyRepositoryLink;
+    return {
+      url: mcpRepositoryLegacyUrl,
+      http_status: response.status,
+      listed,
+      status: listed ? "legacy_personal_listing" : response.status === 404 ? "legacy_removed" : "unexpected_response",
+      canonical_business_distribution: false,
+      excluded_from_acquisition: true,
+      superseded_by: mcpRepositoryUrl,
+      migration_issue_url: mcpRepositoryMigrationIssueUrl,
+      measurement: "legacy_listing_presence_only_not_canonical_distribution_impressions_installs_or_purchases",
+    };
+  } catch (error) {
+    return {
+      url: mcpRepositoryLegacyUrl,
+      listed: false,
+      status: "request_failed",
+      canonical_business_distribution: false,
+      excluded_from_acquisition: true,
+      superseded_by: mcpRepositoryUrl,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -2781,6 +2861,7 @@ async function askillStatus(
     submission: Readonly<Record<string, unknown>>;
   }> = askillLegacyMonitor,
 ): Promise<Record<string, unknown>> {
+  const legacyPersonalRecord = monitor === askillLegacyMonitor;
   try {
     const response = await fetch(monitor.searchUrl, {
       headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
@@ -2797,6 +2878,8 @@ async function askillStatus(
         status: "catalog_unavailable",
         submission: monitor.submission,
         exposed_at: previousStatus.exposed_at || monitor.submittedAt,
+        canonical_business_distribution: !legacyPersonalRecord,
+        excluded_from_acquisition: legacyPersonalRecord,
         catalog_error: `askill search returned HTTP ${response.status}.`,
         measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
       };
@@ -2841,6 +2924,8 @@ async function askillStatus(
       submission: monitor.submission,
       buyer_query_benchmark: buyerQueryBenchmark,
       exposed_at: listed ? previousStatus.exposed_at || monitor.submittedAt : null,
+      canonical_business_distribution: !legacyPersonalRecord,
+      excluded_from_acquisition: legacyPersonalRecord,
       measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
   } catch (error) {
@@ -2853,6 +2938,8 @@ async function askillStatus(
       status: "catalog_request_failed",
       submission: monitor.submission,
       exposed_at: previousStatus.exposed_at || monitor.submittedAt,
+      canonical_business_distribution: !legacyPersonalRecord,
+      excluded_from_acquisition: legacyPersonalRecord,
       error: error instanceof Error ? error.message : String(error),
       measurement: "exact_catalog_presence_and_public_favorites_not_impressions_installs_tool_calls_purchases_or_revenue",
     };
@@ -3329,6 +3416,7 @@ const [
   awesomeSkills,
   agenttool,
   mcpRepository,
+  mcpRepositoryLegacy,
   agentNdx,
   mcpObservatory,
   mcpubCrawlerPr,
@@ -3343,6 +3431,7 @@ const [
   agentage,
   dockerMcpRegistry,
   mcpServersOrg,
+  mcpServersOrgLegacy,
   mcpDirectory,
   vaultPlane,
   toolsForAgents,
@@ -3379,6 +3468,7 @@ const [
   awesomeSkillsStatus(),
   agentToolStatus(),
   mcpRepositoryStatus(),
+  mcpRepositoryLegacyStatus(),
   agentNdxStatus(),
   mcpObservatoryStatus(),
   githubPrStatus("roverbird", "mcpub", 4, mcpubCrawlerPrUrl),
@@ -3393,6 +3483,7 @@ const [
   agentageStatus(previous.agentage || {}, new Date().toISOString()),
   dockerMcpRegistryStatus(previous.docker_mcp_registry || {}, new Date().toISOString()),
   mcpServersOrgStatus(previous.mcp_servers_org || {}, new Date().toISOString()),
+  mcpServersOrgLegacyStatus(),
   mcpDirectoryStatus(previous.mcp_directory || {}, new Date().toISOString()),
   vaultPlaneStatus(previous.vaultplane || {}, new Date().toISOString()),
   toolsForAgentsStatus(previous.tools_for_agents || {}, new Date().toISOString()),
@@ -3584,6 +3675,7 @@ const state = {
   awesome_skills: awesomeSkills,
   agenttool,
   mcp_repository: mcpRepository,
+  mcp_repository_legacy: mcpRepositoryLegacy,
   agentndx: agentNdx,
   mcp_observatory: mcpObservatory,
   mcpub_crawler_pr: mcpubCrawlerPr,
@@ -3606,6 +3698,7 @@ const state = {
   agentage,
   docker_mcp_registry: dockerMcpRegistry,
   mcp_servers_org: mcpServersOrg,
+  mcp_servers_org_legacy: mcpServersOrgLegacy,
   mcp_directory: mcpDirectory,
   vaultplane: vaultPlane,
   tools_for_agents: toolsForAgents,

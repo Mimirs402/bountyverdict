@@ -1027,6 +1027,11 @@ test("post-boundary release execution stays review-bound, exact-head, and retry-
   assert.match(service, /Environment=EXECUTE_POST_BOUNDARY_RELEASE=YES/);
   assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-conversion-release\/agent/);
   assert.match(service, /TimeoutStartSec=45min/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /ReadWritePaths=%h\/Projects\/sandbox\/bountyverdict/);
+  assert.match(service, /CapabilityBoundingSet=\n/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/);
   assert.match(timer, /OnCalendar=2026-07-27 19:42:00 Europe\/Bucharest/);
   assert.match(timer, /OnCalendar=2026-07-27 20:42:00 Europe\/Bucharest/);
   assert.match(timer, /Persistent=true/);

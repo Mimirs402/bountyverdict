@@ -1015,6 +1015,35 @@ test("post-boundary release readiness is a one-shot read-only evidence gate", as
   assert.match(packageJson, /"release:verify-boundary": "node --experimental-strip-types scripts\/verify-post-boundary-release-gate\.ts"/);
 });
 
+test("post-boundary release execution stays review-bound, exact-head, and retry-safe", async () => {
+  const [service, timer, script, source, packageJson] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-post-boundary-release.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-post-boundary-release.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/run-post-boundary-release.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/src/post-boundary-release.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-release-readiness\.service network-online\.target/);
+  assert.match(service, /Environment=EXECUTE_POST_BOUNDARY_RELEASE=YES/);
+  assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-conversion-release\/agent/);
+  assert.match(service, /TimeoutStartSec=45min/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:42:00 Europe\/Bucharest/);
+  assert.match(timer, /OnCalendar=2026-07-27 20:42:00 Europe\/Bucharest/);
+  assert.match(timer, /Persistent=true/);
+  assert.match(script, /scripts\/verify-post-boundary-release-gate\.ts/);
+  assert.ok(script.indexOf("verify-post-boundary-release-gate.ts") < script.indexOf('"pr", "merge"'));
+  assert.match(script, /"--match-head-commit", releaseCommit/);
+  assert.doesNotMatch(script, /"--admin"|--admin/);
+  assert.match(script, /selectExactWorkflowRun/);
+  assert.match(script, /acquireExclusiveRun\(lockPath/);
+  assert.match(script, /"merge", "--ff-only", "refs\/remotes\/origin\/main"/);
+  assert.match(source, /POST_BOUNDARY_PULL_REQUEST = 11/);
+  assert.match(source, /More than one \$\{expected\.workflowName\} run exists/);
+  assert.match(source, /github-actions\[bot\]/);
+  assert.match(source, /agent-manifest\.json/);
+  assert.match(packageJson, /"release:post-boundary": "EXECUTE_POST_BOUNDARY_RELEASE=YES node --experimental-strip-types scripts\/run-post-boundary-release\.ts"/);
+});
+
 test("broad retrieval audits share a bounded six-hour measurement window", async () => {
   const [directoryTimer, marketplaceTimer] = await Promise.all([
     readFile(directoryTimerUrl, "utf8"),

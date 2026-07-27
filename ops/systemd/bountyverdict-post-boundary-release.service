@@ -1,0 +1,21 @@
+[Unit]
+Description=Release the reviewed BountyVerdict candidate after the immutable acquisition boundary
+After=bountyverdict-release-readiness.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict-conversion-release/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=EXECUTE_POST_BOUNDARY_RELEASE=YES
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/run-post-boundary-release.ts
+TimeoutStartSec=45min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+UMask=0077

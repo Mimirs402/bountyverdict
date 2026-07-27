@@ -1517,3 +1517,15 @@ Coolify's official contribution policy explicitly allows AI assistance when cont
 The held analyzer now treats low-effort, unreviewed, untested, undisclosed, or not-understood AI caveats as quality conditions only when the same official policy explicitly permits AI use. A separate prohibition on AI-assisted code still wins and remains a hard stop. Exact normalized `Core Team Only`, `Maintainer Only`, and `Maintainers Only` labels, including emoji-prefixed and hyphenated variants, now stop external work without matching nearby advisory labels such as `Core team review`.
 
 Live replay now returns **AVOID 18**, preserves the verified **$250 USD** Algora listing, reports `DISCLOSURE_REQUIRED`, emits `Issue restricted to core team or maintainers` with the issue URL, and no longer invents an AI-policy block. The complete public suite passes **179 / 179**, the Worker and operations suite passes **511 / 511**, TypeScript checking passes, synchronized llms contracts pass, and `git diff --check` passes. No issue was claimed, no maintainer was contacted, no payment was made, and no production or frozen-v7 coordinate was changed.
+## 2026-07-27 — Post-boundary release is review-bound and autonomously recoverable
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Immutable acquisition boundary: **2026-07-27 19:37:12.796 Europe/Bucharest**
+- Reviewed release: **PR #11, business-owned `Mimirs402/bountyverdict`**
+
+The combined free-selector and executable-wallet candidate now has a fail-closed post-boundary release orchestrator. It requires the exact successful acquisition snapshot and drain rotation, the clean candidate worktree synchronized to its business-owned remote, the active `Mimirs402` GitHub identity, PR #11 at the exact frozen main base and candidate head, and every PR check successful. Before that gate passes it cannot merge, dispatch, deploy, publish, or advance local main.
+
+After the boundary, the orchestrator merges the reviewed PR with its head pinned, waits for exact-head push CI, dispatches the production Worker workflow once, and reuses that exact run on retry. The existing workflow verifies the live free selector, all seven paid contracts, the version-two Coinbase wallet MCP handoff, the pinned `awal@2.12.0` argument vector, real handlers, and automatic rollback. The orchestrator then requires the bot-authored manifest-only activation child, waits for activation CI and Pages, publishes that exact activation to the MCP Registry once, and only then fast-forwards the clean canonical main worktree.
+
+The installed schedule begins five minutes after the acquisition boundary and retries at bounded twenty-minute intervals. Exact failed workflow evidence stops redispatch, overlapping runs are locked out, and every later invocation is idempotent. The existing five-minute funnel poll remains responsible for closing the excluded audit drain after its fifteen-minute quiet period; neither owner audits nor this release automation can become customer demand or revenue.

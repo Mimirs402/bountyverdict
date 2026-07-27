@@ -1,0 +1,14 @@
+[Unit]
+Description=Retry the reviewed BountyVerdict post-boundary release
+
+[Timer]
+OnCalendar=2026-07-27 19:42:00 Europe/Bucharest
+OnCalendar=2026-07-27 20:02:00 Europe/Bucharest
+OnCalendar=2026-07-27 20:22:00 Europe/Bucharest
+OnCalendar=2026-07-27 20:42:00 Europe/Bucharest
+AccuracySec=1s
+Persistent=true
+Unit=bountyverdict-post-boundary-release.service
+
+[Install]
+WantedBy=timers.target

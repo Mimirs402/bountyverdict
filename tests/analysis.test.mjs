@@ -408,6 +408,25 @@ test("a maintainer-authored issue denial is a withdrawn reward hard stop", () =>
   assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
 });
 
+test("a maintainer statement that the project does not pay for code withdraws an advertised bounty", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: "Did you check our AGENTS.md and notice that we don't pay anything for code?",
+      author_association: "MEMBER",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-no-payment",
+      created_at: "2026-07-26T18:21:12Z",
+    }],
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.withdrawals.length, 1);
+  assert.ok(output.signals.some((item) => item.label === "Reward withdrawal signal" && item.hardStop));
+  assert.ok(!output.signals.some((item) => item.label === "Unsafe task instructions"));
+});
+
 test("issue updated_at is never used as a body-edit timestamp", () => {
   const issue = {
     ...healthyIssue,
@@ -2078,6 +2097,7 @@ test("ordinary redacted reproduction details are not unsafe task instructions", 
     "Show the environment variable names only, not the values, and use placeholders for every credential.",
     "Update the helper that resolves the user's home directory without printing the resulting path.",
     "You can always provide an access token or deploy key as a secret to authenticate an external CI/CD system.",
+    "I don't see any way that this could return an incomplete password. Read the actual code of the function.",
   ];
   for (const body of safeRequests) {
     const output = analyzeBounty({

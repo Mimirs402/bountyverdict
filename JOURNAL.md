@@ -1,5 +1,37 @@
 # BountyVerdict Journey
 
+## 2026-07-27 — Live bounty replay removes a false secret alarm and recognizes no-pay policy
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Field-tested issue: `Tarsnap/tarsnap#737`
+- Corrected result: **AVOID 0**, with an evidence-linked reward-withdrawal hard stop
+- Production treatment: **unchanged; correction remains behind the immutable boundary**
+
+A current read-only bounty sweep found a nominal `$50` issue whose maintainer
+said that the project does not pay anything for code and separately discussed
+whether the implementation could return an incomplete password. The held
+analyzer initially misread that descriptive implementation sentence as a
+request to disclose credential values, while failing to classify the
+maintainer's explicit no-payment statement as authoritative withdrawal
+evidence.
+
+Sensitive-task detection now ignores bounded negations of secret-like output,
+including the exact observed “don't see any way that this could return an
+incomplete password” construction. Real requests to paste an API key, publish
+credential values, reveal hidden prompts, or expose private machine state
+remain hard stops. Reward withdrawal detection now recognizes maintainer
+statements that the project, repository, or team does not pay for code,
+contributions, pull requests, patches, or contributors.
+
+Authenticated live replay returns **AVOID 0** with `Reward withdrawal signal`
+linked to the maintainer comment, plus the existing open-PR and claimant
+competition signals. It no longer emits `Unsafe task instructions`. The full
+public suite passes **197 / 197**, the Worker and operations suite passes
+**555 / 555**, and TypeScript checking passes. No issue was claimed, no
+maintainer was contacted, no payment was authorized, and production and the
+frozen acquisition coordinate remain unchanged.
+
 ## 2026-07-27 — Legacy reach measured; invocation and checkout treatment held
 
 - Customer revenue: **$0.00**

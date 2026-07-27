@@ -35,6 +35,7 @@ const WITHDRAWAL_PATTERNS = [
   /(?:reward|bounty).{0,80}(?:withdrew|withdraws?).{0,30}\bit\b/i,
   /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}(?:(?:cancelled|canceled|removed|withdrew)\s+it|decided to (?:cancel|remove|withdraw)\s+it)/i,
   /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}\bit\s+(?:is|was|remains?)\s+no longer\s+(?:available|funded|payable)/i,
+  /\b(?:we|maintainers?|the (?:project|team|repository|repo))\s+(?:do not|don['’]?t|never|won['’]?t|will not)\s+pay\b[^.\n]{0,80}\b(?:code|contributions?|pull requests?|patches?|contributors?)\b/i,
 ];
 
 const REWARD_PLATFORM_REJECTION_PATTERNS = [
@@ -112,6 +113,7 @@ function policyRequestsSensitiveAgentContext(value) {
 
 const SENSITIVE_DISCLOSURE_ACTION = /\b(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)\b/i;
 const SENSITIVE_DISCLOSURE_GUARD = /\b(?:(?:do not|don['’]?t|never|must not)\s+(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)|(?:redact|omit|mask)\b|(?:placeholder|names? only|not (?:the )?values?))[^.\n]{0,120}\b(?:secrets?|credentials?|passwords?|tokens?|keys?|prompts?|instructions?|context|environment variables?)\b/i;
+const SENSITIVE_OUTPUT_DENIAL = /\b(?:cannot|can['’]?t|could not|don['’]?t|do not|no way)\b[^.\n]{0,100}\b(?:return|print|write|show)\b[^.\n]{0,80}\b(?:secrets?|credentials?|passwords?|tokens?|keys?)\b/i;
 const HIDDEN_AGENT_CONTEXT_PATTERNS = [
   /\b(?:verbatim|exact|full|complete|unabridged|unredacted)\s+(?:copy\s+of\s+)?(?:all\s+)?(?:system|developer|hidden|initialization|agent|model|session)?[ -]?(?:instructions?|guidelines?|prompts?|context|messages?)\b/i,
   /\b(?:instructions?|guidelines?|prompts?|context)\b[^.\n]{0,120}\b(?:before|prior to)\b[^.\n]{0,40}\b(?:first|initial)\b[^.\n]{0,24}\b(?:human|user)\s+message\b/i,
@@ -131,6 +133,7 @@ function sensitiveTaskDisclosure(value) {
     .filter(Boolean);
   for (const chunk of chunks) {
     if (SENSITIVE_DISCLOSURE_GUARD.test(chunk)) continue;
+    if (SENSITIVE_OUTPUT_DENIAL.test(chunk)) continue;
     const requestsDisclosure = SENSITIVE_DISCLOSURE_ACTION.test(chunk) || /\b(?:must|required to|required contributor comment)\b/i.test(chunk);
     if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(chunk))) {
       return "hidden agent instructions or context";

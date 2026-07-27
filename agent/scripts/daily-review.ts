@@ -130,7 +130,11 @@ await atomicWrite(scorecardFile, scorecard);
 if (gate.action === "invoke_codex") {
   await runCodex(gate.prompt as string, scorecard.generated_at.slice(0, 10));
 }
-await atomicWrite(baselineFile, scorecard);
+// Preserve the first observation timestamp for an unchanged alert so the
+// local gate can issue one bounded weekly reminder without invoking Codex daily.
+if (gate.reason !== "unhealthy_materially_unchanged") {
+  await atomicWrite(baselineFile, scorecard);
+}
 console.log(JSON.stringify({
   product: "BountyVerdict daily review gate",
   checked_at: scorecard.generated_at,

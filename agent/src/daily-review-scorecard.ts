@@ -73,10 +73,18 @@ export type DailyReviewScorecard = {
 
 export type DailyReviewGate = {
   action: "skip_codex" | "invoke_codex";
-  reason: "healthy_baseline_created" | "healthy_materially_unchanged" | "material_change" | "unhealthy";
+  reason:
+    | "healthy_baseline_created"
+    | "healthy_materially_unchanged"
+    | "material_change"
+    | "unhealthy"
+    | "unhealthy_materially_unchanged"
+    | "unhealthy_periodic_reminder";
   changed_paths: string[];
   prompt: string | null;
 };
+
+const UNHEALTHY_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 function object(value: unknown): Record<string, any> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -342,6 +350,23 @@ export function buildDailyReviewGate(
   previous: DailyReviewScorecard | null,
 ): DailyReviewGate {
   if (!scorecard.healthy) {
+    if (previous?.material_fingerprint === scorecard.material_fingerprint) {
+      const elapsed = Date.parse(scorecard.generated_at) - Date.parse(previous.generated_at);
+      if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < UNHEALTHY_REMINDER_INTERVAL_MS) {
+        return {
+          action: "skip_codex",
+          reason: "unhealthy_materially_unchanged",
+          changed_paths: [],
+          prompt: null,
+        };
+      }
+      return {
+        action: "invoke_codex",
+        reason: "unhealthy_periodic_reminder",
+        changed_paths: [],
+        prompt: compactReviewPrompt(scorecard, []),
+      };
+    }
     const changes = previous
       ? changedPaths(materialProjection(previous), materialProjection(scorecard))
       : [];

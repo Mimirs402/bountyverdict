@@ -210,4 +210,26 @@ test("paid-stage deltas and reliability alerts produce only a compact scorecard 
     "distribution_monitor_errors",
     "functional_canary_unhealthy_or_missing",
   ]);
+
+  const unchangedNextDay = buildDailyReviewScorecard({
+    distribution: { ...distribution(), healthy: false, errors: ["canary stale"] },
+    functional: { ...functional(), healthy: false },
+    funnel: changedSnapshot,
+    demand: { errors: [] },
+  }, "2026-07-30T12:00:00.000Z");
+  const unchangedGate = buildDailyReviewGate(unchangedNextDay, broken);
+  assert.equal(unchangedGate.reason, "unhealthy_materially_unchanged");
+  assert.equal(unchangedGate.action, "skip_codex");
+  assert.equal(unchangedGate.prompt, null);
+
+  const unchangedAfterWeek = buildDailyReviewScorecard({
+    distribution: { ...distribution(), healthy: false, errors: ["canary stale"] },
+    functional: { ...functional(), healthy: false },
+    funnel: changedSnapshot,
+    demand: { errors: [] },
+  }, "2026-08-05T12:00:00.000Z");
+  const reminderGate = buildDailyReviewGate(unchangedAfterWeek, broken);
+  assert.equal(reminderGate.reason, "unhealthy_periodic_reminder");
+  assert.equal(reminderGate.action, "invoke_codex");
+  assert.match(reminderGate.prompt || "", /health alerts only/);
 });

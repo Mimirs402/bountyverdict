@@ -36,7 +36,7 @@ verification, and settlement unchanged, while returning the real
 `make_http_request_with_x402` tool name and exact bounded arguments after a
 valid unpaid call.
 
-The combined candidate passes **195 / 195** public tests, **555 / 555** Worker
+The combined candidate passes **196 / 196** public tests, **555 / 555** Worker
 and operations tests, Node `22.23.1` typechecking, synchronized public
 contracts, production and testnet dry Worker bundles, the real Glama bridge,
 zero high-severity production dependency findings, and `git diff --check`.

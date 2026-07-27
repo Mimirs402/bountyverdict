@@ -7,6 +7,7 @@ import {
 } from "./issuehunt.ts";
 import { fetchAlgoraEvidence } from "./algora.ts";
 import { fetchLightningBountiesEvidence } from "./lightning-bounties.ts";
+import { fetchOpireEvidence } from "./opire.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
 
 export interface CheckEnvironment {
@@ -455,7 +456,7 @@ async function checkGithubIssueInternal(
   }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
-  const [bountyHubEvidence, issueHuntEvidence, algoraEvidence, lightningEvidence] = await Promise.all([
+  const [bountyHubEvidence, issueHuntEvidence, algoraEvidence, lightningEvidence, opireEvidence] = await Promise.all([
     fetchCanonicalBountyHubEvidence(canonical, submitted, fetchImpl),
     fetchCanonicalIssueHuntEvidence(
       issueResponse.data,
@@ -480,6 +481,17 @@ async function checkGithubIssueInternal(
           fetchImpl,
         )
       : Promise.resolve(null),
+    Number.isSafeInteger(issueResponse.data?.id) && Number(issueResponse.data.id) > 0 &&
+        Number.isSafeInteger(repoResponse.data?.id) && Number(repoResponse.data.id) > 0
+      ? fetchOpireEvidence(
+          canonical.owner,
+          canonical.repo,
+          canonical.number,
+          Number(issueResponse.data.id),
+          Number(repoResponse.data.id),
+          fetchImpl,
+        )
+      : Promise.resolve(null),
   ]);
   const bountyHubTerminal = bountyHubEvidence &&
     ["SOLVED", "RETRACTED", "FROZEN", "CLAIMED"].includes(bountyHubEvidence.state);
@@ -489,11 +501,13 @@ async function checkGithubIssueInternal(
       ? issueHuntEvidence
     : bountyHubTerminal
       ? bountyHubEvidence
+      : opireEvidence?.claim_count
+        ? opireEvidence
       : algoraEvidence?.state === "CLAIMED"
         ? algoraEvidence
         : issueHuntEvidence?.submitted_pull_requests.length
           ? issueHuntEvidence
-          : bountyHubEvidence || algoraEvidence || lightningEvidence || issueHuntEvidence;
+          : bountyHubEvidence || algoraEvidence || opireEvidence || lightningEvidence || issueHuntEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)

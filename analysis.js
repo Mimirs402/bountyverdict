@@ -594,6 +594,13 @@ function opireRewardState(comments) {
 }
 
 function platformClaimState(comments, openPulls, opire, reward, platformEvidence) {
+  if (platformEvidence?.platform === "Opire" && platformEvidence.claim_count > 0) {
+    return {
+      label: "Bounty platform reports active competition",
+      detail: `Opire reports ${platformEvidence.claim_count} solver${platformEvidence.claim_count === 1 ? "" : "s"} claiming this issue.`,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "Lightning Bounties" && platformEvidence.state === "AWARDED") {
     return {
       label: "Bounty platform reports reward awarded",
@@ -807,6 +814,16 @@ function openBountyAvailability(issue, comments) {
 }
 
 function rewardEvidence(issue, comments, opire, platformEvidence) {
+  if (platformEvidence?.platform === "Opire") {
+    return {
+      state: "PROMISED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "Lightning Bounties") {
     return {
       state: platformEvidence.state === "AWARDED"
@@ -1270,7 +1287,8 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   } else if (reward.state === "PROMISED") {
     signals.push(signal(
-      platformEvidence?.platform === "BountyHub" || platformEvidence?.platform === "Lightning Bounties"
+      platformEvidence?.platform === "BountyHub" || platformEvidence?.platform === "Lightning Bounties" ||
+          platformEvidence?.platform === "Opire"
         ? "Platform pay-when-solved promise found"
         : "Maintainer reward promise found",
       0,
@@ -1278,6 +1296,8 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
         ? `BountyHub records a $${platformEvidence.promised_amount} pay-when-solved reward, but no platform-held/prepaid amount; creator approval and payout are not guaranteed.`
         : platformEvidence?.platform === "Lightning Bounties"
           ? `Lightning Bounties reports ${formatRewardAmount(platformEvidence.reclaimable_amount, "SATS")} as unlocked/reclaimable and no sats still secured; payout is not guaranteed.`
+        : platformEvidence?.platform === "Opire"
+          ? `Opire advertises a ${formatRewardAmount(platformEvidence.amount, "USD")} pay-when-solved reward; the creator pays only after accepting a claim, so payout is not prepaid or guaranteed.`
         : "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
       reward.evidenceUrl,
     ));

@@ -1,5 +1,40 @@
 # BountyVerdict Journey
 
+## 2026-07-27 — Marketplace-originated Opire rewards retain exact platform evidence
+
+- Customer revenue: **$0.00**
+- Genuine external purchases: **0 / 10**
+- Live replay: `denoland/deno#18147`
+- Corrected reward: **$70 USD pay-when-solved**, three active Opire claimers
+- Production treatment: **unchanged; correction remains behind the immutable boundary**
+
+A fresh cross-platform bounty sweep found an official Opire listing that was
+created from Opire's web application and therefore left no authenticated bot
+comment or backlink in the GitHub issue. The production-equivalent checker
+returned `NOT_FOUND` even though Opire's public issue page and backend reported
+one available `$70` reward, zero paid rewards, and three claiming solvers.
+
+The held checker now performs one bounded public Opire search using the
+canonical repository name, requires exactly one result whose credential-free
+GitHub issue URL matches the canonical owner, repository, and issue number,
+then validates the detail record against GitHub's numeric issue and repository
+IDs. It accepts only bounded unique ULIDs, exact cent-denominated USD rewards,
+recognized available or paid states, canonical issue and repository URLs, and
+unique solver identities. Any timeout, oversized response, duplicate, unknown
+status, route mismatch, or identity drift fails soft to no platform evidence.
+
+Live replay now preserves Opire's exact `$70` pay-after-acceptance promise,
+labels it as not prepaid or guaranteed, and emits an evidence-linked active
+competition hard stop for the three current claimers. The final verdict remains
+**AVOID 0** because two pull requests are open, ten attempts already closed,
+and the bounded GitHub discussion is incomplete. This improves provenance
+without making saturated work actionable.
+
+The complete public suite passes **198 / 198**, the Worker and operations suite
+passes **559 / 559**, TypeScript checking, synchronized public contracts,
+testnet Worker dry deployment, and `git diff --check` pass. No claim, comment,
+bid, payment, production deployment, or marketplace mutation occurred.
+
 ## 2026-07-27 — Live bounty replay removes a false secret alarm and recognizes no-pay policy
 
 - Customer revenue: **$0.00**

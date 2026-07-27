@@ -963,6 +963,37 @@ test("a trusted platform listing is not overridden by contributor-payment heuris
   assert.ok(!output.signals.some((item) => item.label === "Contributor payment required"));
 });
 
+test("an exact Opire API promise preserves amount and hard-stops active solver competition", () => {
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    platformEvidence: {
+      platform: "Opire",
+      verification: "TRUSTED_PLATFORM_API",
+      state: "OPEN",
+      amount: 70,
+      currency: "USD",
+      claim_count: 3,
+      try_count: 3,
+      evidence_url: "https://app.opire.dev/issues/01J8T24PJDXX69RM7XV24SQT11",
+    },
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.reward.state, "PROMISED");
+  assert.equal(output.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(output.reward.platform, "Opire");
+  assert.equal(output.reward.amount, 70);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Bounty platform reports active competition" && item.hardStop &&
+    /3 solvers claiming/i.test(item.detail)
+  ));
+  assert.ok(output.signals.some((item) =>
+    item.label === "Platform pay-when-solved promise found" && /not prepaid or guaranteed/i.test(item.detail)
+  ));
+});
+
 test("an authenticated Algora listing aggregates concurrent sponsor bounties", () => {
   const comments = [{
     body: "## 💎 $1 bounty [• sponsor-one](https://algora.io/one)\n" +

@@ -67,6 +67,7 @@ import {
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
+  verifyThe402ApiKeyWebhookEnvelope,
   verifyThe402Webhook,
 } from "./the402.ts";
 import {
@@ -98,6 +99,7 @@ interface Env {
   THE402_SERVICE_MAP?: string;
   THE402_AUTOMATION_ENABLED?: string;
   THE402_REGISTRATION_WINDOW?: string;
+  THE402_API_KEY_WEBHOOK_AUTH_ENABLED?: string;
   NEAR_MARKET_AUTOMATION_ENABLED?: string;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
@@ -730,14 +732,20 @@ app.post("/api/the402/webhook", async (c) => {
     return c.json({ error: "NOT_FOUND" }, 404);
   }
   const rawBody = await c.req.text();
-  const verified = await verifyThe402Webhook({
+  const verificationInput = {
     raw_body: rawBody,
     api_key_header: c.req.header("X-Platform-Secret"),
     signature_header: c.req.header("X-Webhook-Signature"),
     timestamp_header: c.req.header("X-Webhook-Timestamp"),
     api_key: c.env.THE402_API_KEY,
+  };
+  const verified = await verifyThe402Webhook({
+    ...verificationInput,
     webhook_secret: c.env.THE402_WEBHOOK_SECRET,
-  });
+  }) || (
+    c.env.THE402_API_KEY_WEBHOOK_AUTH_ENABLED === "YES" &&
+    await verifyThe402ApiKeyWebhookEnvelope(verificationInput)
+  );
   if (!verified || !c.env.THE402_API_KEY) return c.json({ error: "NOT_FOUND" }, 404);
 
   let job;

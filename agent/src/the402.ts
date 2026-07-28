@@ -148,6 +148,25 @@ export async function verifyThe402Webhook(input: {
   );
 }
 
+export async function verifyThe402ApiKeyWebhookEnvelope(input: {
+  raw_body: string;
+  api_key_header: string | undefined;
+  signature_header: string | undefined;
+  timestamp_header: string | undefined;
+  api_key: string | undefined;
+  now_ms?: number;
+}): Promise<boolean> {
+  const bytes = new TextEncoder().encode(input.raw_body);
+  if (bytes.length === 0 || bytes.length > MAX_WEBHOOK_BYTES) return false;
+  if (!input.api_key || input.api_key.length < 16 || !input.api_key_header) return false;
+  if (!await constantTimeTextEqual(input.api_key_header, input.api_key)) return false;
+  if (!input.timestamp_header || !/^\d{10}$/.test(input.timestamp_header)) return false;
+  const timestamp = Number(input.timestamp_header);
+  const nowSeconds = Math.floor((input.now_ms ?? Date.now()) / 1000);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > MAX_WEBHOOK_AGE_SECONDS) return false;
+  return /^sha256=[a-f0-9]{64}$/.test(input.signature_header || "");
+}
+
 export function parseThe402JobDispatch(
   rawBody: string,
   serviceMap: ReadonlyMap<string, The402Product>,

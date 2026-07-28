@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -8,6 +8,14 @@ import {
   parseOpenJobs,
   type MoltJob,
 } from "../src/demand-watch.ts";
+import {
+  demandWatchSourceStatus,
+  resolveDemandWatchSource,
+  shouldRefreshTaskmarketTracked,
+  TASKMARKET_TRACKED_REFRESH_INTERVAL_MS,
+  type DemandWatchSourceKey,
+  type DemandWatchSourceStatus,
+} from "../src/demand-watch-state.ts";
 import {
   analyzeTaskmarket,
   parseTaskmarketPage,
@@ -30,11 +38,69 @@ const stateFile = process.env.DEMAND_WATCH_STATE_FILE ||
 const timeoutMs = 20_000;
 const maximumResponseBytes = 2_000_000;
 
+type JsonRecord = Record<string, any>;
+
 async function atomicWrite(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, contents, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+async function readPreviousState(): Promise<JsonRecord | null> {
+  try {
+    const parsed = JSON.parse(await readFile(stateFile, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Previous demand-watch state is malformed.");
+    }
+    const state = parsed as JsonRecord;
+    if (state.schema_version !== 2 || state.read_only !== true || state.actions_enabled !== false ||
+      !state.sources || typeof state.sources !== "object" || Array.isArray(state.sources)) {
+      throw new Error("Previous demand-watch state is incompatible.");
+    }
+    return state;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function previousSourceValue(previous: JsonRecord | null, key: DemandWatchSourceKey): unknown {
+  if (!previous) return undefined;
+  if (key === "taskmarket_inventory") {
+    const taskmarket = previous.sources?.taskmarket;
+    if (!taskmarket || typeof taskmarket !== "object" || Array.isArray(taskmarket)) return undefined;
+    const { tracked_worker: _tracked, tracked_refresh: _refresh, ...inventory } = taskmarket;
+    return inventory;
+  }
+  if (key === "taskmarket_tracked") return previous.sources?.taskmarket?.tracked_worker;
+  return previous.sources?.[key];
+}
+
+function resolveSource<T>({
+  key,
+  label,
+  result,
+  previous,
+  checkedAt,
+  statuses,
+}: {
+  key: DemandWatchSourceKey;
+  label: string;
+  result: PromiseSettledResult<T>;
+  previous: JsonRecord | null;
+  checkedAt: string;
+  statuses: Record<DemandWatchSourceKey, DemandWatchSourceStatus>;
+}): T {
+  const resolved = resolveDemandWatchSource({
+    attemptedAt: checkedAt,
+    label,
+    result,
+    previousValue: previousSourceValue(previous, key) as T | undefined,
+    previousStatus: demandWatchSourceStatus(previous, key),
+  });
+  statuses[key] = resolved.status;
+  return resolved.value;
 }
 
 async function publicJson(url: URL, market: string): Promise<unknown> {
@@ -185,35 +251,103 @@ async function fetchTaskmarketTracked(): Promise<{ payloads: TaskmarketTrackedPa
 
 const checkedAtMs = Date.now();
 const checkedAt = new Date(checkedAtMs).toISOString();
-const [moltOpen, moltFunded, openJobsPayload, taskmarketOpen, taskmarketTracked] = await Promise.all([
-  fetchMoltJobs(false),
-  fetchMoltJobs(true),
-  publicJson(new URL(`${OPENJOBS_API}?status=open&limit=100`), "OpenJobs"),
-  fetchTaskmarketOpen(),
-  fetchTaskmarketTracked(),
+const previous = await readPreviousState();
+const trackedDecision = shouldRefreshTaskmarketTracked(previous, checkedAtMs);
+const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
+  Promise.all([fetchMoltJobs(false), fetchMoltJobs(true)])
+    .then(([openJobs, fundedJobs]) => analyzeMoltJobs({
+      open_jobs: openJobs,
+      funded_jobs: fundedJobs,
+      now_ms: checkedAtMs,
+    })),
+  publicJson(new URL(`${OPENJOBS_API}?status=open&limit=100`), "OpenJobs")
+    .then((payload) => {
+      const openJobs = parseOpenJobs(payload);
+      if (openJobs.length === 100) {
+        throw new Error("OpenJobs reached its public cap while exposing no usable pagination; inventory is incomplete.");
+      }
+      return analyzeOpenJobs(openJobs, checkedAtMs);
+    }),
+  fetchTaskmarketOpen().then((tasks) => analyzeTaskmarket(tasks, checkedAtMs)),
+  trackedDecision.due
+    ? fetchTaskmarketTracked().then((tracked) => reconcileTaskmarketTracked({
+        worker_address: TASKMARKET_WORKER_ADDRESS,
+        tracked: TASKMARKET_TRACKED_SUBMISSIONS,
+        payloads: tracked.payloads,
+        agent_stats: tracked.stats,
+        now_ms: checkedAtMs,
+      }))
+    : Promise.resolve(previousSourceValue(previous, "taskmarket_tracked")),
 ]);
-const openJobs = parseOpenJobs(openJobsPayload);
-if (openJobs.length === 100) {
-  throw new Error("OpenJobs reached its public cap while exposing no usable pagination; inventory is incomplete.");
+
+const statuses = {} as Record<DemandWatchSourceKey, DemandWatchSourceStatus>;
+const moltjobs = resolveSource({
+  key: "moltjobs",
+  label: "MoltJobs",
+  result: moltResult,
+  previous,
+  checkedAt,
+  statuses,
+});
+const openjobs = resolveSource({
+  key: "openjobs",
+  label: "OpenJobs",
+  result: openJobsResult,
+  previous,
+  checkedAt,
+  statuses,
+});
+const taskmarketInventory = resolveSource({
+  key: "taskmarket_inventory",
+  label: "Taskmarket inventory",
+  result: taskmarketInventoryResult,
+  previous,
+  checkedAt,
+  statuses,
+});
+let taskmarketTracked: unknown;
+if (trackedDecision.due) {
+  taskmarketTracked = resolveSource({
+    key: "taskmarket_tracked",
+    label: "Taskmarket tracked reconciliation",
+    result: taskmarketTrackedResult,
+    previous,
+    checkedAt,
+    statuses,
+  });
+} else {
+  taskmarketTracked = previousSourceValue(previous, "taskmarket_tracked");
+  const previousStatus = demandWatchSourceStatus(previous, "taskmarket_tracked");
+  if (taskmarketTracked === undefined || previousStatus === null) {
+    throw new Error("Taskmarket tracked reconciliation was skipped without a last-good snapshot.");
+  }
+  statuses.taskmarket_tracked = previousStatus;
 }
+const degradedSources = Object.values(statuses).filter(({ error }) => error !== null).length;
+const trackedRefreshed = trackedDecision.due &&
+  statuses.taskmarket_tracked.error === null &&
+  statuses.taskmarket_tracked.last_good_at === checkedAt;
 const state = {
   schema_version: 2,
   checked_at: checkedAt,
   read_only: true,
   actions_enabled: false,
-  errors: 0,
+  errors: degradedSources,
+  degraded_sources: degradedSources,
+  source_status: statuses,
   sources: {
-    moltjobs: analyzeMoltJobs({ open_jobs: moltOpen, funded_jobs: moltFunded }),
-    openjobs: analyzeOpenJobs(openJobs),
+    moltjobs,
+    openjobs,
     taskmarket: {
-      ...analyzeTaskmarket(taskmarketOpen, checkedAtMs),
-      tracked_worker: reconcileTaskmarketTracked({
-        worker_address: TASKMARKET_WORKER_ADDRESS,
-        tracked: TASKMARKET_TRACKED_SUBMISSIONS,
-        payloads: taskmarketTracked.payloads,
-        agent_stats: taskmarketTracked.stats,
-        now_ms: checkedAtMs,
-      }),
+      ...(taskmarketInventory as JsonRecord),
+      tracked_worker: taskmarketTracked,
+      tracked_refresh: {
+        attempted: trackedDecision.due,
+        refreshed: trackedRefreshed,
+        reason: trackedDecision.reason,
+        interval_seconds: TASKMARKET_TRACKED_REFRESH_INTERVAL_MS / 1_000,
+        last_good_at: statuses.taskmarket_tracked.last_good_at,
+      },
     },
     excluded: {
       lobster_jobs: "excluded: official documentation requires bearer authentication and its unauthenticated surface exposed sensitive-looking auth metadata",
@@ -222,4 +356,27 @@ const state = {
   accounting_note: "Public demand inventory and exact-match candidates are acquisition evidence only. A tracked Taskmarket submission becomes one purchase and positive worker-payment revenue only after its completed task exposes a canonical award and a live successful Base receipt binds it to the canonical Taskmarket Diamond TaskCompleted event, exact task, onchain non-owner requester, worker payment, platform fee, and a unique exact Base-USDC payout transfer from the Diamond to the worker.",
 };
 await atomicWrite(stateFile, `${JSON.stringify(state, null, 2)}\n`);
-console.log(JSON.stringify(state, null, 2));
+console.log(JSON.stringify({
+  checked_at: checkedAt,
+  healthy: degradedSources === 0,
+  degraded_sources: degradedSources,
+  source_errors: Object.fromEntries(
+    Object.entries(statuses)
+      .filter(([, status]) => status.error !== null)
+      .map(([source, status]) => [source, status.error]),
+  ),
+  exact_candidates: {
+    moltjobs: (moltjobs as JsonRecord).exact_candidate_count,
+    openjobs: (openjobs as JsonRecord).exact_candidate_count,
+    taskmarket: (taskmarketInventory as JsonRecord).exact_candidate_count,
+  },
+  taskmarket_tracked: {
+    attempted: trackedDecision.due,
+    refreshed: trackedRefreshed,
+    reason: trackedDecision.reason,
+    last_good_at: statuses.taskmarket_tracked.last_good_at,
+    pending_submissions: (taskmarketTracked as JsonRecord).pending_submissions,
+    settled_submissions: (taskmarketTracked as JsonRecord).settled_submissions,
+    settled_worker_earnings_usdc: (taskmarketTracked as JsonRecord).settled_worker_earnings_usdc,
+  },
+}));

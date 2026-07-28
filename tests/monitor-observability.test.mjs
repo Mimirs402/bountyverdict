@@ -11,6 +11,7 @@ const acquisitionUrl = new URL("../agent/src/acquisition.ts", import.meta.url);
 const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.url);
 const paymentSmokeUrl = new URL("../agent/scripts/payment-smoke.ts", import.meta.url);
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
+const demandTimerUrl = new URL("../ops/systemd/bountyverdict-demand-watch.timer", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
@@ -968,10 +969,11 @@ test("directory monitoring retains AgentNDX review and exact listing state", asy
 });
 
 test("public demand monitoring is read-only and Taskmarket accounting requires Base receipts", async () => {
-  const [distribution, watcher, service] = await Promise.all([
+  const [distribution, watcher, service, timer] = await Promise.all([
     readFile(distributionUrl, "utf8"),
     readFile(demandWatchUrl, "utf8"),
     readFile(demandServiceUrl, "utf8"),
+    readFile(demandTimerUrl, "utf8"),
   ]);
   assert.match(watcher, /read_only: true/);
   assert.match(watcher, /actions_enabled: false/);
@@ -981,6 +983,13 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.doesNotMatch(watcher, /Authorization|api[_-]?key|place_bid|accept_job|x-taskmarket-api-token|keystore/i);
   assert.match(watcher, /method: "eth_getTransactionReceipt"/);
   assert.doesNotMatch(watcher, /method: "(?:eth_sendRawTransaction|eth_sendTransaction)"/);
+  assert.match(watcher, /Promise\.allSettled/);
+  assert.match(watcher, /shouldRefreshTaskmarketTracked/);
+  assert.match(watcher, /errors: degradedSources/);
+  assert.match(watcher, /degraded_sources: degradedSources/);
+  assert.match(watcher, /source_errors: Object\.fromEntries/);
+  assert.doesNotMatch(watcher, /console\.log\(JSON\.stringify\(state, null, 2\)\)/);
+  assert.match(timer, /OnUnitActiveSec=10min/);
   assert.match(distribution, /async function publicDemandStatus/);
   assert.match(distribution, /state\.read_only !== true \|\| state\.actions_enabled !== false/);
   assert.match(distribution, /public_inventory_exact_fits_submissions_and_API_awards_are_not_purchases_or_revenue/);
@@ -1006,6 +1015,8 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(distribution, /settled_worker_earnings_usdc/);
   assert.match(distribution, /API award rows, or expiry alone remain zero purchases and zero revenue/);
   assert.match(distribution, /Public funded-demand watcher/);
+  assert.match(distribution, /trackedSnapshotAt = sourceStatus\.taskmarket_tracked\.last_good_at/);
+  assert.match(distribution, /state\.errors !== degradedSources/);
   assert.doesNotMatch(service, /EnvironmentFile/);
 });
 

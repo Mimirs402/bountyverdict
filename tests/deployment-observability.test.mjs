@@ -59,7 +59,9 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /mcp_release_ready=false/);
   assert.match(workflow, /if \[\[ "\$mcp_release_ready" != "true" \]\]/);
   assert.match(workflow, /Production MCP contracts did not converge to the deployed release/);
-  assert.equal((workflow.match(/for attempt in \{1\.\.30\}; do/g) || []).length, 6);
+  assert.equal((workflow.match(/for attempt in \{1\.\.30\}; do/g) || []).length, 7);
+  assert.match(workflow, /agent_manifest_ready=false/);
+  assert.match(workflow, /Production agent manifest did not converge to the deployed contract/);
   assert.match(workflow, /npx wrangler deployments list --env production --json/);
   assert.match(workflow, /current production deployment is not one version at 100 percent/);
   assert.match(workflow, /semantic_version=\$previous_semantic_version/);

@@ -84,7 +84,8 @@ test("the scheduled acquisition snapshot has no marketplace mutation request pat
   assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
   assert.match(directory, /name: "search_servers"/);
 
-  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 8);
+  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 9);
+  assert.match(distribution, /services\/\$\{encodeURIComponent\(String\(service\.id\)\)\}\/test[\s\S]{0,180}method: "POST"/);
   assert.equal((distribution.match(/method:\s*"(?:PUT|PATCH|DELETE)"/g) || []).length, 0);
   assert.equal((distribution.match(/params: \{ name: "(?:get|search_live)"/g) || []).length, 2);
   assert.match(distribution, /validatePaymentChallenge\(challenge, \{\s+maximumAtomic: expectedAmount,\s+executePayment: false,/);

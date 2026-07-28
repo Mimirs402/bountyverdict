@@ -7,6 +7,7 @@ import {
   normalizeThe402CustomerSettlement,
   normalizeThe402ServiceOutcome,
   normalizeThe402WebhookHealth,
+  normalizeThe402WebhookTest,
 } from "../src/marketplace-telemetry.ts";
 
 test("accepts pending and string-valued Agentic Market quality counters", () => {
@@ -96,6 +97,34 @@ test("distinguishes a pre-sale unverified webhook from a failed webhook", () => 
   assert.throws(
     () => normalizeThe402WebhookHealth([true, false], 0),
     /inconsistent with completed jobs/,
+  );
+});
+
+test("accepts only a successful the402 synthetic service dispatch", () => {
+  const response = {
+    success: true,
+    response_time_ms: 123,
+    status_code: 200,
+    warnings: [],
+    test_payload: {
+      type: "job_dispatch",
+      job_id: "test_job_abc123",
+      service_id: "svc_expected",
+      test: true,
+    },
+    response_body: { accepted: true, job_id: "test_job_abc123" },
+  };
+  assert.deepEqual(
+    normalizeThe402WebhookTest(response, "svc_expected"),
+    { response_time_ms: 123, job_id: "test_job_abc123" },
+  );
+  assert.throws(
+    () => normalizeThe402WebhookTest({ ...response, warnings: ["slow"] }, "svc_expected"),
+    /did not prove/,
+  );
+  assert.throws(
+    () => normalizeThe402WebhookTest(response, "svc_other"),
+    /did not prove/,
   );
 });
 

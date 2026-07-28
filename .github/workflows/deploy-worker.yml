@@ -287,19 +287,33 @@ jobs:
               if (!new RegExp(`link: <${process.env.PRODUCTION_API_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/.well-known\\/api-catalog>; rel="api-catalog"`, "i").test(body)) process.exit(1);
             });
           '
-          owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/ai-catalog.json" | node -e '
-            let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
-              const value = JSON.parse(body);
-              const entry = value.entries?.[0];
-              const tools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
-              if (value.specVersion !== "1.0" || value.entries?.length !== 1) process.exit(1);
-              if (entry?.identifier !== "urn:air:bountyverdict-agent-production.mimirslab.workers.dev:server:bountyverdict") process.exit(1);
-              if (entry?.type !== "application/mcp-server-card+json" || entry?.url !== `${process.env.PRODUCTION_API_URL}/.well-known/mcp.json`) process.exit(1);
-              if (entry?.representativeQueries?.length !== 6 || entry.representativeQueries.some((query) => query !== query.toLowerCase() || /bountyverdict/i.test(query))) process.exit(1);
-              if (JSON.stringify(entry?.capabilities) !== JSON.stringify(tools)) process.exit(1);
-              if (entry?.metadata?.paymentProtocol !== "x402-v2" || entry?.metadata?.paymentNetwork !== "eip155:8453" || entry?.metadata?.paymentCurrency !== "USDC" || entry?.metadata?.mutatesExternalSystems !== false) process.exit(1);
-            });
-          '
+          # The route can return a valid stale document from another edge while
+          # a new Worker version propagates. Retry the semantic release contract,
+          # not only transport errors.
+          ai_catalog_ready=false
+          for attempt in {1..12}; do
+            if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/ai-catalog.json" | node -e '
+              let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
+                const value = JSON.parse(body);
+                const entry = value.entries?.[0];
+                const tools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+                if (value.specVersion !== "1.0" || value.entries?.length !== 1) process.exit(1);
+                if (entry?.identifier !== "urn:air:bountyverdict-agent-production.mimirslab.workers.dev:server:bountyverdict") process.exit(1);
+                if (entry?.type !== "application/mcp-server-card+json" || entry?.url !== `${process.env.PRODUCTION_API_URL}/.well-known/mcp.json`) process.exit(1);
+                if (entry?.representativeQueries?.length !== 6 || entry.representativeQueries.some((query) => query !== query.toLowerCase() || /bountyverdict/i.test(query))) process.exit(1);
+                if (JSON.stringify(entry?.capabilities) !== JSON.stringify(tools)) process.exit(1);
+                if (entry?.metadata?.paymentProtocol !== "x402-v2" || entry?.metadata?.paymentNetwork !== "eip155:8453" || entry?.metadata?.paymentCurrency !== "USDC" || entry?.metadata?.mutatesExternalSystems !== false) process.exit(1);
+              });
+            '; then
+              ai_catalog_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ai_catalog_ready" != "true" ]]; then
+            echo "Production AI catalog did not converge to the deployed contract" >&2
+            exit 1
+          fi
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);

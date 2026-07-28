@@ -40,6 +40,7 @@ const ownerHeaders = {
     : {}),
 };
 const url = new URL(contract.path, baseUrl);
+if (product === "single") url.searchParams.set("issue_url", issueUrl);
 const harnessRepo = process.env.REPO_URL || defaultRepo;
 if (product === "skill") {
   url.searchParams.set("repo_url", process.env.SKILL_REPO_URL || "https://github.com/coinbase/agentic-wallet-skills");
@@ -57,9 +58,7 @@ if (product === "flake") {
     flakeAttempt = Number(attempt);
   }
 }
-const postBody: unknown = product === "single"
-  ? { issue_url: issueUrl }
-  : product === "portfolio"
+const postBody: unknown = product === "portfolio"
     ? { issue_urls: issueUrls }
     : product === "harness"
       ? { repo_url: harnessRepo }
@@ -91,7 +90,7 @@ const paymentHeader = unpaid.headers.get("payment-required");
 if (!paymentHeader) throw new Error("The 402 response omitted PAYMENT-REQUIRED.");
 const challenge = decodeHeader(paymentHeader);
 const expectedService = contract.service;
-const expectedMethod = contract.method;
+const expectedMethod = product === "single" ? "GET" : contract.method;
 if (challenge.resource?.url !== url.href) throw new Error("The payment challenge resource URL does not match the requested operation.");
 if (challenge.resource?.serviceName !== expectedService) throw new Error(`The payment challenge service is not ${expectedService}.`);
 if (challenge.extensions?.bazaar?.info?.input?.method !== expectedMethod) throw new Error(`The payment challenge method is not ${expectedMethod}.`);

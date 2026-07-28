@@ -9,6 +9,7 @@ const directoryMonitorUrl = new URL("../agent/scripts/directory-monitor.ts", imp
 const agentToolsCloudUrl = new URL("../agent/src/agent-tools-cloud.ts", import.meta.url);
 const acquisitionUrl = new URL("../agent/src/acquisition.ts", import.meta.url);
 const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.url);
+const paymentSmokeUrl = new URL("../agent/scripts/payment-smoke.ts", import.meta.url);
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
@@ -846,6 +847,13 @@ test("production reporting keeps the executable MCP payment handoff visible", as
   assert.match(distribution, /MCP paid-call handoff/);
   assert.match(distribution, /direct MCP payment requires @x402\/mcp/);
   assert.match(distribution, /standard hosts receive the exact versioned HTTP handoff/);
+});
+
+test("production payment inspection exercises the Agentic Wallet-compatible BountyVerdict transport", async () => {
+  const smoke = await readFile(paymentSmokeUrl, "utf8");
+  assert.match(smoke, /if \(product === "single"\) url\.searchParams\.set\("issue_url", issueUrl\)/);
+  assert.match(smoke, /const expectedMethod = product === "single" \? "GET" : contract\.method/);
+  assert.doesNotMatch(smoke, /product === "single"\s*\?\s*\{\s*issue_url:/);
 });
 
 test("Gemini CLI extension exposes only the hosted paid MCP without secrets", async () => {

@@ -4,17 +4,21 @@ import { checkGithubHarness } from "./harness.ts";
 import { diagnoseGithubRun } from "./run.ts";
 import { diagnoseGithubFlake } from "./flake.ts";
 import { parseAndAnalyzeMcpDrift } from "./mcp-drift.ts";
+import { checkGithubSkill } from "./skill.ts";
 
 export const THE402_PRODUCTS = Object.freeze([
   "single",
   "portfolio",
   "harness",
+  "skill",
   "run",
   "flake",
   "mcpdrift",
 ] as const);
 
 export type The402Product = typeof THE402_PRODUCTS[number];
+export const MARKETPLACE_PRODUCTS = THE402_PRODUCTS;
+export type MarketplaceProduct = The402Product;
 
 export interface The402Environment {
   GITHUB_TOKEN?: string;
@@ -27,7 +31,7 @@ export type The402JobDispatch = {
   service_id: string;
   callback_url: string;
   brief: Record<string, unknown>;
-  product: The402Product;
+  product: MarketplaceProduct;
 };
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -59,14 +63,14 @@ function parseCallbackUrl(value: unknown): string {
   return url.href;
 }
 
-function parseProduct(value: unknown): The402Product {
-  if (!THE402_PRODUCTS.includes(value as The402Product)) {
+function parseProduct(value: unknown): MarketplaceProduct {
+  if (!MARKETPLACE_PRODUCTS.includes(value as MarketplaceProduct)) {
     throw new Error("the402 service map contains an unsupported product.");
   }
-  return value as The402Product;
+  return value as MarketplaceProduct;
 }
 
-export function parseThe402ServiceMap(input: string | undefined): ReadonlyMap<string, The402Product> {
+export function parseThe402ServiceMap(input: string | undefined): ReadonlyMap<string, MarketplaceProduct> {
   if (!input) throw new Error("THE402_SERVICE_MAP is not configured.");
   let parsed: unknown;
   try {
@@ -77,8 +81,8 @@ export function parseThe402ServiceMap(input: string | undefined): ReadonlyMap<st
   if (!isObject(parsed) || !Object.keys(parsed).length) {
     throw new Error("THE402_SERVICE_MAP must contain at least one service.");
   }
-  const result = new Map<string, The402Product>();
-  const products = new Set<The402Product>();
+  const result = new Map<string, MarketplaceProduct>();
+  const products = new Set<MarketplaceProduct>();
   for (const [serviceId, value] of Object.entries(parsed)) {
     if (!serviceIdPattern.test(serviceId)) throw new Error("THE402_SERVICE_MAP contains an invalid service ID.");
     const product = parseProduct(value);
@@ -205,7 +209,7 @@ export async function verifyThe402PlatformWebhookEnvelope(
 
 export function parseThe402JobDispatch(
   rawBody: string,
-  serviceMap: ReadonlyMap<string, The402Product>,
+  serviceMap: ReadonlyMap<string, MarketplaceProduct>,
 ): The402JobDispatch | null {
   let parsed: unknown;
   try {
@@ -243,7 +247,7 @@ export async function fulfillThe402Product(
 }
 
 export async function fulfillProduct(
-  product: The402Product,
+  product: MarketplaceProduct,
   brief: Record<string, unknown>,
   env: The402Environment,
 ): Promise<unknown> {
@@ -255,6 +259,13 @@ export async function fulfillProduct(
   }
   if (product === "harness") {
     return checkGithubHarness(briefString(brief, "repo_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });
+  }
+  if (product === "skill") {
+    return checkGithubSkill(
+      briefString(brief, "repo_url"),
+      briefString(brief, "skill_path"),
+      { GITHUB_TOKEN: env.GITHUB_TOKEN },
+    );
   }
   if (product === "run") {
     return diagnoseGithubRun(briefString(brief, "run_url"), { GITHUB_TOKEN: env.GITHUB_TOKEN });

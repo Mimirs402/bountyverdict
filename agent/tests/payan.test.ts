@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PAYAN_OFFERS, PAYAN_PROVIDER_ID } from "../src/payan.ts";
 
-test("PayanAgent offers preserve the six frozen products and direct prices", () => {
+test("PayanAgent offers publish seven products with direct prices", () => {
   assert.match(PAYAN_PROVIDER_ID, /^[a-z0-9]{20,64}$/);
   assert.deepEqual(PAYAN_OFFERS.map(({ product }) => product).sort(), [
-    "flake", "harness", "mcpdrift", "portfolio", "run", "single",
+    "flake", "harness", "mcpdrift", "portfolio", "run", "single", "skill",
   ]);
   assert.deepEqual(Object.fromEntries(PAYAN_OFFERS.map(({ product, priceCents }) => [product, priceCents])), {
     single: 5,
     portfolio: 40,
     harness: 3,
+    skill: 6,
     run: 4,
     flake: 7,
     mcpdrift: 2,
@@ -23,5 +24,7 @@ test("PayanAgent offers preserve the six frozen products and direct prices", () 
     assert.doesNotThrow(() => JSON.parse(offer.outputSchema));
     assert.match(offer.endpoint, /^https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/api\/near-market\//);
   }
+  const skill = PAYAN_OFFERS.find(({ product }) => product === "skill");
+  assert.ok(skill);
+  assert.deepEqual(JSON.parse(skill.inputSchema).required, ["repo_url", "skill_path"]);
 });
-

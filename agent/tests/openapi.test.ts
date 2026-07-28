@@ -155,7 +155,9 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
   assert.match(llms, /AI-work bans/);
   assert.match(llms, /Escrow marketplace/);
   assert.match(llms, /services\/svc_4462e481fedf4afc\/purchase/);
-  assert.match(llms, /SkillVerdict is intentionally excluded/);
+  assert.match(llms, /Provider fulfillment supports all seven tested product contracts through the402 escrow, including SkillVerdict/);
+  assert.match(llms, /Automated fulfillment supports all seven tested input and output contracts through NEAR Agent Market, including SkillVerdict/);
+  assert.match(llms, /authoritative for which listing IDs have actually been published/);
   assert.match(llms, /Remote MCP server: https:\/\/agent\.example\/mcp/);
   assert.match(llms, /io\.github\.Mimirs402\/bountyverdict/);
   assert.match(llms, /plans\/plan_ec6c49878dc34636\/subscribe/);

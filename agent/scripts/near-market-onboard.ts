@@ -1,5 +1,5 @@
 import { NEAR_MARKET_API, NEAR_MARKET_LISTINGS, NEAR_MARKET_PROVIDER_ID } from "../src/near-market.ts";
-import { THE402_PRODUCTS } from "../src/the402.ts";
+import { MARKETPLACE_PRODUCTS } from "../src/the402.ts";
 
 const apiKey = process.env.NEAR_MARKET_API_KEY;
 const enabled = process.env.NEAR_MARKET_CREATE === "YES";
@@ -9,9 +9,9 @@ if (!apiKey || !/^sk_live_[A-Za-z0-9_-]+$/.test(apiKey)) {
   throw new Error("NEAR_MARKET_API_KEY is missing or invalid.");
 }
 if (
-  NEAR_MARKET_LISTINGS.length !== THE402_PRODUCTS.length ||
-  NEAR_MARKET_LISTINGS.some(({ product }) => !THE402_PRODUCTS.includes(product))
-) throw new Error("NEAR Market definitions do not match the frozen six-product distribution set.");
+  NEAR_MARKET_LISTINGS.length !== MARKETPLACE_PRODUCTS.length ||
+  NEAR_MARKET_LISTINGS.some(({ product }) => !MARKETPLACE_PRODUCTS.includes(product))
+) throw new Error("NEAR Market definitions do not match the supported marketplace product set.");
 
 type Service = { service_id: string; agent_id: string; name: string };
 

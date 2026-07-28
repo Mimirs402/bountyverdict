@@ -3,7 +3,8 @@ import { harnessOutputSchema } from "./harness-discovery.ts";
 import { runOutputSchema } from "./run-discovery.ts";
 import { flakeOutputSchema } from "./flake-discovery.ts";
 import { mcpDriftOutputSchema } from "./mcp-drift-discovery.ts";
-import type { The402Product } from "./the402.ts";
+import { SKILL_DISCOVERY_DESCRIPTION, skillOutputSchema } from "./skill-discovery.ts";
+import { THE402_PRODUCTS, type MarketplaceProduct, type The402Product } from "./the402.ts";
 
 export const THE402_API = "https://api.the402.ai/v1";
 export const THE402_PROVIDER_ID = "p_d4b4ece39162409b";
@@ -25,8 +26,8 @@ function objectSchema(schema: Record<string, unknown>): Record<string, unknown> 
   return { type: "object", ...schema };
 }
 
-export const THE402_LISTINGS: ReadonlyArray<{
-  product: The402Product;
+export type The402Listing<Product extends MarketplaceProduct = MarketplaceProduct> = {
+  product: Product;
   service_id: string;
   name: string;
   description: string;
@@ -35,7 +36,12 @@ export const THE402_LISTINGS: ReadonlyArray<{
   tags: string[];
   input_schema: Record<string, unknown>;
   deliverable_schema: Record<string, unknown>;
-}> = Object.freeze([
+};
+
+// Definitions may contain a provisional service ID while a marketplace service
+// is being created. Public the402 surfaces must use THE402_LISTINGS, which
+// contains only authoritative platform IDs.
+export const THE402_SERVICE_DEFINITIONS: ReadonlyArray<The402Listing> = Object.freeze([
   {
     product: "single",
     service_id: "svc_4462e481fedf4afc",
@@ -109,6 +115,40 @@ export const THE402_LISTINGS: ReadonlyArray<{
     deliverable_schema: objectSchema(harnessOutputSchema),
   },
   {
+    product: "skill",
+    service_id: "svc_7f39caef9bf64340",
+    name: "SkillVerdict",
+    description: `${SKILL_DISCOVERY_DESCRIPTION} Documentation: https://mimirs402.github.io/bountyverdict/agents.html`,
+    price: "$0.06",
+    agent_price: "$0.063",
+    tags: [
+      "agent-skills",
+      "skill-md",
+      "security",
+      "supply-chain",
+      "prompt-injection",
+      "pre-install",
+    ],
+    input_schema: {
+      type: "object",
+      required: ["repo_url", "skill_path"],
+      additionalProperties: false,
+      properties: {
+        repo_url: {
+          type: "string",
+          pattern: "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+(\\.git)?$",
+          description: "Canonical URL of the public GitHub repository containing the skill.",
+        },
+        skill_path: {
+          type: "string",
+          pattern: "^[A-Za-z0-9._/-]+$",
+          description: "Repository-relative skill directory or exact case-sensitive SKILL.md path.",
+        },
+      },
+    },
+    deliverable_schema: objectSchema(skillOutputSchema),
+  },
+  {
     product: "run",
     service_id: "svc_f269590f47ae463f",
     name: "GitHub Actions CI Failure Diagnosis — RunVerdict",
@@ -169,10 +209,18 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
 ]);
 
+export const THE402_LISTINGS: ReadonlyArray<The402Listing<The402Product>> = Object.freeze(
+  THE402_SERVICE_DEFINITIONS.filter(
+    (listing): listing is The402Listing<The402Product> =>
+      THE402_PRODUCTS.includes(listing.product as The402Product) &&
+      !listing.service_id.endsWith("_PENDING"),
+  ),
+);
+
 export const THE402_SUBSCRIPTION_PLAN = Object.freeze({
   plan_id: "plan_ec6c49878dc34636",
   name: "BountyVerdict Agent Engineering Monthly",
-  description: "Twenty combined monthly requests across six existing automated agent-engineering checks: public GitHub bounty due diligence and ranking, repository instruction audits, GitHub Actions diagnosis and flake decisions, and MCP tools/list compatibility gates. Exact typed deliverables, public evidence where applicable, instant fulfillment, no buyer API key, and no manual provider step. SkillVerdict is not included during its isolated experiment.",
+  description: "Twenty combined monthly requests across seven automated agent-engineering checks: public GitHub bounty due diligence and ranking, repository instruction and skill security audits, GitHub Actions diagnosis and flake decisions, and MCP tools/list compatibility gates. Exact typed deliverables, public evidence where applicable, instant fulfillment, no buyer API key, and no manual provider step.",
   interval: "monthly" as const,
   provider_price_usd: 1,
   agent_price_usd: 1.05,
@@ -184,7 +232,10 @@ export function the402MarketplaceManifest(): Record<string, unknown> {
   return {
     provider_id: THE402_PROVIDER_ID,
     public_catalog: THE402_PROVIDER_CATALOG_URL,
-    skillverdict_excluded_during_frozen_experiment: true,
+    fulfillment_contract_count: THE402_SERVICE_DEFINITIONS.length,
+    skillverdict_listing_status: THE402_LISTINGS.some(({ product }) => product === "skill")
+      ? "active"
+      : "publish_ready_pending_authoritative_id",
     subscription_plan: {
       name: THE402_SUBSCRIPTION_PLAN.name,
       plan_id: THE402_SUBSCRIPTION_PLAN.plan_id,

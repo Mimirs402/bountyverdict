@@ -15,14 +15,14 @@ import { MCP_HTTP_PAYMENT_HANDOFF_EXTENSION } from "../src/payment-handoff.ts";
 
 const origin = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 
-test("origin manifest publishes six exact products without changing SkillVerdict exposure", async () => {
+test("origin manifest publishes all seven exact REST products while MCP remains six-tool", async () => {
   const manifest = createOriginAgentManifest(origin, "eip155:8453", "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614");
   const openApiResponse = await app.request(`${origin}/openapi.json`, {}, { X402_NETWORK: "eip155:8453" });
   const openApi = await openApiResponse.json() as Record<string, any>;
   assert.equal(manifest.spec, "bountyverdict-agent-manifest/1");
-  assert.equal(manifest.products.length, 6);
-  assert.equal(manifest.products.some(({ id }) => id === "skill"), false);
-  assert.deepEqual(manifest.products.map(({ id }) => id), ["single", "portfolio", "harness", "run", "flake", "mcpdrift"]);
+  assert.equal(manifest.products.length, 7);
+  assert.equal(manifest.products.some(({ id }) => id === "skill"), true);
+  assert.deepEqual(manifest.products.map(({ id }) => id), ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"]);
   assert.equal(manifest.products[0].method, "POST");
   assert.equal(manifest.products[0].url, `${origin}/api/bounty-preflight`);
   for (const product of manifest.products) {
@@ -66,13 +66,14 @@ test("origin manifest publishes six exact products without changing SkillVerdict
   assert.equal(manifest.mcp.tools[0].amount_atomic_usdc, "0");
 });
 
-test("origin skill is a truthful six-product payment-safe routing surface", () => {
+test("origin skill is a truthful seven-product payment-safe routing surface", () => {
   const markdown = createOriginSkillMarkdown(origin, "eip155:8453", "0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614");
   assert.match(markdown, /^---\nname: bountyverdict-agent-decisions\n/);
   assert.match(markdown, /BountyVerdict Portfolio/);
   assert.match(markdown, /HarnessVerdict/);
   assert.match(markdown, /MCPDriftVerdict/);
-  assert.doesNotMatch(markdown, /### SkillVerdict/);
+  assert.match(markdown, /### SkillVerdict/);
+  assert.match(markdown, /SkillVerdict is available through the canonical REST, OpenAPI, x402, and marketplace fulfillment contracts/);
   assert.match(markdown, /never signs, pays, executes repository code, mutates GitHub/);
   assert.match(markdown, /Never join it into a shell string or raise the cap silently/);
   assert.match(markdown, /network `eip155:8453` \(Base mainnet\)/);
@@ -153,19 +154,20 @@ test("ARD catalog publishes one semantic MCP entry without inventing an agent ru
   assert.deepEqual(await response.json(), catalog);
 });
 
-test("standard discovery documents expose only the six distributed products and paid MCP", async () => {
+test("standard discovery documents expose seven REST products and the six-tool paid MCP", async () => {
   const apiCatalog = createApiCatalog(origin);
   assert.equal(apiCatalog.linkset[0].anchor, `${origin}/.well-known/api-catalog`);
   assert.deepEqual(apiCatalog.linkset[0].item.map(({ href }) => href), [
     `${origin}/api/bounty-preflight`,
     `${origin}/api/portfolio`,
     `${origin}/api/repository-agent-instructions-audit`,
+    `${origin}/api/skill`,
     `${origin}/api/github-actions-run-diagnosis`,
     `${origin}/api/github-actions-flake-retry-gate`,
     `${origin}/api/mcp-drift`,
     `${origin}/mcp`,
   ]);
-  assert.doesNotMatch(JSON.stringify(apiCatalog), /SkillVerdict|\/api\/skill/);
+  assert.match(JSON.stringify(apiCatalog), /preflight-agent-skills|\/api\/skill/);
 
   const serverCard = createMcpServerCard(origin, "eip155:8453");
   assert.equal(serverCard.url, `${origin}/mcp`);
@@ -177,12 +179,12 @@ test("standard discovery documents expose only the six distributed products and 
 
   const integrations = createIntegrationsManifest(origin);
   assert.equal(integrations.version, 3);
-  assert.equal(integrations.surfaces.length, 7);
-  assert.equal(integrations.surfaces.filter(({ type }) => type === "http").length, 6);
+  assert.equal(integrations.surfaces.length, 8);
+  assert.equal(integrations.surfaces.filter(({ type }) => type === "http").length, 7);
   assert.equal(integrations.surfaces.filter(({ type }) => type === "mcp").length, 1);
   assert.ok(integrations.surfaces.every(({ basis, auth }) =>
     basis.source === `${origin}/.well-known/integrations.json` && auth.status === "none"));
-  assert.doesNotMatch(JSON.stringify(integrations), /SkillVerdict|\/api\/skill/);
+  assert.match(JSON.stringify(integrations), /SkillVerdict|\/api\/skill/);
 
   const apiResponse = await app.request(`${origin}/.well-known/api-catalog`);
   assert.equal(apiResponse.status, 200);
@@ -224,7 +226,7 @@ test("Worker serves origin-native manifest and skill with exact content types", 
   assert.equal(manifestResponse.status, 200);
   assert.match(manifestResponse.headers.get("content-type") || "", /^application\/json/);
   const manifest = await manifestResponse.json() as ReturnType<typeof createOriginAgentManifest>;
-  assert.equal(manifest.products.length, 6);
+  assert.equal(manifest.products.length, 7);
   const skillResponse = await app.request(`${origin}/SKILL.md`, {}, env);
   assert.equal(skillResponse.status, 200);
   assert.match(skillResponse.headers.get("content-type") || "", /^text\/markdown/);

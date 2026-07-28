@@ -771,15 +771,14 @@ export function createLlmsText(origin: string): string {
 ## Escrow marketplace
 
 - Public the402 provider catalog: ${THE402_PROVIDER_CATALOG_URL}
-- These six routes offer the same tested products through the402 escrow; inspect each exact input and deliverable schema in the public catalog before purchase.
-- SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
-- Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the six listed services.
+- Provider fulfillment supports all seven tested product contracts through the402 escrow, including SkillVerdict. Treat the public catalog and service list below as authoritative for which listing IDs have actually been published.
+- Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the seven listed services.
 ${the402Services}
 
 ## NEAR Agent Market
 
 - Public provider profile: ${NEAR_MARKET_PROVIDER_URL}
-- These six automated services expose the same tested input and output contracts through NEAR Agent Market; SkillVerdict remains excluded during its frozen experiment.
+- Automated fulfillment supports all seven tested input and output contracts through NEAR Agent Market, including SkillVerdict. Treat the provider profile and service list below as authoritative for which listing IDs have actually been published.
 ${nearMarketServices}
 
 ## Differentiation

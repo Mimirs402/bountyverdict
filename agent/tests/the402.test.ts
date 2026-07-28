@@ -3,6 +3,7 @@ import test from "node:test";
 import app from "../src/index.ts";
 import {
   diagnoseThe402PlatformWebhookEnvelope,
+  fulfillProduct,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
@@ -12,13 +13,17 @@ import {
 import {
   THE402_LISTINGS,
   THE402_PROVIDER_CATALOG_URL,
+  THE402_SERVICE_DEFINITIONS,
   THE402_SUBSCRIPTION_PLAN,
+  the402MarketplaceManifest,
 } from "../src/the402-catalog.ts";
 import { outputSchema, portfolioOutputSchema } from "../src/discovery.ts";
 import { harnessOutputSchema } from "../src/harness-discovery.ts";
 import { runOutputSchema } from "../src/run-discovery.ts";
 import { flakeOutputSchema } from "../src/flake-discovery.ts";
 import { mcpDriftOutputSchema } from "../src/mcp-drift-discovery.ts";
+import { skillOutputSchema } from "../src/skill-discovery.ts";
+import { SkillError } from "../src/skill.ts";
 
 const apiKey = "sk_test_bountyverdict_provider";
 const webhookSecret = "whsec_test_bountyverdict_webhook";
@@ -31,7 +36,7 @@ const body = JSON.stringify({
   callback_url: "https://api.the402.ai/v1/threads/thread_123/update",
 });
 
-test("the402 monthly bundle contains only the six existing non-SkillVerdict services", () => {
+test("the402 monthly bundle contains only services with authoritative platform IDs", () => {
   assert.equal(THE402_SUBSCRIPTION_PLAN.interval, "monthly");
   assert.equal(THE402_SUBSCRIPTION_PLAN.plan_id, "plan_ec6c49878dc34636");
   assert.equal(THE402_SUBSCRIPTION_PLAN.provider_price_usd, 1);
@@ -41,8 +46,10 @@ test("the402 monthly bundle contains only the six existing non-SkillVerdict serv
     [...THE402_SUBSCRIPTION_PLAN.service_ids].sort(),
     THE402_LISTINGS.map(({ service_id }) => service_id).sort(),
   );
-  assert.equal(THE402_SUBSCRIPTION_PLAN.service_ids.length, 6);
-  assert.match(THE402_SUBSCRIPTION_PLAN.description, /SkillVerdict is not included/);
+  assert.equal(THE402_SUBSCRIPTION_PLAN.service_ids.length, 7);
+  assert.match(THE402_SUBSCRIPTION_PLAN.description, /seven automated/);
+  assert.doesNotMatch(JSON.stringify(THE402_SUBSCRIPTION_PLAN), /_PENDING/);
+  assert.doesNotMatch(JSON.stringify(the402MarketplaceManifest()), /_PENDING/);
 });
 
 async function signature(timestamp: string, rawBody = body): Promise<string> {
@@ -61,26 +68,30 @@ async function signature(timestamp: string, rawBody = body): Promise<string> {
   return `sha256=${[...signed].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
-test("the402 service map permits only independently distributed existing products", () => {
+test("the402 service map accepts every supported fulfillment product", () => {
   assert.equal(serviceMap.get("svc_bounty_123"), "single");
+  assert.equal(
+    parseThe402ServiceMap(JSON.stringify({ svc_skill_123: "skill" })).get("svc_skill_123"),
+    "skill",
+  );
   assert.throws(() => parseThe402ServiceMap("{}"), /at least one/);
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ bad: "single" })), /service ID/);
-  assert.throws(() => parseThe402ServiceMap(JSON.stringify({ svc_skill_123: "skill" })), /unsupported product/);
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ svc_one: "run", svc_two: "run" })), /duplicate product/);
 });
 
-test("the402 publishes six exact existing-product contracts and excludes SkillVerdict", () => {
-  assert.equal(THE402_LISTINGS.length, 6);
-  assert.equal(new Set(THE402_LISTINGS.map(({ service_id }) => service_id)).size, 6);
+test("the402 publishes seven authoritative service contracts including SkillVerdict", () => {
+  assert.equal(THE402_LISTINGS.length, 7);
+  assert.equal(new Set(THE402_LISTINGS.map(({ service_id }) => service_id)).size, 7);
   assert.deepEqual(THE402_LISTINGS.map(({ product }) => product).sort(), [
-    "flake", "harness", "mcpdrift", "portfolio", "run", "single",
+    "flake", "harness", "mcpdrift", "portfolio", "run", "single", "skill",
   ]);
-  assert.equal(THE402_LISTINGS.some(({ name }) => name === "SkillVerdict"), false);
+  assert.equal(THE402_LISTINGS.some(({ name }) => name === "SkillVerdict"), true);
   assert.match(THE402_PROVIDER_CATALOG_URL, /provider=p_d4b4ece39162409b/);
   const schemas = new Map(THE402_LISTINGS.map(({ product, deliverable_schema }) => [product, deliverable_schema]));
   assert.deepEqual(schemas.get("single"), { type: "object", ...outputSchema });
   assert.deepEqual(schemas.get("portfolio"), { type: "object", ...portfolioOutputSchema });
   assert.deepEqual(schemas.get("harness"), { type: "object", ...harnessOutputSchema });
+  assert.deepEqual(schemas.get("skill"), { type: "object", ...skillOutputSchema });
   assert.deepEqual(schemas.get("run"), { type: "object", ...runOutputSchema });
   assert.deepEqual(schemas.get("flake"), { type: "object", ...flakeOutputSchema });
   assert.deepEqual(schemas.get("mcpdrift"), { type: "object", ...mcpDriftOutputSchema });
@@ -95,6 +106,30 @@ test("the402 publishes six exact existing-product contracts and excludes SkillVe
     assert.notDeepEqual(listing.deliverable_schema, { type: "object", additionalProperties: true });
     assert.ok(Array.isArray(listing.deliverable_schema.required));
   }
+});
+
+test("the402 publishes an exact SkillVerdict contract without provisional IDs", async () => {
+  assert.equal(THE402_SERVICE_DEFINITIONS.length, 7);
+  const skill = THE402_SERVICE_DEFINITIONS.find(({ product }) => product === "skill");
+  assert.ok(skill);
+  assert.equal(skill.service_id, "svc_7f39caef9bf64340");
+  assert.equal(skill.price, "$0.06");
+  assert.equal(skill.agent_price, "$0.063");
+  assert.match(skill.description, /^Is this agent skill safe to install\?/i);
+  assert.deepEqual(skill.input_schema.required, ["repo_url", "skill_path"]);
+  assert.equal(skill.input_schema.additionalProperties, false);
+  assert.deepEqual(skill.deliverable_schema, { type: "object", ...skillOutputSchema });
+  assert.equal(THE402_LISTINGS.some(({ product }) => product === "skill"), true);
+  assert.doesNotMatch(JSON.stringify(THE402_SERVICE_DEFINITIONS), /_PENDING/);
+  await assert.rejects(
+    () => fulfillProduct("skill", {
+      repo_url: "https://github.com/acme/skills",
+      skill_path: "../SKILL.md",
+    }, {}),
+    (error: unknown) =>
+      error instanceof SkillError &&
+      error.code === "INVALID_SKILL_PATH",
+  );
 });
 
 test("the402 webhook verification pins API key, HMAC body, and five-minute replay window", async () => {

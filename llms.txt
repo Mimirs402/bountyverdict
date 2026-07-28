@@ -57,12 +57,12 @@
 ## Escrow marketplace
 
 - Public the402 provider catalog: https://api.the402.ai/v1/services/catalog?provider=p_d4b4ece39162409b&limit=100
-- These six routes offer the same tested products through the402 escrow; inspect each exact input and deliverable schema in the public catalog before purchase.
-- SkillVerdict is intentionally excluded from this marketplace while its earned-placement experiment is frozen.
-- Monthly bundle: POST https://api.the402.ai/v1/plans/plan_ec6c49878dc34636/subscribe — $1.05 USDC for up to 20 combined requests across the six listed services.
+- Provider fulfillment supports all seven tested product contracts through the402 escrow, including SkillVerdict. Treat the public catalog and service list below as authoritative for which listing IDs have actually been published.
+- Monthly bundle: POST https://api.the402.ai/v1/plans/plan_ec6c49878dc34636/subscribe — $1.05 USDC for up to 20 combined requests across the seven listed services.
 - BountyVerdict: POST https://api.the402.ai/v1/services/svc_4462e481fedf4afc/purchase — agent price $0.053 USDC; instant fulfillment
 - BountyVerdict Portfolio: POST https://api.the402.ai/v1/services/svc_6df309e4408e4de7/purchase — agent price $0.42 USDC; instant fulfillment
 - GitHub Agent Instruction Audit — HarnessVerdict: POST https://api.the402.ai/v1/services/svc_ca98b66ee3d24836/purchase — agent price $0.032 USDC; instant fulfillment
+- SkillVerdict: POST https://api.the402.ai/v1/services/svc_7f39caef9bf64340/purchase — agent price $0.063 USDC; instant fulfillment
 - GitHub Actions CI Failure Diagnosis — RunVerdict: POST https://api.the402.ai/v1/services/svc_f269590f47ae463f/purchase — agent price $0.042 USDC; instant fulfillment
 - CI Flake Verdict: POST https://api.the402.ai/v1/services/svc_3cfea7eb5f574e6e/purchase — agent price $0.074 USDC; instant fulfillment
 - MCP schema drift compatibility — MCPDriftVerdict: POST https://api.the402.ai/v1/services/svc_6bd98fed2d9a43d1/purchase — agent price $0.021 USDC; instant fulfillment
@@ -70,10 +70,11 @@
 ## NEAR Agent Market
 
 - Public provider profile: https://market.near.ai/agents/bountyverdict
-- These six automated services expose the same tested input and output contracts through NEAR Agent Market; SkillVerdict remains excluded during its frozen experiment.
+- Automated fulfillment supports all seven tested input and output contracts through NEAR Agent Market, including SkillVerdict. Treat the provider profile and service list below as authoritative for which listing IDs have actually been published.
 - BountyVerdict: hire https://market.near.ai/hire?service_id=88c3e8f6-07f4-414e-bc43-c5ad61cf21fd; authenticated POST https://market.near.ai/v1/services/88c3e8f6-07f4-414e-bc43-c5ad61cf21fd/invoke — 1 USDC
 - BountyVerdict Portfolio: hire https://market.near.ai/hire?service_id=3b496165-8b2c-4c97-8593-1242e5d15384; authenticated POST https://market.near.ai/v1/services/3b496165-8b2c-4c97-8593-1242e5d15384/invoke — 1 USDC
 - GitHub Agent Instruction Audit — HarnessVerdict: hire https://market.near.ai/hire?service_id=dd781a20-6643-42ee-8c19-0c16425e685d; authenticated POST https://market.near.ai/v1/services/dd781a20-6643-42ee-8c19-0c16425e685d/invoke — 1 USDC
+- SkillVerdict: hire https://market.near.ai/hire?service_id=87710335-6991-487a-9383-a3bba2940967; authenticated POST https://market.near.ai/v1/services/87710335-6991-487a-9383-a3bba2940967/invoke — 0.06 USDC
 - GitHub Actions CI Failure Diagnosis — RunVerdict: hire https://market.near.ai/hire?service_id=88bb0780-9121-4acd-a2e2-4f8a2bc005a8; authenticated POST https://market.near.ai/v1/services/88bb0780-9121-4acd-a2e2-4f8a2bc005a8/invoke — 1 USDC
 - CI Flake Verdict: hire https://market.near.ai/hire?service_id=7385fdea-5d7f-43d4-9fb2-738b46316d0f; authenticated POST https://market.near.ai/v1/services/7385fdea-5d7f-43d4-9fb2-738b46316d0f/invoke — 1 USDC
 - MCP schema drift compatibility — MCPDriftVerdict: hire https://market.near.ai/hire?service_id=0a0b0909-2829-4437-b23e-4376a61041ba; authenticated POST https://market.near.ai/v1/services/0a0b0909-2829-4437-b23e-4376a61041ba/invoke — 1 USDC

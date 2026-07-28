@@ -6,7 +6,10 @@ const githubIssuePattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-
 const githubRepoPattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+(?:\.git)?$/;
 const githubRunPattern = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/actions\/runs\/[1-9][0-9]*$/;
 
-export type ExactDemandProduct = Exclude<The402Product, "mcpdrift">;
+// Public request matching requires a complete unambiguous input contract.
+// SkillVerdict needs both a repository URL and an exact repository-relative
+// skill path, so it remains listing-only until the request parser supports both.
+export type ExactDemandProduct = Exclude<The402Product, "mcpdrift" | "skill">;
 
 export type ExactDemandDecision = {
   product: ExactDemandProduct;

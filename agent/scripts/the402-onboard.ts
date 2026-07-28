@@ -1,13 +1,18 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { THE402_PRODUCTS, type The402Product } from "../src/the402.ts";
-import { THE402_API, THE402_LISTINGS } from "../src/the402-catalog.ts";
+import { MARKETPLACE_PRODUCTS, type MarketplaceProduct } from "../src/the402.ts";
+import {
+  THE402_API,
+  THE402_LISTINGS,
+  THE402_SERVICE_DEFINITIONS,
+} from "../src/the402-catalog.ts";
 
 const api = THE402_API;
 const apiKey = process.env.THE402_API_KEY;
 const participantId = process.env.THE402_PARTICIPANT_ID;
 const enabled = process.env.THE402_CREATE === "YES";
+const stagePending = process.env.THE402_STAGE_PENDING === "YES";
 const webhookUrl = "https://bountyverdict-agent-production.mimirslab.workers.dev/api/the402/webhook";
 const configFile = process.env.THE402_CONFIG_FILE ||
   `${homedir()}/.config/bountyverdict/the402.env`;
@@ -18,10 +23,17 @@ if (!participantId || !/^p_[A-Za-z0-9_-]{1,160}$/.test(participantId)) {
   throw new Error("THE402_PARTICIPANT_ID is missing or invalid.");
 }
 
-const definitions = THE402_LISTINGS;
+const definitions = stagePending
+  ? THE402_SERVICE_DEFINITIONS.filter(({ service_id }) => service_id.endsWith("_PENDING"))
+  : THE402_LISTINGS;
 
-if (definitions.length !== THE402_PRODUCTS.length ||
-  definitions.some(({ product }) => !THE402_PRODUCTS.includes(product))) {
+if (
+  !definitions.length ||
+  definitions.some(({ product }) => !MARKETPLACE_PRODUCTS.includes(product)) ||
+  new Set(definitions.map(({ product }) => product)).size !== definitions.length ||
+  (stagePending && definitions.some(({ service_id }) => !service_id.endsWith("_PENDING"))) ||
+  (!stagePending && definitions.some(({ service_id }) => service_id.endsWith("_PENDING")))
+) {
   throw new Error("the402 listing definitions do not match the allowed product set.");
 }
 
@@ -129,9 +141,9 @@ const duplicateNames = [...new Set(existing.map(({ name }) => name))]
 if (duplicateNames.length) {
   throw new Error(`the402 contains duplicate owned service names: ${duplicateNames.join(", ")}`);
 }
-const map: Record<string, The402Product> = {};
+const map: Record<string, MarketplaceProduct> = {};
 const results: Array<{
-  product: The402Product;
+  product: MarketplaceProduct;
   service_id: string;
   previous_service_id: string | null;
   action: "created" | "updated" | "recovered";
@@ -151,6 +163,7 @@ for (const definition of definitions) {
     tags: definition.tags,
     input_schema: definition.input_schema,
     deliverable_schema: definition.deliverable_schema,
+    status: stagePending ? "inactive" : "active",
   };
   const response = await platformFetch(previous ? `/services/${previous.id}` : "/services", {
     method: previous ? "PUT" : "POST",
@@ -161,6 +174,16 @@ for (const definition of definitions) {
     throw new Error(`the402 ${definition.product} listing returned HTTP ${response.status}: ${error.slice(0, 500)}`);
   }
   const id = previous?.id || serviceId(await response.json());
+  if (stagePending) {
+    const deactivate = await platformFetch(`/services/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "inactive" }),
+    });
+    if (!deactivate.ok) {
+      const error = await deactivate.text();
+      throw new Error(`the402 ${definition.product} staging deactivation returned HTTP ${deactivate.status}: ${error.slice(0, 500)}`);
+    }
+  }
   map[id] = definition.product;
   results.push({
     product: definition.product,

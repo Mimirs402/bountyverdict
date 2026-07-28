@@ -69,10 +69,21 @@ function serviceId(payload: any): string {
 }
 
 const existing = await existingServices();
+const duplicateNames = [...new Set(existing.map(({ name }) => name))]
+  .filter((name) => existing.filter((service) => service.name === name).length > 1);
+if (duplicateNames.length) {
+  throw new Error(`the402 contains duplicate owned service names: ${duplicateNames.join(", ")}`);
+}
 const map: Record<string, The402Product> = {};
-const results: Array<{ product: The402Product; service_id: string; action: "created" | "updated" }> = [];
+const results: Array<{
+  product: The402Product;
+  service_id: string;
+  previous_service_id: string | null;
+  action: "created" | "updated" | "recovered";
+}> = [];
 for (const definition of definitions) {
-  const previous = existing.find(({ id }) => id === definition.service_id);
+  const previous = existing.find(({ id }) => id === definition.service_id) ||
+    existing.find(({ name }) => name === definition.name);
   const payload = {
     name: definition.name,
     description: definition.description,
@@ -96,7 +107,14 @@ for (const definition of definitions) {
   }
   const id = previous?.id || serviceId(await response.json());
   map[id] = definition.product;
-  results.push({ product: definition.product, service_id: id, action: previous ? "updated" : "created" });
+  results.push({
+    product: definition.product,
+    service_id: id,
+    previous_service_id: previous?.id || null,
+    action: previous
+      ? previous.id === definition.service_id ? "updated" : "recovered"
+      : "created",
+  });
 }
 
 console.log(JSON.stringify({ participant_id: participantId, service_map: map, services: results }, null, 2));

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import {
   DAILY_REVIEW_SCORECARD_SCHEMA_VERSION,
+  applyDailyReviewModelBudget,
   buildDailyReviewGate,
   buildDailyReviewScorecard,
   type DailyReviewScorecard,
@@ -21,6 +22,7 @@ const schemaFile = resolve(
   process.env.BOUNTYVERDICT_DAILY_REVIEW_SCHEMA ||
   new URL("../../ops/cadence/daily-review.schema.json", import.meta.url).pathname,
 );
+const modelReviewEnabled = process.env.BOUNTYVERDICT_MODEL_REVIEW_ENABLED === "YES";
 
 async function readJson(name: string): Promise<unknown | undefined> {
   const path = `${stateRoot}/${name}`;
@@ -132,14 +134,17 @@ const scorecard = buildDailyReviewScorecard({
   clawlancer,
 });
 const gate = buildDailyReviewGate(scorecard, previous);
+const executionGate = applyDailyReviewModelBudget(gate, modelReviewEnabled);
 await atomicWrite(scorecardFile, scorecard);
 
-if (gate.action === "invoke_codex") {
+if (executionGate.action === "invoke_codex") {
   await runCodex(gate.prompt as string, scorecard.generated_at.slice(0, 10));
 }
 // Preserve the first observation timestamp for an unchanged alert so the
 // local gate can issue one bounded weekly reminder without invoking Codex daily.
-if (gate.reason !== "unhealthy_materially_unchanged") {
+// When the model budget gate suppresses a review, retain the prior baseline so
+// an explicit future opt-in reviews the still-material delta immediately.
+if (!executionGate.codex_suppressed && gate.reason !== "unhealthy_materially_unchanged") {
   await atomicWrite(baselineFile, scorecard);
 }
 console.log(JSON.stringify({
@@ -147,6 +152,6 @@ console.log(JSON.stringify({
   checked_at: scorecard.generated_at,
   healthy: scorecard.healthy,
   scorecard_bytes: Buffer.byteLength(JSON.stringify(scorecard)),
-  ...gate,
-  prompt: gate.prompt === null ? null : "[compact scorecard prompt supplied to Codex]",
+  ...executionGate,
+  prompt: executionGate.prompt === null ? null : "[compact scorecard prompt supplied to Codex]",
 }, null, 2));

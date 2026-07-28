@@ -11,7 +11,10 @@ test("every production deployment probe identifies as owner automation", async (
   const canary = await readFile(canaryUrl, "utf8");
   const glamaVerifier = await readFile(glamaVerifierUrl, "utf8");
   assert.match(workflow, /owner_curl\(\)/);
-  assert.match(workflow, /curl --user-agent "bountyverdict-owner-audit\/1\.0"/);
+  assert.match(workflow, /--user-agent "bountyverdict-owner-audit\/1\.0"/);
+  assert.match(workflow, /CLOUDFLARE_WORKER_VERSION_OVERRIDE=\$deployed_version/);
+  assert.match(workflow, /Cloudflare-Workers-Version-Overrides: bountyverdict-agent-production=/);
+  assert.match(workflow, /bountyverdict-release-override-check/);
   assert.equal((workflow.match(/\bowner_curl --/g) || []).length, 18);
   assert.doesNotMatch(workflow, /\n\s+curl --(?:fail|silent|show-error)/);
   assert.match(workflow, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);
@@ -53,7 +56,7 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /mcp_release_ready=false/);
   assert.match(workflow, /if \[\[ "\$mcp_release_ready" != "true" \]\]/);
   assert.match(workflow, /Production MCP contracts did not converge to the deployed release/);
-  assert.equal((workflow.match(/for attempt in \{1\.\.30\}; do/g) || []).length, 5);
+  assert.equal((workflow.match(/for attempt in \{1\.\.30\}; do/g) || []).length, 6);
   assert.match(workflow, /npx wrangler deployments list --env production --json/);
   assert.match(workflow, /current production deployment is not one version at 100 percent/);
   assert.match(workflow, /semantic_version=\$previous_semantic_version/);

@@ -153,6 +153,9 @@ jobs:
           ' "$secret_file"
           npx wrangler deploy --env production --secrets-file "$secret_file" 2>&1 | tee "$deploy_log"
           api_url=$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "$deploy_log" | tail -1)
+          deployed_version=$(sed -n 's/.*Current Version ID: \([0-9a-f-]\+\).*/\1/p' "$deploy_log" | tail -1)
+          [[ "$deployed_version" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+          echo "CLOUDFLARE_WORKER_VERSION_OVERRIDE=$deployed_version" >> "$GITHUB_ENV"
           node -e '
             const expected = "https://bountyverdict-agent-production.mimirslab.workers.dev";
             const value = new URL(process.argv[1]);
@@ -163,8 +166,50 @@ jobs:
       - name: Verify live free and paid contracts
         run: |
           owner_curl() {
-            command curl --user-agent "bountyverdict-owner-audit/1.0" "$@"
+            command curl \
+              --header "Cloudflare-Workers-Version-Overrides: bountyverdict-agent-production=\"$CLOUDFLARE_WORKER_VERSION_OVERRIDE\"" \
+              --user-agent "bountyverdict-owner-audit/1.0" \
+              "$@"
           }
+          # Confirm the exact deployed version is globally addressable before
+          # probing its individual discovery documents.
+          override_ready=false
+          for attempt in {1..30}; do
+            if node <<'NODE'
+          const response = await fetch(`${process.env.PRODUCTION_API_URL}/mcp`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "User-Agent": "bountyverdict-owner-audit/1.0",
+              "Cloudflare-Workers-Version-Overrides": `bountyverdict-agent-production="${process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE}"`,
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-11-25",
+                capabilities: {},
+                clientInfo: { name: "bountyverdict-release-override-check", version: "1.0.0" },
+              },
+            }),
+          });
+          if (!response.ok) process.exit(1);
+          const initialized = await response.json();
+          if (initialized.result?.serverInfo?.version !== process.env.WORKER_RELEASE_VERSION) process.exit(1);
+          NODE
+            then
+              override_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$override_ready" != "true" ]]; then
+            echo "Exact deployed Worker version was not globally addressable" >&2
+            exit 1
+          fi
           # A successful HTTP response can still come from the previous Worker
           # while Cloudflare propagates a new version. Wait for the new root
           # contract, rather than retrying only transport failures.
@@ -345,6 +390,7 @@ jobs:
             "Content-Type": "application/json",
             "MCP-Protocol-Version": "2025-11-25",
             "User-Agent": "bountyverdict-owner-audit/1.0",
+            "Cloudflare-Workers-Version-Overrides": `bountyverdict-agent-production="${process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE}"`,
           };
           async function rpc(id, method, params = {}) {
             const response = await fetch(`${api}/mcp`, {

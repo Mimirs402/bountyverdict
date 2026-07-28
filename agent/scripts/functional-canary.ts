@@ -10,6 +10,10 @@ if (configuredApi.origin !== DEFAULT_API || configuredApi.pathname !== "/" || co
   throw new Error("Functional canaries may only send credentials to the exact production Worker origin.");
 }
 const api = configuredApi.origin;
+const workerVersionOverride = process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE;
+if (workerVersionOverride && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionOverride)) {
+  throw new Error("CLOUDFLARE_WORKER_VERSION_OVERRIDE must be a lowercase UUID.");
+}
 const tokenFile = process.env.CANARY_TOKEN_FILE;
 const token = (process.env.CANARY_TOKEN || (tokenFile ? await readFile(tokenFile, "utf8") : "")).trim();
 const stateFile = process.env.CANARY_STATE_FILE ||
@@ -36,6 +40,9 @@ for (const product of products) {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
         "User-Agent": "bountyverdict-owner-audit/1.0",
+        ...(workerVersionOverride
+          ? { "Cloudflare-Workers-Version-Overrides": `bountyverdict-agent-production="${workerVersionOverride}"` }
+          : {}),
       },
       redirect: "error",
       signal: AbortSignal.timeout(TIMEOUT_MS),

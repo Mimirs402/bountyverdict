@@ -8,6 +8,7 @@ import {
   buildDailyReviewScorecard,
   type DailyReviewScorecard,
 } from "../src/daily-review-scorecard.ts";
+import { runBoundedAttempts } from "../src/bounded-retry.ts";
 
 const MAX_STATE_BYTES = 2 * 1024 * 1024;
 const stateRoot = resolve(process.env.BOUNTYVERDICT_STATE_ROOT || `${homedir()}/.local/state/bountyverdict`);
@@ -68,16 +69,22 @@ async function runCodex(prompt: string, expectedDate: string): Promise<void> {
     "--output-last-message", temporary,
     prompt,
   ];
-  const exitCode = await new Promise<number>((resolveExit, reject) => {
-    const child = spawn("codex", args, {
-      env: strippedEnvironment,
-      stdio: ["ignore", "inherit", "inherit"],
+  const maximumAttempts = 2;
+  const exitCode = await runBoundedAttempts(maximumAttempts, async () => {
+    await unlink(temporary).catch(() => undefined);
+    return await new Promise<number>((resolveExit, reject) => {
+      const child = spawn("codex", args, {
+        env: strippedEnvironment,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        if (signal) reject(new Error(`codex review terminated by ${signal}.`));
+        else resolveExit(code ?? 1);
+      });
     });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (signal) reject(new Error(`codex review terminated by ${signal}.`));
-      else resolveExit(code ?? 1);
-    });
+  }, (code) => code === 0, (attempt, code) => {
+    console.warn(`Codex daily review attempt ${attempt} failed with status ${code}; retrying once.`);
   });
   if (exitCode !== 0) throw new Error(`codex review exited with status ${exitCode}.`);
   try {

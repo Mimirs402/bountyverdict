@@ -82,7 +82,15 @@ function decodeHeader(value: string): any {
   return JSON.parse(Buffer.from(value, "base64").toString("utf8"));
 }
 
-const unpaid = await fetch(url, requestInit);
+const maximumChallengeAttempts = workerVersionOverride ? 30 : 1;
+let unpaid: Response | undefined;
+for (let attempt = 1; attempt <= maximumChallengeAttempts; attempt += 1) {
+  unpaid = await fetch(url, requestInit);
+  if (unpaid.status === 402 || unpaid.status !== 404 || attempt === maximumChallengeAttempts) break;
+  await unpaid.body?.cancel();
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+}
+if (!unpaid) throw new Error("The unpaid payment challenge request did not run.");
 if (unpaid.status !== 402) {
   throw new Error(`Expected an unpaid HTTP 402 response, received ${unpaid.status}.`);
 }

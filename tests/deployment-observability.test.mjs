@@ -52,6 +52,9 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /manifest_status=\$\(jq -er '\.status' \.\.\/agent-manifest\.json\)/);
   assert.match(workflow, /\[\[ "\$manifest_status" == "awaiting_production" \]\]/);
   assert.match(workflow, /jq -e '\.production_api == null' \.\.\/agent-manifest\.json/);
+  assert.match(workflow, /value\.surfaces\?\.length !== 8/);
+  assert.match(workflow, /type === "http"\)\.length !== 7/);
+  assert.match(workflow, /repository-agent-instructions-audit", "\/api\/skill", "\/api\/github-actions-run-diagnosis/);
   assert.match(workflow, /serverInfo\?\.version !== process\.env\.WORKER_RELEASE_VERSION/);
   assert.match(workflow, /ai_catalog_ready=false/);
   assert.match(workflow, /if \[\[ "\$ai_catalog_ready" != "true" \]\]/);

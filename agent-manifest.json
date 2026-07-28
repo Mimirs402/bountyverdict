@@ -210,7 +210,8 @@
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
       "public_catalog": "https://api.the402.ai/v1/services/catalog?provider=p_d4b4ece39162409b&limit=100",
-      "skillverdict_excluded_during_frozen_experiment": true,
+      "fulfillment_contract_count": 7,
+      "skillverdict_listing_status": "publish_ready_pending_authoritative_id",
       "subscription_plan": {
         "name": "BountyVerdict Agent Engineering Monthly",
         "plan_id": "plan_ec6c49878dc34636",
@@ -289,7 +290,8 @@
     "near_agent_market": {
       "provider_id": "51ebba6e-65e9-49b2-b23b-6561b2375179",
       "provider_url": "https://market.near.ai/agents/bountyverdict",
-      "skillverdict_excluded_during_frozen_experiment": true,
+      "fulfillment_contract_count": 7,
+      "skillverdict_listing_status": "publish_ready_pending_authoritative_id",
       "services": [
         {
           "name": "BountyVerdict",

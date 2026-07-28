@@ -9,7 +9,10 @@ const NETWORK_LABELS = Object.freeze({
   "eip155:8453": "Base mainnet",
   "eip155:84532": "Base Sepolia",
 } as const);
-const DISTRIBUTED_PRODUCTS = Object.freeze([
+const PUBLIC_PRODUCTS = Object.freeze([
+  "single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift",
+] as const satisfies readonly ProductKey[]);
+const MCP_PRODUCTS = Object.freeze([
   "single", "portfolio", "harness", "run", "flake", "mcpdrift",
 ] as const satisfies readonly ProductKey[]);
 const MCP_TOOL_BY_PRODUCT = Object.freeze({
@@ -19,7 +22,7 @@ const MCP_TOOL_BY_PRODUCT = Object.freeze({
   run: "diagnose_github_actions_run",
   flake: "classify_github_actions_flake",
   mcpdrift: "check_mcp_tool_drift",
-} as const satisfies Record<typeof DISTRIBUTED_PRODUCTS[number], string>);
+} as const satisfies Record<typeof MCP_PRODUCTS[number], string>);
 const AI_CATALOG_UPDATED_AT = "2026-07-26T16:45:00Z";
 const AI_CATALOG_QUERIES = Object.freeze([
   "is this github issue bounty still claimable or already being worked on",
@@ -30,7 +33,8 @@ const AI_CATALOG_QUERIES = Object.freeze([
   "will this mcp tools list upgrade break my agent",
 ] as const);
 
-const AGENT_DECISION_DESCRIPTION = "Answer six questions before an agent codes, retries CI, trusts repository instructions, or accepts an MCP upgrade: is a bounty still claimable, which bounty should I choose, why did this run fail, is it flaky, can I trust these instructions, and will this tools/list break my agent? Read-only; no-account use.";
+const AGENT_DECISION_DESCRIPTION = "Answer seven questions before an agent codes, installs a skill, retries CI, trusts repository instructions, or accepts an MCP upgrade: is a bounty still claimable, which bounty should I choose, is this skill safe to install, why did this run fail, is it flaky, can I trust these instructions, and will this tools/list break my agent? Read-only; no-account use.";
+const MCP_DECISION_DESCRIPTION = "Answer six questions before an agent codes, retries CI, trusts repository instructions, or accepts an MCP upgrade: is a bounty still claimable, which bounty should I choose, why did this run fail, is it flaky, can I trust these instructions, and will this tools/list break my agent? Read-only; no-account use.";
 
 const PRODUCT_GUIDANCE = Object.freeze({
   single: Object.freeze({
@@ -55,6 +59,15 @@ const PRODUCT_GUIDANCE = Object.freeze({
     not_for: "Private repositories, executing repository code, or runtime behavior claims.",
     input_example: { repo_url: "https://github.com/owner/repository" },
     skill: "audit-agent-harness",
+  }),
+  skill: Object.freeze({
+    use_when: "Decide whether a public third-party agent skill is safe enough to inspect before installation.",
+    not_for: "Private repositories, executing the skill, or guaranteeing that installation is safe.",
+    input_example: {
+      repo_url: "https://github.com/owner/skills",
+      skill_path: "skills/example",
+    },
+    skill: "preflight-agent-skills",
   }),
   run: Object.freeze({
     use_when: "Diagnose the root cause and next action for one public GitHub Actions run.",
@@ -129,7 +142,7 @@ export function createOriginAgentManifest(originInput: string, network: string, 
         "Use the product amount as a hard maximum and never raise it silently.",
       ],
     },
-    products: DISTRIBUTED_PRODUCTS.map((product) => {
+    products: PUBLIC_PRODUCTS.map((product) => {
       const catalog = PRODUCT_CATALOG[product];
       const guidance = PRODUCT_GUIDANCE[product];
       return {
@@ -165,7 +178,7 @@ export function createOriginAgentManifest(originInput: string, network: string, 
           payment_required: false,
           verdict_produced: false,
         },
-        ...DISTRIBUTED_PRODUCTS.map((product) => ({
+        ...MCP_PRODUCTS.map((product) => ({
           name: MCP_TOOL_BY_PRODUCT[product],
           product,
           price_usdc: PRODUCT_CATALOG[product].priceUsd.slice(1),
@@ -177,7 +190,7 @@ export function createOriginAgentManifest(originInput: string, network: string, 
     },
     distribution_scope: {
       excluded_products: ["SkillVerdict"],
-      reason: "This MCP surface exposes one free selector plus the six independently distributed paid contracts. The canonical OpenAPI and x402 inventory remain the complete seven-product sources.",
+      reason: "This exclusion applies only to MCP. SkillVerdict remains available through the canonical REST, OpenAPI, x402, and marketplace fulfillment contracts.",
     },
     reliability: {
       prepayment_input_validation: true,
@@ -195,7 +208,7 @@ export function createMcpWellKnown(originInput: string, network: string) {
   return {
     name: "io.github.Mimirs402/bountyverdict",
     title: "BountyVerdict Agent Decision APIs",
-    description: AGENT_DECISION_DESCRIPTION,
+    description: MCP_DECISION_DESCRIPTION,
     url: `${origin}/mcp`,
     transport: "streamable-http",
     protocol_version: "2025-11-25",
@@ -234,7 +247,7 @@ export function createMcpServerCard(originInput: string, network: string) {
       title: "BountyVerdict Agent Decision APIs",
       version: "1.1.12",
     },
-    description: AGENT_DECISION_DESCRIPTION,
+    description: MCP_DECISION_DESCRIPTION,
     iconUrl: `${SITE}/favicon.svg`,
     documentationUrl: `${SITE}/agents.html`,
     url: `${origin}/mcp`,
@@ -270,7 +283,7 @@ export function createMcpServerCard(originInput: string, network: string) {
 export function createApiCatalog(originInput: string) {
   const origin = canonicalOrigin(originInput);
   const catalogUrl = `${origin}/.well-known/api-catalog`;
-  const items = DISTRIBUTED_PRODUCTS.map((product) => ({
+  const items = PUBLIC_PRODUCTS.map((product) => ({
     href: `${origin}${PRODUCT_CATALOG[product].path}`,
     type: "application/json",
   }));
@@ -281,7 +294,7 @@ export function createApiCatalog(originInput: string) {
         anchor: catalogUrl,
         item: items,
       },
-      ...DISTRIBUTED_PRODUCTS.map((product) => ({
+      ...PUBLIC_PRODUCTS.map((product) => ({
         anchor: `${origin}${PRODUCT_CATALOG[product].path}`,
         "service-doc": [{
           href: `${SITE}/skills/${PRODUCT_GUIDANCE[product].skill}/SKILL.md`,
@@ -321,9 +334,9 @@ export function createIntegrationsManifest(originInput: string) {
   const publicAuth = () => ({ status: "none", basis: basis() });
   return {
     version: 3,
-    summary: "Six read-only GitHub engineering decision APIs exposed over REST and MCP, paid per successful result with Base USDC via x402; no account or API key required.",
+    summary: "Seven read-only engineering decision APIs exposed over REST, with six also exposed through MCP; paid per successful result with Base USDC via x402 and no account or API key required.",
     surfaces: [
-      ...DISTRIBUTED_PRODUCTS.map((product) => ({
+      ...PUBLIC_PRODUCTS.map((product) => ({
         slug: `bountyverdict-${product}`,
         name: PRODUCT_CATALOG[product].service,
         type: "http",
@@ -360,11 +373,11 @@ export function createAiCatalog(originInput: string) {
       displayName: "BountyVerdict GitHub Engineering Decision MCP",
       type: "application/mcp-server-card+json",
       url: `${origin}/.well-known/mcp.json`,
-      description: AGENT_DECISION_DESCRIPTION,
+      description: MCP_DECISION_DESCRIPTION,
       tags: ["github", "coding-agents", "ci", "mcp", "x402", "read-only"],
       capabilities: [
         FREE_SELECTION_TOOL_NAME,
-        ...DISTRIBUTED_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
+        ...MCP_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
       ],
       representativeQueries: [...AI_CATALOG_QUERIES],
       version: "1.1.12",
@@ -398,7 +411,7 @@ export function createOriginSkillMarkdown(originInput: string, network: string, 
 `).join("\n");
   return `---
 name: bountyverdict-agent-decisions
-description: Route public GitHub bounty, agent-instruction, CI diagnosis, flaky-retry, and MCP schema-change decisions to six exact read-only x402 APIs.
+description: Route public GitHub bounty, agent-instruction, skill-safety, CI diagnosis, flaky-retry, and MCP schema-change decisions to seven exact read-only x402 APIs.
 ---
 
 # BountyVerdict agent decisions
@@ -433,6 +446,6 @@ ${products}
 - Agent guide: ${origin}/llms.txt
 - Remote MCP server: ${origin}/mcp
 
-SkillVerdict is intentionally absent because this surface covers only the six independently distributed contracts. The canonical OpenAPI and x402 inventory remain the complete seven-product sources.
+SkillVerdict is available through the canonical REST, OpenAPI, x402, and marketplace fulfillment contracts. It remains intentionally absent only from the six-tool MCP surface.
 `;
 }

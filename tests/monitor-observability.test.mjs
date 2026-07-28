@@ -853,8 +853,10 @@ test("production payment inspection exercises the Agentic Wallet-compatible Boun
   const smoke = await readFile(paymentSmokeUrl, "utf8");
   assert.match(smoke, /if \(product === "single"\) url\.searchParams\.set\("issue_url", issueUrl\)/);
   assert.match(smoke, /const expectedMethod = product === "single" \? "GET" : contract\.method/);
+  assert.match(smoke, /if \(expectedMethod === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType !== "json"\)/);
   assert.match(smoke, /maximumChallengeAttempts = workerVersionOverride \? 30 : 1/);
   assert.match(smoke, /unpaid\.status !== 404/);
+  assert.doesNotMatch(smoke, /if \(contract\.method === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType/);
   assert.doesNotMatch(smoke, /product === "single"\s*\?\s*\{\s*issue_url:/);
 });
 

@@ -160,7 +160,7 @@ test("the402 automation is fail-closed unless explicitly enabled", async () => {
   }
 });
 
-test("the402 registration probe opens only during the exact temporary window", async () => {
+test("the402 registration window temporarily short-circuits every request without executing it", async () => {
   const response = await app.request("/api/the402/webhook", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -172,7 +172,7 @@ test("the402 registration probe opens only during the exact temporary window", a
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { accepted: true, action: "registration_probe" });
 
-  const partialSignature = await app.request("/api/the402/webhook", {
+  const platformProbe = await app.request("/api/the402/webhook", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -183,6 +183,6 @@ test("the402 registration probe opens only during the exact temporary window", a
     THE402_AUTOMATION_ENABLED: "YES",
     THE402_REGISTRATION_WINDOW: "YES",
   });
-  assert.equal(partialSignature.status, 404);
-  assert.deepEqual(await partialSignature.json(), { error: "NOT_FOUND" });
+  assert.equal(platformProbe.status, 200);
+  assert.deepEqual(await platformProbe.json(), { accepted: true, action: "registration_probe" });
 });

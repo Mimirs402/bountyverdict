@@ -722,12 +722,7 @@ app.post("/api/the402/webhook", async (c) => {
   if (c.env.THE402_AUTOMATION_ENABLED !== "YES") {
     return c.json({ error: "NOT_FOUND" }, 404);
   }
-  if (
-    c.env.THE402_REGISTRATION_WINDOW === "YES" &&
-    !c.req.header("X-Platform-Secret") &&
-    !c.req.header("X-Webhook-Signature") &&
-    !c.req.header("X-Webhook-Timestamp")
-  ) {
+  if (c.env.THE402_REGISTRATION_WINDOW === "YES") {
     return c.json({ accepted: true, action: "registration_probe" });
   }
   const declaredLength = c.req.header("Content-Length");

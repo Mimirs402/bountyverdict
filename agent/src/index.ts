@@ -64,6 +64,7 @@ import {
 import {
   fulfillProduct,
   fulfillThe402Product,
+  diagnoseThe402ApiKeyWebhookEnvelope,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
@@ -746,7 +747,18 @@ app.post("/api/the402/webhook", async (c) => {
     c.env.THE402_API_KEY_WEBHOOK_AUTH_ENABLED === "YES" &&
     await verifyThe402ApiKeyWebhookEnvelope(verificationInput)
   );
-  if (!verified || !c.env.THE402_API_KEY) return c.json({ error: "NOT_FOUND" }, 404);
+  if (!verified || !c.env.THE402_API_KEY) {
+    if (
+      verificationInput.api_key_header || verificationInput.signature_header ||
+      verificationInput.timestamp_header
+    ) {
+      console.warn(
+        "Rejected the402 signing envelope:",
+        await diagnoseThe402ApiKeyWebhookEnvelope(verificationInput),
+      );
+    }
+    return c.json({ error: "NOT_FOUND" }, 404);
+  }
 
   let job;
   try {

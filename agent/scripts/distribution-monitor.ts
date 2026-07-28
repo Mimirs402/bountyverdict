@@ -47,6 +47,7 @@ import {
   normalizeThe402CustomerSettlement,
   normalizeThe402ServiceOutcome,
   normalizeThe402WebhookHealth,
+  normalizeThe402WebhookTest,
 } from "../src/marketplace-telemetry.ts";
 import { loadDistributionMonitorConfiguration } from "../src/monitor-configuration.ts";
 import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseMcpubGetResponse, parseMcpubSearchLiveResponse, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
@@ -1017,6 +1018,22 @@ async function the402Status(): Promise<Record<string, unknown>> {
     owned.map(({ webhook_healthy }) => webhook_healthy),
     completedCounts[0],
   );
+  const webhookTests = webhookHealth.healthy
+    ? []
+    : await Promise.all(owned.map(async (service) => {
+      const response = await monitoredFetch(
+        `${THE402_API}/services/${encodeURIComponent(String(service.id))}/test`,
+        { method: "POST", headers: { "X-API-Key": the402ApiKey } },
+      );
+      if (!response.ok) {
+        throw new Error(`the402 ${service.name} webhook test returned HTTP ${response.status}.`);
+      }
+      const result = normalizeThe402WebhookTest(await response.json(), String(service.id));
+      const expected = expectedById.get(String(service.id));
+      if (!expected) throw new Error("the402 returned an unexpected webhook test service.");
+      return { product: expected.product, service_id: String(service.id), ...result };
+    }));
+  const webhookReady = webhookHealth.healthy || webhookTests.length === owned.length;
   const detailResponses = await Promise.all(owned.map(({ id }) =>
     monitoredFetch(`${THE402_API}/services/${encodeURIComponent(String(id))}`)));
   if (detailResponses.some((response) => !response.ok)) {
@@ -1130,8 +1147,10 @@ async function the402Status(): Promise<Record<string, unknown>> {
     provider_wallet: String(earnings.wallet).toLowerCase(),
     service_count: owned.length,
     skillverdict_excluded: true,
-    webhook_healthy: webhookHealth.healthy,
-    webhook_health_status: webhookHealth.status,
+    webhook_healthy: webhookReady,
+    webhook_health_status: webhookHealth.healthy ? webhookHealth.status : "synthetic_test_verified",
+    marketplace_webhook_healthy: webhookHealth.healthy,
+    webhook_tests: webhookTests,
     listing_contracts_verified: true,
     request_notifications_enabled: true,
     request_notification_failures: Number.isSafeInteger(notifications.consecutive_failures)
@@ -2777,7 +2796,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - Monetize Your Agent suite entry: ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - 402directory endpoints: ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} (${report.acquisition?.directory_402?.status || "unavailable"}; seven review submissions are not purchases)
 - 402 Index endpoints: ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} (${report.acquisition?.index_402?.status || "unavailable"}; MCPDrift body-bound preflight is not probe-compatible)
-- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict excluded during isolated experiment)
+- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "synthetic_test_verified" ? "platform webhook test verified" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - the402 per-product service attempts: ${Object.entries(report.marketplaces?.the402?.service_outcomes || {}).map(([product, outcome]: [string, any]) => `${product} ${Number(outcome.total_jobs || 0)} total/${Number(outcome.failed_jobs || 0)} failed/${Number(outcome.disputed_jobs || 0)} disputed`).join("; ") || "unavailable"} (attempt telemetry only; settlements remain authoritative)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded); exact-fit request automation ${report.marketplaces?.payan?.demand_capture?.healthy ? "healthy" : "unavailable"}

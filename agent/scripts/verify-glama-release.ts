@@ -17,7 +17,7 @@ const expectedPaidTools = Object.freeze([
   "rank_github_bounties",
 ]);
 const expectedTools = Object.freeze([
-  ...(process.env.GLAMA_EXPECT_FREE_SELECTOR === "YES" ? ["choose_github_agent_decision"] : []),
+  ...(process.env.GLAMA_EXPECT_FREE_SELECTOR === "NO" ? [] : ["choose_github_agent_decision"]),
   ...expectedPaidTools,
 ]);
 const expectedTaskOpeners = Object.freeze({

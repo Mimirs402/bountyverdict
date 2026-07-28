@@ -238,6 +238,31 @@ export function normalizeThe402WebhookHealth(
   throw new Error("the402 webhook health telemetry is inconsistent with completed jobs.");
 }
 
+export function normalizeThe402WebhookTest(
+  value: unknown,
+  expectedServiceId: string,
+): { response_time_ms: number; job_id: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("the402 webhook test response is malformed.");
+  }
+  const result = value as Record<string, any>;
+  const responseTimeMs = Number(result.response_time_ms);
+  const payload = result.test_payload;
+  const responseBody = result.response_body;
+  if (
+    result.success !== true || result.status_code !== 200 ||
+    !Number.isFinite(responseTimeMs) || responseTimeMs < 0 ||
+    !Array.isArray(result.warnings) || result.warnings.length !== 0 ||
+    !payload || payload.type !== "job_dispatch" || payload.test !== true ||
+    payload.service_id !== expectedServiceId ||
+    typeof payload.job_id !== "string" || !/^test_job_[A-Za-z0-9_-]+$/.test(payload.job_id) ||
+    !responseBody || responseBody.accepted !== true || responseBody.job_id !== payload.job_id
+  ) {
+    throw new Error("the402 webhook test did not prove a successful service dispatch.");
+  }
+  return { response_time_ms: responseTimeMs, job_id: payload.job_id };
+}
+
 export function normalizeThe402CustomerSettlement(
   settlementValue: unknown,
   jobValue: unknown,

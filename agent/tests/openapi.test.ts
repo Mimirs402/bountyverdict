@@ -13,7 +13,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     mcpdrift: "$0.02",
   });
   assert.match(spec.info.title, /Agent Decision APIs/);
-  assert.equal(spec.info.version, "1.1.11");
+  assert.equal(spec.info.version, "1.1.12");
   assert.match(spec.info.description, /Seven bounded/);
   assert.match(spec.info["x-guidance"], /service_reuse/);
   assert.equal(spec.tags.length, 7);
@@ -30,6 +30,13 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     operation.requestBody.content["application/json"].schema.properties.issue_url.example,
     "https://github.com/typeorm/typeorm/issues/3357",
   );
+  const agenticWalletOperation = spec.paths["/api/bounty-preflight"].get;
+  assert.equal(agenticWalletOperation.operationId, "checkBountyVerdictAgenticWallet");
+  assert.equal(agenticWalletOperation["x-x402"].price, "$0.05");
+  assert.equal(agenticWalletOperation["x-x402"].network, "eip155:8453");
+  assert.equal(agenticWalletOperation.parameters[0].name, "issue_url");
+  assert.equal(agenticWalletOperation.parameters[0].required, true);
+  assert.match(agenticWalletOperation.description, /Agentic Wallet buyers/);
   assert.equal(spec.paths["/api/verdict"].get.deprecated, true);
   assert.equal(spec.paths["/api/verdict"].get.operationId, "checkBountyVerdictLegacyGet");
   assert.ok(spec.paths["/api/verdict"].get.parameters.some((parameter) => parameter.name === "issue_url"));

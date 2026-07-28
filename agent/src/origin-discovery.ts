@@ -232,7 +232,7 @@ export function createMcpServerCard(originInput: string, network: string) {
     serverInfo: {
       name: "io.github.Mimirs402/bountyverdict",
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.11",
+      version: "1.1.12",
     },
     description: AGENT_DECISION_DESCRIPTION,
     iconUrl: `${SITE}/favicon.svg`,
@@ -367,7 +367,7 @@ export function createAiCatalog(originInput: string) {
         ...DISTRIBUTED_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
       ],
       representativeQueries: [...AI_CATALOG_QUERIES],
-      version: "1.1.11",
+      version: "1.1.12",
       updatedAt: AI_CATALOG_UPDATED_AT,
       metadata: {
         authentication: "none",

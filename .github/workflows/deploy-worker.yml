@@ -319,19 +319,19 @@ jobs:
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/integrations.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
-              if (value.version !== 3 || value.surfaces?.length !== 7) process.exit(1);
-              if (value.surfaces.filter(({ type }) => type === "http").length !== 6 || value.surfaces.filter(({ type }) => type === "mcp").length !== 1) process.exit(1);
-              if (value.surfaces.some(({ url }) => url === `${process.env.PRODUCTION_API_URL}/api/skill`)) process.exit(1);
+              if (value.version !== 3 || value.surfaces?.length !== 8) process.exit(1);
+              if (value.surfaces.filter(({ type }) => type === "http").length !== 7 || value.surfaces.filter(({ type }) => type === "mcp").length !== 1) process.exit(1);
+              if (!value.surfaces.some(({ url }) => url === `${process.env.PRODUCTION_API_URL}/api/skill`)) process.exit(1);
               if (value.surfaces.some(({ basis, auth }) => basis?.source !== `${process.env.PRODUCTION_API_URL}/.well-known/integrations.json` || auth?.status !== "none")) process.exit(1);
             });
           '
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/api-catalog" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
-              const expected = ["/api/bounty-preflight", "/api/portfolio", "/api/repository-agent-instructions-audit", "/api/github-actions-run-diagnosis", "/api/github-actions-flake-retry-gate", "/api/mcp-drift", "/mcp"]
+              const expected = ["/api/bounty-preflight", "/api/portfolio", "/api/repository-agent-instructions-audit", "/api/skill", "/api/github-actions-run-diagnosis", "/api/github-actions-flake-retry-gate", "/api/mcp-drift", "/mcp"]
                 .map((path) => `${process.env.PRODUCTION_API_URL}${path}`);
               if (JSON.stringify(value.linkset?.[0]?.item?.map(({ href }) => href)) !== JSON.stringify(expected)) process.exit(1);
-              if (JSON.stringify(value).includes(`${process.env.PRODUCTION_API_URL}/api/skill`)) process.exit(1);
+              if (!JSON.stringify(value).includes(`${process.env.PRODUCTION_API_URL}/api/skill`)) process.exit(1);
             });
           '
           owner_curl --fail --silent --show-error --head "$PRODUCTION_API_URL/.well-known/api-catalog" | node -e '

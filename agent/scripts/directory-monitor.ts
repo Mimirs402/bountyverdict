@@ -42,6 +42,7 @@ import {
   parseKiloMarketplaceCatalog,
   parseKiloMarketplaceDefinition,
   parseMcpDirectoryPage,
+  parseMcpRepositoryPage,
   parseMcpServersOrgPage,
   parseMcpObservatoryDetail,
   parseTensorBlockProfile,
@@ -183,8 +184,18 @@ const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bounty
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
 const githubSkillReleaseTag = "v1.1.12";
-const mcpRepositoryUrl = "https://mcprepository.com/cristianmoroaica/bountyverdict";
-const mcpRepositorySubmittedAt = "2026-07-21T03:31:45Z";
+const mcpRepositoryUrl = "https://mcprepository.com/Mimirs402/bountyverdict";
+const mcpRepositoryMigrationIssueUrl = "https://github.com/mcprepository/mcp-index/issues/3";
+const mcpRepositoryMigrationRequestedAt = "2026-07-27T09:22:10Z";
+const historicalMcpRepositoryListing = Object.freeze({
+  url: "https://mcprepository.com/cristianmoroaica/bountyverdict",
+  repository: "https://github.com/cristianmoroaica/bountyverdict",
+  originally_submitted_at: "2026-07-21T03:31:45Z",
+  classification: "historical_superseded_personal_listing",
+  monitored_as_current_placement: false,
+  canonical_business_distribution: false,
+  superseded_by: mcpRepositoryUrl,
+});
 const mcpubCrawlerPrUrl = "https://github.com/roverbird/mcpub/pull/4";
 const agentNdxIndexUrl = "https://agentndx.ai/api/servers.json";
 const agentNdxSubmittedAt = "2026-07-21T03:33:34Z";
@@ -1997,26 +2008,42 @@ async function mcpRepositoryStatus(): Promise<Record<string, unknown>> {
       headers: { "User-Agent": "bountyverdict-directory-monitor/1.0" },
       signal: AbortSignal.timeout(timeoutMs),
     });
-    const body = await response.text();
-    if (body.length > 1_000_000) throw new Error("MCPRepository listing response is unbounded.");
-    const title = body.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || "";
-    const exactRepositoryLink = /href="https:\/\/github\.com\/cristianmoroaica\/bountyverdict(?:\?ref=mcprepository\.com)?"/i.test(body);
-    const listed = response.ok && title.length > 0 && exactRepositoryLink;
+    const parsed = parseMcpRepositoryPage(
+      await readBoundedText(response, 1_000_000),
+      repository,
+      publicProductUrl,
+    );
+    const listed = response.ok && parsed.listed;
+    const contractVerified = response.ok && parsed.contract_verified;
     return {
       url: mcpRepositoryUrl,
       http_status: response.status,
-      submitted_at: mcpRepositorySubmittedAt,
+      migration_issue_url: mcpRepositoryMigrationIssueUrl,
+      migration_requested_at: mcpRepositoryMigrationRequestedAt,
+      historical_legacy_listing: historicalMcpRepositoryListing,
+      ...parsed,
       listed,
-      status: listed ? "listed" : response.ok || response.status === 404 ? "queued_validation" : "unexpected_response",
-      title: listed ? title : null,
-      measurement: "submission_and_catalog_presence_not_impressions_installs_or_purchases",
+      contract_verified: contractVerified,
+      status: contractVerified
+        ? "listed_contract_verified"
+        : listed
+          ? "listed_contract_drift"
+          : response.ok || response.status === 404
+            ? "queued_validation"
+            : "unexpected_response",
+      canonical_business_distribution: true,
+      measurement: "canonical_business_catalog_presence_not_impressions_installs_or_purchases",
     };
   } catch (error) {
     return {
       url: mcpRepositoryUrl,
-      submitted_at: mcpRepositorySubmittedAt,
+      migration_issue_url: mcpRepositoryMigrationIssueUrl,
+      migration_requested_at: mcpRepositoryMigrationRequestedAt,
+      historical_legacy_listing: historicalMcpRepositoryListing,
       listed: false,
+      contract_verified: false,
       status: "request_failed",
+      canonical_business_distribution: true,
       error: error instanceof Error ? error.message : String(error),
     };
   }

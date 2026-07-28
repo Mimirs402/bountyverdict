@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   canReuseMcpDownstreamStatus,
@@ -16,6 +17,7 @@ import {
   parseKiloMarketplaceDefinition,
   parseMcpObservatoryDetail,
   parseMcpDirectoryPage,
+  parseMcpRepositoryPage,
   parseMcpServersOrgPage,
   parseMcpubGetResponse,
   parseMcpubSearchLiveResponse,
@@ -35,6 +37,59 @@ const repository = "https://github.com/Mimirs402/bountyverdict";
 const agentFinderIdentifier = "urn:ai:github.com:Mimirs402:bountyverdict:bountyverdict";
 const agentFinderDefinitionUrl = "https://github.com/Mimirs402/bountyverdict/blob/main/server.json";
 const registryLatestUrl = "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Mimirs402%2Fbountyverdict/versions/latest";
+const documentation = "https://mimirs402.github.io/bountyverdict/";
+
+test("recognizes only the canonical business MCPRepository listing", async () => {
+  const [business, legacy] = await Promise.all([
+    readFile(new URL("./fixtures/mcprepository-business.html", import.meta.url), "utf8"),
+    readFile(new URL("./fixtures/mcprepository-legacy.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.deepEqual(parseMcpRepositoryPage(business, repository, documentation), {
+    listed: true,
+    contract_verified: true,
+    repository_metadata_verified: true,
+    documentation_metadata_verified: true,
+    legacy_personal_reference_present: false,
+    repository,
+    documentation,
+    title: "BountyVerdict Agent Decision APIs - MCP Server",
+  });
+
+  assert.deepEqual(parseMcpRepositoryPage(legacy, repository, documentation), {
+    listed: false,
+    contract_verified: false,
+    repository_metadata_verified: false,
+    documentation_metadata_verified: false,
+    legacy_personal_reference_present: true,
+    repository,
+    documentation,
+    title: "BountyVerdict Agent Decision APIs - MCP Server",
+  });
+
+  const mixed = parseMcpRepositoryPage(
+    business.replace("</body>", '<a href="https://github.com/cristianmoroaica/bountyverdict">Legacy</a></body>'),
+    repository,
+    documentation,
+  );
+  assert.equal(mixed.listed, true);
+  assert.equal(mixed.contract_verified, false);
+  assert.equal(mixed.legacy_personal_reference_present, true);
+
+  const wrongDocumentation = parseMcpRepositoryPage(
+    business.replace("https://mimirs402.github.io/bountyverdict/", "https://example.com/bountyverdict/"),
+    repository,
+    documentation,
+  );
+  assert.equal(wrongDocumentation.listed, true);
+  assert.equal(wrongDocumentation.documentation_metadata_verified, false);
+  assert.equal(wrongDocumentation.contract_verified, false);
+
+  assert.throws(
+    () => parseMcpRepositoryPage("x".repeat(1_000_001), repository, documentation),
+    /invalid or unbounded/,
+  );
+});
 
 test("recognizes the direct Agent Finder contract and independent Registry contract", () => {
   const catalogEntry = {

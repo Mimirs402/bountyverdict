@@ -903,8 +903,19 @@ test("directory monitoring retains MCPRepository validation without calling it d
   const directory = await readFile(directoryMonitorUrl, "utf8");
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(directory, /async function mcpRepositoryStatus/);
-  assert.match(directory, /mcprepository\.com\/cristianmoroaica\/bountyverdict/);
-  assert.match(directory, /submission_and_catalog_presence_not_impressions_installs_or_purchases/);
+  assert.match(directory, /const mcpRepositoryUrl = "https:\/\/mcprepository\.com\/Mimirs402\/bountyverdict"/);
+  assert.match(
+    directory,
+    /parseMcpRepositoryPage\(\s*await readBoundedText\(response, 1_000_000\),\s*repository,\s*publicProductUrl,\s*\)/,
+  );
+  assert.match(directory, /canonical_business_catalog_presence_not_impressions_installs_or_purchases/);
+  assert.match(directory, /classification: "historical_superseded_personal_listing"/);
+  assert.match(directory, /monitored_as_current_placement: false/);
+  assert.doesNotMatch(directory, /async function mcpRepositoryLegacyStatus/);
+  assert.doesNotMatch(
+    directory,
+    /const mcpRepositoryUrl = "https:\/\/mcprepository\.com\/cristianmoroaica\/bountyverdict"/,
+  );
   assert.match(directory, /mcp_repository: mcpRepository/);
   assert.match(distribution, /MCPRepository:/);
   assert.match(distribution, /catalog presence is not demand or revenue/);

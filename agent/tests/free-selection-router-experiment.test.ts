@@ -6,6 +6,7 @@ import {
   type FreeSelectionRouterReleaseCoordinates,
 } from "../src/free-selection-router-experiment.ts";
 import {
+  FREE_SELECTION_CATALOG_EXPERIMENT_ID,
   FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
   updateTaskLeadingDescriptionExperiment,
@@ -68,6 +69,20 @@ test("derives a free router activation only from the exact post-release clean ep
       epochs: [{ ...ledger.epochs[0], conversion_eligible: false }],
     }, coordinates),
     /does not match/,
+  );
+});
+
+test("zero-argument catalog activation has a distinct immutable experiment identity", () => {
+  const activation = activationFromVerifiedFreeSelectionEpoch(
+    ledger,
+    coordinates,
+    FREE_SELECTION_CATALOG_EXPERIMENT_ID,
+  );
+  assert.equal(activation?.experiment_id, FREE_SELECTION_CATALOG_EXPERIMENT_ID);
+  assert.equal(activation?.measurement_epoch_id, 60);
+  assert.throws(
+    () => parseTaskLeadingDescriptionActivation(activation, FREE_SELECTION_ROUTER_EXPERIMENT_ID),
+    /identity is invalid/,
   );
 });
 

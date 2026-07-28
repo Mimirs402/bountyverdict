@@ -2,13 +2,15 @@ export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descript
 export const AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID = "mcp-agent-question-descriptions-v6";
 export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v7";
 export const FREE_SELECTION_ROUTER_EXPERIMENT_ID = "mcp-free-selection-router-v1";
+export const FREE_SELECTION_CATALOG_EXPERIMENT_ID = "mcp-free-selection-catalog-v1";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export type DescriptionExperimentId =
   | typeof TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
   | typeof AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID
   | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID
-  | typeof FREE_SELECTION_ROUTER_EXPERIMENT_ID;
+  | typeof FREE_SELECTION_ROUTER_EXPERIMENT_ID
+  | typeof FREE_SELECTION_CATALOG_EXPERIMENT_ID;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "initialize",
@@ -167,7 +169,8 @@ function decisionFor(
   delta: TaskLeadingDescriptionCounters,
   experimentId: DescriptionExperimentId,
 ): { decision: string; interpretation: string } {
-  const freeRouter = experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID;
+  const freeRouter = experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID ||
+    experimentId === FREE_SELECTION_CATALOG_EXPERIMENT_ID;
   if (delta.paid_success > 0) return {
     decision: freeRouter ? "paid_conversion_observed_after_free_router_release" : "paid_conversion_observed_without_task_copy_attribution",
     interpretation: freeRouter
@@ -319,7 +322,8 @@ export function updateTaskLeadingDescriptionExperiment(
     observation_rule:
       experimentId === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
         ? "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events"
-        : experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID
+        : experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID ||
+            experimentId === FREE_SELECTION_CATALOG_EXPERIMENT_ID
           ? "first_monitor_report_at_or_above_25_eligible_free_selection_router_tools_list_events"
           : "first_monitor_report_at_or_above_25_eligible_agent_question_description_tools_list_events",
     measurement_epoch_id: activation.measurement_epoch_id,

@@ -292,11 +292,14 @@ const OPEN_AVAILABILITY_PATTERNS = [
 ];
 
 const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接|原\s*(?:url|链接|issue))[^\n\r]{0,80}[\n\r\s:|>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
+const EXACT_EXTERNAL_SOURCE_PATTERN = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)\/?$/i;
 
 export function externalSourceIssue(issue, repository) {
   const body = typeof issue?.body === "string" ? issue.body : "";
   const current = typeof repository?.full_name === "string" ? repository.full_name.toLowerCase() : "";
-  for (const match of body.matchAll(EXTERNAL_SOURCE_LABEL_PATTERN)) {
+  const exact = body.trim().match(EXACT_EXTERNAL_SOURCE_PATTERN);
+  const matches = exact ? [exact] : body.matchAll(EXTERNAL_SOURCE_LABEL_PATTERN);
+  for (const match of matches) {
     const owner = match[1];
     const repo = match[2];
     const number = Number(match[3]);

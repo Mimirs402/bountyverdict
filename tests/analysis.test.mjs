@@ -540,6 +540,39 @@ test("a mirrored bounty requires checking its external source issue", () => {
   ));
 });
 
+test("an exact bare GitHub issue URL is treated as a machine-readable mirror", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "https://github.com/upstream/project/issues/77\n",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "External source issue requires separate verification" &&
+    item.evidenceUrl === "https://github.com/upstream/project/issues/77"
+  ));
+});
+
+test("an unlabeled GitHub issue URL inside ordinary prose is not treated as a mirror", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: "This $100 bounty has complete acceptance criteria. Compare behavior with https://github.com/upstream/project/issues/77 before implementing the bounded fix.",
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "VIABLE");
+  assert.ok(!output.signals.some((item) =>
+    item.label === "External source issue requires separate verification"
+  ));
+});
+
 test("a nominal USD promise qualified as non-cash dockets is unverified and unsafe", () => {
   const output = analyzeBounty({
     issue: {

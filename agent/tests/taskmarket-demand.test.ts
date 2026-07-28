@@ -113,7 +113,7 @@ const tracked: readonly TaskmarketTrackedSpecification[] = [{
   expected_net_atomic: "138750",
 }];
 
-test("Taskmarket production tracker pins the isolated worker and all ten public receipts", () => {
+test("Taskmarket production tracker pins the isolated worker and all eleven public receipts", () => {
   assert.equal(TASKMARKET_WORKER_ADDRESS, "0xe5E0fe496B7283032d034Dc79C305b384Ad1ee67");
   assert.deepEqual(TASKMARKET_TRACKED_SUBMISSIONS, [
     {
@@ -310,6 +310,42 @@ test("Taskmarket production tracker pins the isolated worker and all ten public 
           size_bytes: 992,
           sha256_hash: "719de214057e36a4c679bc129b28cd12fce63e0eafb519d22b74c7680cefa0a2",
           keccak256_hash: "0x83a7bb542f0e389eb7f89705f6d3514583a1a0c80486935c101ea96b65b1c1a3",
+          display_order: 2,
+        },
+      ],
+    },
+    {
+      task_id: "0x17275a75ba29a7fe1843c1d9ad34740ae340c55fd8c082b2ff83953ab3411ea6",
+      submission_id: "678b4631-282c-4f39-acf9-a51aef34e44e",
+      submit_tx_hash: "0x191479d4b2a2fe87ab40c9e69ba420b18ea86df648e425889c2792d0699f545a",
+      reward_atomic: "5000000",
+      expected_net_atomic: "4625000",
+      artifact_manifest: [
+        {
+          file_name: "hero.png",
+          mime_type: "image/png",
+          role: "final",
+          size_bytes: 2_992_158,
+          sha256_hash: "d0b2e78032ae9fa322afe84f8dc5f80b0edef39b62bb64b1d133dab0671831bc",
+          keccak256_hash: "0xb05e9c1cc72b18d2abfae661750a730fca092fc86951cf9e7ed716935e7c29ae",
+          display_order: 0,
+        },
+        {
+          file_name: "concept-note.md",
+          mime_type: "text/markdown",
+          role: "final",
+          size_bytes: 1_151,
+          sha256_hash: "4223e211e2bdfb49aa224f9e316973173e32a1cfbe34da89460502aaa0b8c2d6",
+          keccak256_hash: "0x0db48126868f1ab12e16e28710ea61e0c5dd2686e78cebae30aca07930860937",
+          display_order: 1,
+        },
+        {
+          file_name: "sources.md",
+          mime_type: "text/markdown",
+          role: "final",
+          size_bytes: 1_063,
+          sha256_hash: "fc2d631b017fcc7786541f598ecf46e7698024ce149da6c5a903a89e6e944a38",
+          keccak256_hash: "0xc76a259f46eec8556d4466e8fe87b675b2c964cdb140bb6176a1bb6842c43743",
           display_order: 2,
         },
       ],

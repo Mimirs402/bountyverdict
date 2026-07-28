@@ -4,7 +4,10 @@ import { lstat, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
-import { buildGithubDigest } from "../src/github-digest.ts";
+import {
+  buildGithubDigest,
+  preserveLatestNonEmptyGithubDigest,
+} from "../src/github-digest.ts";
 
 const execFileAsync = promisify(execFile);
 const stateRoot = resolve(process.env.BOUNTYVERDICT_STATE_ROOT || `${homedir()}/.local/state/bountyverdict`);
@@ -37,6 +40,17 @@ async function readCheckpoint(): Promise<string | null> {
   }
 }
 
+async function readPreviousDigest(): Promise<unknown> {
+  try {
+    const metadata = await lstat(digestPath);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 256_000) return null;
+    return JSON.parse(await readFile(digestPath, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function atomicWrite(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
@@ -56,6 +70,7 @@ if ((identity as Record<string, unknown>).login !== "Mimirs402") {
 }
 const checkedAt = new Date().toISOString();
 const checkpoint = await readCheckpoint();
+const previousDigest = await readPreviousDigest();
 const floor = Date.now() - maximumLookbackMs;
 const since = new Date(Math.max(checkpoint ? Date.parse(checkpoint) : floor, floor)).toISOString();
 const notifications = await gh([
@@ -83,14 +98,16 @@ for (let index = 0; index < detailUrls.length; index += 5) {
   }));
   for (const [url, value] of values) if (value) details.set(url, value);
 }
-const digest = buildGithubDigest(notifications, details, since, checkedAt);
+const currentDigest = buildGithubDigest(notifications, details, since, checkedAt);
+const digest = preserveLatestNonEmptyGithubDigest(currentDigest, previousDigest);
 await atomicWrite(digestPath, digest);
 await atomicWrite(checkpointPath, { schema_version: 1, checked_at: checkedAt, account: "Mimirs402" });
 console.log(JSON.stringify({
   product: "BountyVerdict GitHub digest",
   checked_at: digest.checked_at,
   since: digest.since,
-  events: digest.event_count,
+  new_events: currentDigest.event_count,
+  retained_events: digest.event_count,
   actionable: digest.actionable_count,
   digest_fingerprint: digest.digest_fingerprint,
 }, null, 2));

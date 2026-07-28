@@ -15,7 +15,7 @@ export type GithubDigestEvent = {
   actionable: boolean;
 };
 
-type GithubDigest = {
+export type GithubDigest = {
   schema_version: 1;
   checked_at: string;
   since: string;
@@ -25,6 +25,26 @@ type GithubDigest = {
   digest_fingerprint: string;
   events: GithubDigestEvent[];
 };
+
+export function preserveLatestNonEmptyGithubDigest(
+  current: GithubDigest,
+  previous: unknown,
+): GithubDigest {
+  if (current.event_count > 0) return current;
+  const prior = record(previous);
+  if (prior.schema_version !== 1 || prior.account !== "Mimirs402" ||
+      typeof prior.digest_fingerprint !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(prior.digest_fingerprint) ||
+      !Number.isSafeInteger(prior.event_count) || prior.event_count < 1 ||
+      !Number.isSafeInteger(prior.actionable_count) ||
+      !Array.isArray(prior.events) || prior.events.length !== prior.event_count ||
+      prior.events.length > GITHUB_DIGEST_MAX_EVENTS) return current;
+  return {
+    ...(prior as GithubDigest),
+    checked_at: current.checked_at,
+    since: current.since,
+  };
+}
 
 function record(value: unknown): Record<string, any> {
   return value !== null && typeof value === "object" && !Array.isArray(value)

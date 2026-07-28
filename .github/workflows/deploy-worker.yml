@@ -334,7 +334,11 @@ jobs:
               if (!body.includes(`${process.env.PRODUCTION_API_URL}/agent-manifest.json`) || !body.includes("network `eip155:8453` (Base mainnet)")) process.exit(1);
             });
           '
-          node <<'NODE'
+          # MCP verification spans several requests. During edge propagation a
+          # sequence can otherwise mix the prior and new Worker versions.
+          mcp_release_ready=false
+          for attempt in {1..12}; do
+            if node <<'NODE'
           const api = process.env.PRODUCTION_API_URL;
           const headers = {
             Accept: "application/json, text/event-stream",
@@ -462,6 +466,16 @@ jobs:
             } else if (payment.exact_request.body !== undefined || payment.exact_request.normalized_body_sha256 !== undefined || payment.authorization_scope !== "resource_url") process.exit(1);
           }
           NODE
+            then
+              mcp_release_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$mcp_release_ready" != "true" ]]; then
+            echo "Production MCP contracts did not converge to the deployed release" >&2
+            exit 1
+          fi
           owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/openapi.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const spec = JSON.parse(body);

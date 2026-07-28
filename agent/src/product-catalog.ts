@@ -78,6 +78,12 @@ export function productForTransport(path: string, method: string): ProductKey | 
     const catalog = PRODUCT_CATALOG[product];
     if (catalog.path === path && catalog.method === normalizedMethod) return product;
   }
+  if (
+    normalizedMethod === "GET" &&
+    path === PRODUCT_CATALOG.single.path
+  ) {
+    return "single";
+  }
   if (normalizedMethod === "GET") {
     for (const [product, legacyPath] of Object.entries(LEGACY_GET_PATHS) as [keyof typeof LEGACY_GET_PATHS, string][]) {
       if (path === legacyPath) return product;

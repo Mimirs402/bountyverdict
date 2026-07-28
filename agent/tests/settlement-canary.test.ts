@@ -106,11 +106,12 @@ test("settlement fixtures are exact production-only resources", () => {
     assert.match(url.pathname, /^\/api\/(?:bounty-preflight|portfolio|repository-agent-instructions-audit|skill|github-actions-run-diagnosis|github-actions-flake-retry-gate|mcp-drift)$/);
   }
   const single = getSettlementCanaryFixture("single");
-  assert.equal(single.method, "POST");
-  assert.equal(single.url, `${SETTLEMENT_CANARY_ORIGIN}/api/bounty-preflight`);
-  assert.deepEqual(JSON.parse(single.body || "null"), {
-    issue_url: "https://github.com/typeorm/typeorm/issues/3357",
-  });
+  assert.equal(single.method, "GET");
+  assert.equal(
+    single.url,
+    `${SETTLEMENT_CANARY_ORIGIN}/api/bounty-preflight?issue_url=https%3A%2F%2Fgithub.com%2Ftypeorm%2Ftypeorm%2Fissues%2F3357`,
+  );
+  assert.equal(single.body, undefined);
   assert.deepEqual(
     ["harness", "run", "flake"].map((product) => {
       const fixture = getSettlementCanaryFixture(product as SettlementCanaryProduct);
@@ -193,8 +194,7 @@ test("challenge validation pins every economic and resource field", () => {
     ["NETWORK_CHANGED", value => { value.accepts[0].network = "eip155:84532"; }],
     ["ASSET_CHANGED", value => { value.accepts[0].asset = "0x0000000000000000000000000000000000000001"; }],
     ["PAYEE_CHANGED", value => { value.accepts[0].payTo = "0x0000000000000000000000000000000000000001"; }],
-    ["METHOD_CHANGED", value => { value.extensions.bazaar.info.input.method = "GET"; }],
-    ["BODY_TYPE_CHANGED", value => { value.extensions.bazaar.info.input.bodyType = "form"; }],
+    ["METHOD_CHANGED", value => { value.extensions.bazaar.info.input.method = "POST"; }],
   ];
   for (const [code, mutate] of mutations) {
     const challenge = paymentRequired("single");
@@ -342,7 +342,7 @@ test("orchestration authorizes once, sends once, forbids redirects, and validate
   assert.equal(calls.length, 2);
   const singleFixture = getSettlementCanaryFixture("single");
   assert.ok(calls.every(call => call.input === singleFixture.url));
-  assert.ok(calls.every(call => call.init.method === "POST"));
+  assert.ok(calls.every(call => call.init.method === "GET"));
   assert.ok(calls.every(call => call.init.body === singleFixture.body));
   assert.ok(calls.every(call => call.init.redirect === "error"));
   assert.ok(calls.every(call =>

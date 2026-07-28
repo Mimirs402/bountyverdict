@@ -286,6 +286,33 @@ export const discoveryExtension = addHttpMethod(declareDiscoveryExtension({
   bodyType: "json",
 }), "POST");
 
+/**
+ * Coinbase Agentic Wallet currently discovers POST payment requirements
+ * without forwarding the advertised JSON body. Keep the strict canonical POST
+ * contract above for clients that preserve bodies, while advertising an
+ * equivalent GET transport at the same resource path for Bazaar buyers.
+ */
+export const agenticWalletDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({
+  input: {
+    issue_url: "https://github.com/typeorm/typeorm/issues/3357",
+  },
+  inputSchema: {
+    properties: {
+      issue_url: {
+        type: "string",
+        pattern: "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$",
+        description: "Canonical URL of a public GitHub issue to preflight before an agent starts work.",
+      },
+    },
+    required: ["issue_url"],
+    additionalProperties: false,
+  },
+  output: {
+    example: exampleVerdict,
+    schema: outputSchema,
+  },
+}), "GET");
+
 const portfolioAssignedVerdict = {
   product: "BountyVerdict",
   version: "1.0",

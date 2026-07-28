@@ -112,6 +112,8 @@ test("Glama release packaging bridges only the existing hosted MCP without secre
   assert.match(smoke, /User-Agent:bountyverdict-owner-audit\/1\.0/);
   assert.match(smoke, /client\.listTools\(\)/);
   assert.match(smoke, /GLAMA_EXPECT_FREE_SELECTOR === "YES"/);
+  assert.match(smoke, /for \(let attempt = 1; attempt <= 30; attempt \+= 1\)/);
+  assert.match(smoke, /setTimeout\(resolve, 1_000\)/);
   assert.match(smoke, /assert\.deepEqual\(names, \[\.\.\.expectedTools\]\.sort\(\)\)/);
   assert.match(workflow, /npm run glama:verify/);
 });

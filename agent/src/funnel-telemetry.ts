@@ -844,6 +844,22 @@ export function renewFunnelCollectorCapabilityLeases(snapshot: FunnelSnapshot, n
   );
 }
 
+export function collectorLeaseDeadlineExceeded(
+  collectorStartedAtMs: number,
+  heartbeatAt: string,
+  nowMs: number,
+  timeoutMs: number,
+): boolean {
+  if (![collectorStartedAtMs, nowMs, timeoutMs].every(Number.isFinite) ||
+      collectorStartedAtMs < 0 || nowMs < collectorStartedAtMs || timeoutMs <= 0) return true;
+  const heartbeatMs = Date.parse(heartbeatAt);
+  if (Number.isFinite(heartbeatMs) && heartbeatMs > nowMs + 5_000) return true;
+  const latestProofMs = Number.isFinite(heartbeatMs) && heartbeatMs >= collectorStartedAtMs
+    ? heartbeatMs
+    : collectorStartedAtMs;
+  return nowMs - latestProofMs > timeoutMs;
+}
+
 function paidCohortKey(observation: FunnelObservation): string {
   return [
     observation.product,

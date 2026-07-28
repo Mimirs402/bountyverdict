@@ -10,6 +10,17 @@ export const THE402_PROVIDER_ID = "p_d4b4ece39162409b";
 export const THE402_PROVIDER_CATALOG_URL =
   `${THE402_API}/services/catalog?provider=${THE402_PROVIDER_ID}&limit=100`;
 
+// Historical platform-verification listings. They are intentionally retained
+// for strict settlement attribution and must never be treated as active offers.
+export const THE402_RETIRED_SERVICE_IDS = Object.freeze([
+  "svc_5e36dabc8b434e95",
+  "svc_780bf04bd8204b2f",
+  "svc_df4baf282b7d48d5",
+  "svc_cdd16073d02c4429",
+  "svc_565a2a5c8e154b6e",
+  "svc_40e97a390c5b4d71",
+] as const);
+
 function objectSchema(schema: Record<string, unknown>): Record<string, unknown> {
   return { type: "object", ...schema };
 }

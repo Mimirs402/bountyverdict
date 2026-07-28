@@ -268,6 +268,7 @@ export function normalizeThe402CustomerSettlement(
   jobValue: unknown,
   expectedServiceIds: ReadonlySet<string>,
   excludedBuyerWallets: ReadonlySet<string>,
+  retiredServiceIds: ReadonlySet<string> = new Set(),
 ): {
   settlement_id: string;
   job_id: string;
@@ -293,7 +294,6 @@ export function normalizeThe402CustomerSettlement(
     }
   }
   if (job.id !== settlement.job_id) throw new Error("the402 settlement job identity is inconsistent.");
-  if (!expectedServiceIds.has(job.service_id)) throw new Error("the402 settlement references an unknown service.");
   const buyerWallet = String(job.agent_wallet || "").toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(buyerWallet)) throw new Error("the402 settlement buyer wallet is invalid.");
   const amount = Number(settlement.amount_usd);
@@ -302,7 +302,20 @@ export function normalizeThe402CustomerSettlement(
     !Number.isFinite(providerAmount) || Math.abs(amount - providerAmount) > 0.000001) {
     throw new Error("the402 settlement amount is inconsistent.");
   }
-  if (excludedBuyerWallets.has(buyerWallet)) return null;
+  const settledAt = timestamp(settlement.created_at, "settlement created_at");
+  const expectedService = expectedServiceIds.has(job.service_id);
+  const retiredService = retiredServiceIds.has(job.service_id);
+  const excludedBuyer = excludedBuyerWallets.has(buyerWallet);
+  if (expectedService && retiredService) {
+    throw new Error("the402 service classification is ambiguous.");
+  }
+  // Platform verification and owner canaries can outlive a retired listing,
+  // but no arbitrary unknown service may disappear from revenue attribution.
+  if (!expectedService) {
+    if (retiredService && excludedBuyer) return null;
+    throw new Error("the402 settlement references an unknown service.");
+  }
+  if (excludedBuyer) return null;
   if (!["completed", "verified", "released"].includes(String(job.status)) ||
     job.escrow_status !== "released") {
     return null;
@@ -313,6 +326,6 @@ export function normalizeThe402CustomerSettlement(
     service_id: job.service_id,
     buyer_wallet: buyerWallet,
     amount_usd: amount,
-    settled_at: timestamp(settlement.created_at, "settlement created_at"),
+    settled_at: settledAt,
   };
 }

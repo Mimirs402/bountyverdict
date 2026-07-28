@@ -145,6 +145,7 @@ test("the402 revenue attribution excludes platform probes and incomplete jobs", 
   };
   const services = new Set(["svc_1"]);
   const excluded = new Set(["0x2222222222222222222222222222222222222222"]);
+  const retired = new Set(["svc_retired"]);
   assert.deepEqual(normalizeThe402CustomerSettlement(settlement, job, services, excluded), {
     settlement_id: "earn_1",
     job_id: "job_1",
@@ -159,6 +160,84 @@ test("the402 revenue attribution excludes platform probes and incomplete jobs", 
     services,
     excluded,
   ), null);
+  assert.equal(normalizeThe402CustomerSettlement(
+    settlement,
+    {
+      ...job,
+      service_id: "svc_retired",
+      agent_wallet: "0x2222222222222222222222222222222222222222",
+    },
+    services,
+    excluded,
+    retired,
+  ), null);
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      settlement,
+      { ...job, service_id: "svc_retired" },
+      services,
+      excluded,
+      retired,
+    ),
+    /unknown service/,
+  );
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      settlement,
+      {
+        ...job,
+        service_id: "svc_retired",
+        agent_wallet: "0x2222222222222222222222222222222222222222",
+        provider_amount_usd: 0.04,
+      },
+      services,
+      excluded,
+      retired,
+    ),
+    /amount is inconsistent/,
+  );
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      settlement,
+      {
+        ...job,
+        service_id: "svc_unknown",
+        agent_wallet: "0x2222222222222222222222222222222222222222",
+      },
+      services,
+      excluded,
+      retired,
+    ),
+    /unknown service/,
+  );
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      { ...settlement, created_at: "not-a-timestamp" },
+      {
+        ...job,
+        service_id: "svc_retired",
+        agent_wallet: "0x2222222222222222222222222222222222222222",
+      },
+      services,
+      excluded,
+      retired,
+    ),
+    /settlement created_at is invalid/,
+  );
+  assert.throws(
+    () => normalizeThe402CustomerSettlement(
+      settlement,
+      {
+        ...job,
+        service_id: "svc_1",
+        agent_wallet: "0x2222222222222222222222222222222222222222",
+      },
+      services,
+      excluded,
+      new Set(["svc_1"]),
+    ),
+    /classification is ambiguous/,
+  );
   assert.equal(normalizeThe402CustomerSettlement(
     settlement,
     { ...job, status: "dispatched" },

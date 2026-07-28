@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
   "product": "BountyVerdict",
-  "release_version": "1.1.11",
-  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.11",
-  "status": "active",
-  "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
+  "release_version": "1.1.12",
+  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.12",
+  "status": "awaiting_production",
+  "production_api": null,
   "test_api": "https://bountyverdict-agent.mimirslab.workers.dev",
   "test_network": "eip155:84532",
   "test_verification": {
@@ -29,7 +29,7 @@
   },
   "mcp": {
     "registry_name": "io.github.Mimirs402/bountyverdict",
-    "server_version": "1.1.11",
+    "server_version": "1.1.12",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
     "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp",
@@ -55,6 +55,13 @@
       "path": "/api/bounty-preflight",
       "body": {
         "issue_url": "required exact canonical public GitHub issue URL"
+      },
+      "agentic_wallet_transport": {
+        "method": "GET",
+        "path": "/api/bounty-preflight",
+        "query": {
+          "issue_url": "required exact canonical public GitHub issue URL"
+        }
       },
       "legacy_transport": {
         "method": "GET",

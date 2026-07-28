@@ -60,7 +60,7 @@ export function createOpenApi(
     openapi: "3.1.0",
     info: {
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.11",
+      version: "1.1.12",
       description: "Seven bounded decision APIs for coding agents: evidence-linked GitHub due diligence and diagnostics plus deterministic MCP tool-catalog compatibility and security gates. Payment uses x402 v2 and Base USDC.",
       "x-guidance": "Choose the narrowest operation for the decision at hand, inspect its free sample and unpaid x402 challenge, then pay only when the challenge matches the documented price, Base USDC asset, and operation. Reuse a successful result only according to its service_reuse field.",
       license: { name: "MIT", identifier: "MIT" },
@@ -93,6 +93,48 @@ export function createOpenApi(
         },
       },
       "/api/bounty-preflight": {
+        get: {
+          summary: "Check GitHub bounty eligibility and claimability (Agentic Wallet transport)",
+          description: `Bazaar-compatible query transport for Agentic Wallet buyers. The strict canonical POST contract remains available for clients that preserve JSON bodies during x402 discovery. ${BOUNTY_DISCOVERY_DESCRIPTION}`,
+          operationId: "checkBountyVerdictAgenticWallet",
+          ...agentMetadata(origin, {
+            tags: ["bounty-due-diligence"],
+            samplePath: "/api/sample",
+            skill: "preflight-github-bounties",
+            useWhen: "Decide whether one public GitHub bounty is still available and worth pursuing before coding.",
+            reuse: SERVICE_REUSE.single,
+          }),
+          parameters: [{
+            name: "issue_url",
+            in: "query",
+            required: true,
+            description: "Exact canonical public GitHub issue URL without a query string, fragment, or trailing slash.",
+            schema: {
+              type: "string",
+              pattern: "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$",
+            },
+            example: "https://github.com/typeorm/typeorm/issues/3357",
+          }],
+          responses: {
+            "200": {
+              description: "Fresh evidence-linked verdict after x402 settlement",
+              content: { "application/json": { schema: { type: "object", ...outputSchema } } },
+            },
+            "400": { description: "Invalid or missing GitHub issue URL; no payment challenge is issued" },
+            "402": { description: "Payment required; inspect the PAYMENT-REQUIRED header before authorizing the exact spend" },
+            "410": { description: "GitHub reports that the issue was deleted; a stale marketplace listing must not be pursued and verified payment is not settled" },
+            "502": { description: "GitHub upstream failure; verified payment is not settled" },
+            "503": { description: "Temporary capacity or service configuration failure" },
+          },
+          "x-x402": {
+            version: 2,
+            scheme: "exact",
+            network,
+            price: prices.single,
+            currency: "USDC",
+          },
+          "x-payment-info": paymentInfo(prices.single),
+        },
         post: {
           summary: "Check GitHub bounty eligibility and claimability",
           description: BOUNTY_DISCOVERY_DESCRIPTION,

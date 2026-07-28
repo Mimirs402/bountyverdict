@@ -85,12 +85,12 @@ test("the402 publishes six exact existing-product contracts and excludes SkillVe
   assert.deepEqual(schemas.get("flake"), { type: "object", ...flakeOutputSchema });
   assert.deepEqual(schemas.get("mcpdrift"), { type: "object", ...mcpDriftOutputSchema });
   const descriptions = Object.fromEntries(THE402_LISTINGS.map(({ product, description }) => [product, description]));
-  assert.match(descriptions.single, /public GitHub bounty worth pursuing/i);
-  assert.match(descriptions.portfolio, /rank GitHub bounty issues/i);
-  assert.match(descriptions.harness, /coding agent repository instructions/i);
-  assert.match(descriptions.run, /GitHub Actions diagnosis/i);
+  assert.match(descriptions.single, /^Is this GitHub issue bounty still available, and can I claim it\?/i);
+  assert.match(descriptions.portfolio, /^Which GitHub bounty should I choose\?/i);
+  assert.match(descriptions.harness, /^Check repository instructions before coding\./i);
+  assert.match(descriptions.run, /^Why did this GitHub Actions run fail\?/i);
   assert.match(descriptions.flake, /GitHub Actions failure retry/i);
-  assert.match(descriptions.mcpdrift, /MCP tools\/list compatibility/i);
+  assert.match(descriptions.mcpdrift, /^Will this MCP schema update break existing agents\?/i);
   for (const listing of THE402_LISTINGS) {
     assert.notDeepEqual(listing.deliverable_schema, { type: "object", additionalProperties: true });
     assert.ok(Array.isArray(listing.deliverable_schema.required));

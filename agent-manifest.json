@@ -205,13 +205,13 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-07-28T15:32:36.253Z",
+  "updated_at": "2026-07-28T16:57:12.461Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
       "public_catalog": "https://api.the402.ai/v1/services/catalog?provider=p_d4b4ece39162409b&limit=100",
       "fulfillment_contract_count": 7,
-      "skillverdict_listing_status": "publish_ready_pending_authoritative_id",
+      "skillverdict_listing_status": "active",
       "subscription_plan": {
         "name": "BountyVerdict Agent Engineering Monthly",
         "plan_id": "plan_ec6c49878dc34636",
@@ -225,6 +225,7 @@
           "svc_4462e481fedf4afc",
           "svc_6df309e4408e4de7",
           "svc_ca98b66ee3d24836",
+          "svc_7f39caef9bf64340",
           "svc_f269590f47ae463f",
           "svc_3cfea7eb5f574e6e",
           "svc_6bd98fed2d9a43d1"
@@ -256,6 +257,15 @@
           "method": "POST",
           "agent_price_usdc": "0.032",
           "provider_net_usdc": "0.03",
+          "fulfillment_type": "instant"
+        },
+        {
+          "name": "SkillVerdict",
+          "service_id": "svc_7f39caef9bf64340",
+          "purchase_endpoint": "https://api.the402.ai/v1/services/svc_7f39caef9bf64340/purchase",
+          "method": "POST",
+          "agent_price_usdc": "0.063",
+          "provider_net_usdc": "0.06",
           "fulfillment_type": "instant"
         },
         {
@@ -291,7 +301,7 @@
       "provider_id": "51ebba6e-65e9-49b2-b23b-6561b2375179",
       "provider_url": "https://market.near.ai/agents/bountyverdict",
       "fulfillment_contract_count": 7,
-      "skillverdict_listing_status": "publish_ready_pending_authoritative_id",
+      "skillverdict_listing_status": "active",
       "services": [
         {
           "name": "BountyVerdict",
@@ -319,6 +329,15 @@
           "method": "POST",
           "authentication": "NEAR Agent Market bearer token",
           "price_usdc": "1"
+        },
+        {
+          "name": "SkillVerdict",
+          "service_id": "87710335-6991-487a-9383-a3bba2940967",
+          "hire_url": "https://market.near.ai/hire?service_id=87710335-6991-487a-9383-a3bba2940967",
+          "invoke_endpoint": "https://market.near.ai/v1/services/87710335-6991-487a-9383-a3bba2940967/invoke",
+          "method": "POST",
+          "authentication": "NEAR Agent Market bearer token",
+          "price_usdc": "0.06"
         },
         {
           "name": "GitHub Actions CI Failure Diagnosis — RunVerdict",

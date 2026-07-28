@@ -116,7 +116,7 @@ export const THE402_SERVICE_DEFINITIONS: ReadonlyArray<The402Listing> = Object.f
   },
   {
     product: "skill",
-    service_id: "svc_skill_PENDING",
+    service_id: "svc_7f39caef9bf64340",
     name: "SkillVerdict",
     description: `${SKILL_DISCOVERY_DESCRIPTION} Documentation: https://mimirs402.github.io/bountyverdict/agents.html`,
     price: "$0.06",
@@ -220,7 +220,7 @@ export const THE402_LISTINGS: ReadonlyArray<The402Listing<The402Product>> = Obje
 export const THE402_SUBSCRIPTION_PLAN = Object.freeze({
   plan_id: "plan_ec6c49878dc34636",
   name: "BountyVerdict Agent Engineering Monthly",
-  description: "Twenty combined monthly requests across six automated agent-engineering checks: public GitHub bounty due diligence and ranking, repository instruction audits, GitHub Actions diagnosis and flake decisions, and MCP tools/list compatibility gates. Exact typed deliverables, public evidence where applicable, instant fulfillment, no buyer API key, and no manual provider step.",
+  description: "Twenty combined monthly requests across seven automated agent-engineering checks: public GitHub bounty due diligence and ranking, repository instruction and skill security audits, GitHub Actions diagnosis and flake decisions, and MCP tools/list compatibility gates. Exact typed deliverables, public evidence where applicable, instant fulfillment, no buyer API key, and no manual provider step.",
   interval: "monthly" as const,
   provider_price_usd: 1,
   agent_price_usd: 1.05,
@@ -232,6 +232,10 @@ export function the402MarketplaceManifest(): Record<string, unknown> {
   return {
     provider_id: THE402_PROVIDER_ID,
     public_catalog: THE402_PROVIDER_CATALOG_URL,
+    fulfillment_contract_count: THE402_SERVICE_DEFINITIONS.length,
+    skillverdict_listing_status: THE402_LISTINGS.some(({ product }) => product === "skill")
+      ? "active"
+      : "publish_ready_pending_authoritative_id",
     subscription_plan: {
       name: THE402_SUBSCRIPTION_PLAN.name,
       plan_id: THE402_SUBSCRIPTION_PLAN.plan_id,

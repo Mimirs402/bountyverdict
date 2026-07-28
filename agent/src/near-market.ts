@@ -41,7 +41,10 @@ export function nearMarketManifest(): Record<string, unknown> {
   return {
     provider_id: NEAR_MARKET_PROVIDER_ID,
     provider_url: NEAR_MARKET_PROVIDER_URL,
-    skillverdict_included: true,
+    fulfillment_contract_count: NEAR_MARKET_LISTINGS.length,
+    skillverdict_listing_status: NEAR_MARKET_LISTINGS.some(({ product }) => product === "skill")
+      ? "active"
+      : "not_configured",
     services: NEAR_MARKET_LISTINGS.map((listing) => ({
       name: listing.name,
       service_id: listing.service_id,

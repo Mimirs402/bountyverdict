@@ -46,7 +46,8 @@ test("the402 monthly bundle contains only services with authoritative platform I
     [...THE402_SUBSCRIPTION_PLAN.service_ids].sort(),
     THE402_LISTINGS.map(({ service_id }) => service_id).sort(),
   );
-  assert.equal(THE402_SUBSCRIPTION_PLAN.service_ids.length, 6);
+  assert.equal(THE402_SUBSCRIPTION_PLAN.service_ids.length, 7);
+  assert.match(THE402_SUBSCRIPTION_PLAN.description, /seven automated/);
   assert.doesNotMatch(JSON.stringify(THE402_SUBSCRIPTION_PLAN), /_PENDING/);
   assert.doesNotMatch(JSON.stringify(the402MarketplaceManifest()), /_PENDING/);
 });
@@ -78,18 +79,19 @@ test("the402 service map accepts every supported fulfillment product", () => {
   assert.throws(() => parseThe402ServiceMap(JSON.stringify({ svc_one: "run", svc_two: "run" })), /duplicate product/);
 });
 
-test("the402 publishes only six authoritative service contracts before SkillVerdict activation", () => {
-  assert.equal(THE402_LISTINGS.length, 6);
-  assert.equal(new Set(THE402_LISTINGS.map(({ service_id }) => service_id)).size, 6);
+test("the402 publishes seven authoritative service contracts including SkillVerdict", () => {
+  assert.equal(THE402_LISTINGS.length, 7);
+  assert.equal(new Set(THE402_LISTINGS.map(({ service_id }) => service_id)).size, 7);
   assert.deepEqual(THE402_LISTINGS.map(({ product }) => product).sort(), [
-    "flake", "harness", "mcpdrift", "portfolio", "run", "single",
+    "flake", "harness", "mcpdrift", "portfolio", "run", "single", "skill",
   ]);
-  assert.equal(THE402_LISTINGS.some(({ name }) => name === "SkillVerdict"), false);
+  assert.equal(THE402_LISTINGS.some(({ name }) => name === "SkillVerdict"), true);
   assert.match(THE402_PROVIDER_CATALOG_URL, /provider=p_d4b4ece39162409b/);
   const schemas = new Map(THE402_LISTINGS.map(({ product, deliverable_schema }) => [product, deliverable_schema]));
   assert.deepEqual(schemas.get("single"), { type: "object", ...outputSchema });
   assert.deepEqual(schemas.get("portfolio"), { type: "object", ...portfolioOutputSchema });
   assert.deepEqual(schemas.get("harness"), { type: "object", ...harnessOutputSchema });
+  assert.deepEqual(schemas.get("skill"), { type: "object", ...skillOutputSchema });
   assert.deepEqual(schemas.get("run"), { type: "object", ...runOutputSchema });
   assert.deepEqual(schemas.get("flake"), { type: "object", ...flakeOutputSchema });
   assert.deepEqual(schemas.get("mcpdrift"), { type: "object", ...mcpDriftOutputSchema });
@@ -106,18 +108,19 @@ test("the402 publishes only six authoritative service contracts before SkillVerd
   }
 });
 
-test("the402 stages an exact SkillVerdict contract without publishing its provisional ID", async () => {
+test("the402 publishes an exact SkillVerdict contract without provisional IDs", async () => {
   assert.equal(THE402_SERVICE_DEFINITIONS.length, 7);
   const skill = THE402_SERVICE_DEFINITIONS.find(({ product }) => product === "skill");
   assert.ok(skill);
-  assert.equal(skill.service_id, "svc_skill_PENDING");
+  assert.equal(skill.service_id, "svc_7f39caef9bf64340");
   assert.equal(skill.price, "$0.06");
   assert.equal(skill.agent_price, "$0.063");
   assert.match(skill.description, /^Is this agent skill safe to install\?/i);
   assert.deepEqual(skill.input_schema.required, ["repo_url", "skill_path"]);
   assert.equal(skill.input_schema.additionalProperties, false);
   assert.deepEqual(skill.deliverable_schema, { type: "object", ...skillOutputSchema });
-  assert.equal(THE402_LISTINGS.some(({ product }) => product === "skill"), false);
+  assert.equal(THE402_LISTINGS.some(({ product }) => product === "skill"), true);
+  assert.doesNotMatch(JSON.stringify(THE402_SERVICE_DEFINITIONS), /_PENDING/);
   await assert.rejects(
     () => fulfillProduct("skill", {
       repo_url: "https://github.com/acme/skills",

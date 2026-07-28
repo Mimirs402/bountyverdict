@@ -109,10 +109,10 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.match(manifest.skills.check_mcp_tool_drift, /check-mcp-tool-drift\/SKILL\.md$/);
   assert.equal(manifest.marketplaces.the402.provider_id, "p_d4b4ece39162409b");
   assert.match(manifest.marketplaces.the402.public_catalog, /^https:\/\/api\.the402\.ai\/v1\/services\/catalog\?/);
-  assert.equal(manifest.marketplaces.the402.services.length, 6);
-  assert.equal(manifest.marketplaces.the402.services.some((service) => service.name === "SkillVerdict"), false);
+  assert.equal(manifest.marketplaces.the402.services.length, 7);
+  assert.equal(manifest.marketplaces.the402.services.some((service) => service.name === "SkillVerdict"), true);
   assert.equal(manifest.marketplaces.the402.fulfillment_contract_count, 7);
-  assert.equal(manifest.marketplaces.the402.skillverdict_listing_status, "publish_ready_pending_authoritative_id");
+  assert.equal(manifest.marketplaces.the402.skillverdict_listing_status, "active");
   assert.equal(manifest.marketplaces.the402.subscription_plan.plan_id, "plan_ec6c49878dc34636");
   assert.equal(manifest.marketplaces.the402.subscription_plan.maximum_requests_per_period, 20);
   assert.ok(manifest.marketplaces.the402.services.every((service) =>
@@ -120,7 +120,9 @@ test("agent manifest is honest and links inspectable products", async () => {
     /^https:\/\/api\.the402\.ai\/v1\/services\/svc_[A-Za-z0-9_-]+\/purchase$/.test(service.purchase_endpoint)
   ));
   assert.equal(manifest.marketplaces.near_agent_market.fulfillment_contract_count, 7);
-  assert.equal(manifest.marketplaces.near_agent_market.skillverdict_listing_status, "publish_ready_pending_authoritative_id");
+  assert.equal(manifest.marketplaces.near_agent_market.skillverdict_listing_status, "active");
+  assert.equal(manifest.marketplaces.near_agent_market.services.length, 7);
+  assert.equal(manifest.marketplaces.near_agent_market.services.some((service) => service.name === "SkillVerdict"), true);
   for (const product of manifest.products) {
     assert.match(product.use_when, /\.$/);
     assert.match(product.skill_url, /^https:\/\/.+\/SKILL\.md$/);

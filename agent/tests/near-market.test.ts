@@ -28,7 +28,7 @@ test("NEAR Market publishes seven automated products including SkillVerdict", ()
   }
   const skill = NEAR_MARKET_LISTINGS.find(({ product }) => product === "skill");
   assert.equal(skill?.service_id, "87710335-6991-487a-9383-a3bba2940967");
-  assert.equal(nearMarketManifest().skillverdict_included, true);
+  assert.equal(nearMarketManifest().skillverdict_listing_status, "active");
 });
 
 test("NEAR Market request parsing accepts platform-wrapped and direct inputs", () => {

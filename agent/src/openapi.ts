@@ -772,7 +772,7 @@ export function createLlmsText(origin: string): string {
 
 - Public the402 provider catalog: ${THE402_PROVIDER_CATALOG_URL}
 - Provider fulfillment supports all seven tested product contracts through the402 escrow, including SkillVerdict. Treat the public catalog and service list below as authoritative for which listing IDs have actually been published.
-- Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the six listed services.
+- Monthly bundle: POST https://api.the402.ai/v1/plans/${THE402_SUBSCRIPTION_PLAN.plan_id}/subscribe — $${THE402_SUBSCRIPTION_PLAN.agent_price_usd.toFixed(2)} USDC for up to ${THE402_SUBSCRIPTION_PLAN.max_requests} combined requests across the seven listed services.
 ${the402Services}
 
 ## NEAR Agent Market

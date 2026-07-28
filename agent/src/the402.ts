@@ -10,14 +10,15 @@ export const THE402_PRODUCTS = Object.freeze([
   "single",
   "portfolio",
   "harness",
+  "skill",
   "run",
   "flake",
   "mcpdrift",
 ] as const);
 
 export type The402Product = typeof THE402_PRODUCTS[number];
-export const MARKETPLACE_PRODUCTS = Object.freeze([...THE402_PRODUCTS, "skill"] as const);
-export type MarketplaceProduct = typeof MARKETPLACE_PRODUCTS[number];
+export const MARKETPLACE_PRODUCTS = THE402_PRODUCTS;
+export type MarketplaceProduct = The402Product;
 
 export interface The402Environment {
   GITHUB_TOKEN?: string;

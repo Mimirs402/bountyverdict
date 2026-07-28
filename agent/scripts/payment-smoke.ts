@@ -102,7 +102,7 @@ const expectedMethod = product === "single" ? "GET" : contract.method;
 if (challenge.resource?.url !== url.href) throw new Error("The payment challenge resource URL does not match the requested operation.");
 if (challenge.resource?.serviceName !== expectedService) throw new Error(`The payment challenge service is not ${expectedService}.`);
 if (challenge.extensions?.bazaar?.info?.input?.method !== expectedMethod) throw new Error(`The payment challenge method is not ${expectedMethod}.`);
-if (contract.method === "POST" && challenge.extensions?.bazaar?.info?.input?.bodyType !== "json") {
+if (expectedMethod === "POST" && challenge.extensions?.bazaar?.info?.input?.bodyType !== "json") {
   throw new Error(`${contract.service} payment challenge bodyType is not json.`);
 }
 if (challenge.accepts?.[0]?.scheme !== "exact") throw new Error("The payment challenge scheme is not exact.");

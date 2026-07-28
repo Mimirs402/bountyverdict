@@ -374,10 +374,10 @@ jobs:
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
               let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
                 const value = JSON.parse(body);
-                const expected = ["single", "portfolio", "harness", "run", "flake", "mcpdrift"];
+                const expected = ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"];
                 if (value.spec !== "bountyverdict-agent-manifest/1" || value.version !== 1) process.exit(1);
                 if (value.origin !== process.env.PRODUCTION_API_URL || JSON.stringify(value.products?.map(({ id }) => id)) !== JSON.stringify(expected)) process.exit(1);
-                if (value.products?.some(({ id }) => id === "skill") || JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
+                if (JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
                 const mcpTools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
                 if (JSON.stringify(value.mcp?.tools?.map(({ name }) => name)) !== JSON.stringify(mcpTools)) process.exit(1);
                 if (value.mcp.tools[0]?.payment_required !== false || value.mcp.tools[0]?.verdict_produced !== false || value.mcp.tools[0]?.amount_atomic_usdc !== "0") process.exit(1);
@@ -397,7 +397,7 @@ jobs:
           verify_stage agent-skill
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/SKILL.md" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
-              if (!body.startsWith("---\nname: bountyverdict-agent-decisions\n") || !body.includes("### HarnessVerdict") || !body.includes("### MCPDriftVerdict") || body.includes("### SkillVerdict")) process.exit(1);
+              if (!body.startsWith("---\nname: bountyverdict-agent-decisions\n") || !body.includes("### HarnessVerdict") || !body.includes("### SkillVerdict") || !body.includes("### MCPDriftVerdict")) process.exit(1);
               if (!body.includes(`${process.env.PRODUCTION_API_URL}/agent-manifest.json`) || !body.includes("network `eip155:8453` (Base mainnet)")) process.exit(1);
             });
           '

@@ -112,7 +112,7 @@ test("the402 publishes an exact SkillVerdict contract without provisional IDs", 
   assert.equal(THE402_SERVICE_DEFINITIONS.length, 7);
   const skill = THE402_SERVICE_DEFINITIONS.find(({ product }) => product === "skill");
   assert.ok(skill);
-  assert.equal(skill.service_id, "svc_7f39caef9bf64340");
+  assert.equal(skill.service_id, "svc_75dc3d5021bb4a22");
   assert.equal(skill.price, "$0.06");
   assert.equal(skill.agent_price, "$0.063");
   assert.match(skill.description, /^Is this agent skill safe to install\?/i);

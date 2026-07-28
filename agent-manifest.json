@@ -205,7 +205,7 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-07-28T16:57:12.461Z",
+  "updated_at": "2026-07-28T17:09:35.370Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
@@ -225,7 +225,7 @@
           "svc_4462e481fedf4afc",
           "svc_6df309e4408e4de7",
           "svc_ca98b66ee3d24836",
-          "svc_7f39caef9bf64340",
+          "svc_75dc3d5021bb4a22",
           "svc_f269590f47ae463f",
           "svc_3cfea7eb5f574e6e",
           "svc_6bd98fed2d9a43d1"
@@ -261,8 +261,8 @@
         },
         {
           "name": "SkillVerdict",
-          "service_id": "svc_7f39caef9bf64340",
-          "purchase_endpoint": "https://api.the402.ai/v1/services/svc_7f39caef9bf64340/purchase",
+          "service_id": "svc_75dc3d5021bb4a22",
+          "purchase_endpoint": "https://api.the402.ai/v1/services/svc_75dc3d5021bb4a22/purchase",
           "method": "POST",
           "agent_price_usdc": "0.063",
           "provider_net_usdc": "0.06",

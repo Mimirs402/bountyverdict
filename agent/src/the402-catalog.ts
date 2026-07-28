@@ -20,6 +20,7 @@ export const THE402_RETIRED_SERVICE_IDS = Object.freeze([
   "svc_cdd16073d02c4429",
   "svc_565a2a5c8e154b6e",
   "svc_40e97a390c5b4d71",
+  "svc_7f39caef9bf64340",
 ] as const);
 
 function objectSchema(schema: Record<string, unknown>): Record<string, unknown> {
@@ -116,7 +117,7 @@ export const THE402_SERVICE_DEFINITIONS: ReadonlyArray<The402Listing> = Object.f
   },
   {
     product: "skill",
-    service_id: "svc_7f39caef9bf64340",
+    service_id: "svc_75dc3d5021bb4a22",
     name: "SkillVerdict",
     description: `${SKILL_DISCOVERY_DESCRIPTION} Documentation: https://mimirs402.github.io/bountyverdict/agents.html`,
     price: "$0.06",

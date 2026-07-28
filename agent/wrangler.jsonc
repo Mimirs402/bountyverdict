@@ -37,7 +37,7 @@
         "THE402_AUTOMATION_ENABLED": "YES",
         "THE402_PLATFORM_ENVELOPE_AUTH_ENABLED": "YES",
         "NEAR_MARKET_AUTOMATION_ENABLED": "YES",
-        "THE402_SERVICE_MAP": "{\"svc_4462e481fedf4afc\":\"single\",\"svc_6df309e4408e4de7\":\"portfolio\",\"svc_ca98b66ee3d24836\":\"harness\",\"svc_7f39caef9bf64340\":\"skill\",\"svc_f269590f47ae463f\":\"run\",\"svc_3cfea7eb5f574e6e\":\"flake\",\"svc_6bd98fed2d9a43d1\":\"mcpdrift\"}"
+        "THE402_SERVICE_MAP": "{\"svc_4462e481fedf4afc\":\"single\",\"svc_6df309e4408e4de7\":\"portfolio\",\"svc_ca98b66ee3d24836\":\"harness\",\"svc_75dc3d5021bb4a22\":\"skill\",\"svc_f269590f47ae463f\":\"run\",\"svc_3cfea7eb5f574e6e\":\"flake\",\"svc_6bd98fed2d9a43d1\":\"mcpdrift\"}"
       },
       "ratelimits": [
         {

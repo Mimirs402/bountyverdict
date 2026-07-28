@@ -33,11 +33,21 @@ if (!ownedResponse.ok) throw new Error(`NEAR Market service lookup returned HTTP
 const owned = await ownedResponse.json() as Service[];
 if (!Array.isArray(owned)) throw new Error("NEAR Market returned an invalid service list.");
 
-const results: Array<{ product: string; service_id: string; action: "created" | "updated" }> = [];
+const duplicateNames = [...new Set(owned.map(({ name }) => name))]
+  .filter((name) => owned.filter((service) => service.name === name).length > 1);
+if (duplicateNames.length) {
+  throw new Error(`NEAR Market contains duplicate owned service names: ${duplicateNames.join(", ")}`);
+}
+
+const results: Array<{
+  product: string;
+  service_id: string;
+  previous_service_id: string | null;
+  action: "created" | "updated" | "recovered";
+}> = [];
 for (const definition of NEAR_MARKET_LISTINGS) {
-  const matches = owned.filter(({ service_id }) => service_id === definition.service_id);
-  if (matches.length > 1) throw new Error(`NEAR Market contains duplicate ${definition.service_id} listings.`);
-  const previous = matches[0];
+  const previous = owned.find(({ service_id }) => service_id === definition.service_id) ||
+    owned.find(({ name }) => name === definition.name);
   if (previous && previous.agent_id !== NEAR_MARKET_PROVIDER_ID) {
     throw new Error(`NEAR Market ${definition.name} belongs to an unexpected provider.`);
   }
@@ -51,13 +61,16 @@ for (const definition of NEAR_MARKET_LISTINGS) {
   }
   const service = await response.json() as Service;
   if (
-    !service || service.service_id !== definition.service_id ||
+    !service || !/^[a-f0-9-]{36}$/.test(service.service_id) ||
     service.agent_id !== NEAR_MARKET_PROVIDER_ID || service.name !== definition.name
   ) throw new Error(`NEAR Market returned an invalid ${definition.product} listing.`);
   results.push({
     product: definition.product,
     service_id: service.service_id,
-    action: previous ? "updated" : "created",
+    previous_service_id: previous?.service_id || null,
+    action: previous
+      ? previous.service_id === definition.service_id ? "updated" : "recovered"
+      : "created",
   });
 }
 

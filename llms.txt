@@ -74,7 +74,7 @@
 - BountyVerdict: hire https://market.near.ai/hire?service_id=88c3e8f6-07f4-414e-bc43-c5ad61cf21fd; authenticated POST https://market.near.ai/v1/services/88c3e8f6-07f4-414e-bc43-c5ad61cf21fd/invoke — 1 USDC
 - BountyVerdict Portfolio: hire https://market.near.ai/hire?service_id=3b496165-8b2c-4c97-8593-1242e5d15384; authenticated POST https://market.near.ai/v1/services/3b496165-8b2c-4c97-8593-1242e5d15384/invoke — 1 USDC
 - GitHub Agent Instruction Audit — HarnessVerdict: hire https://market.near.ai/hire?service_id=dd781a20-6643-42ee-8c19-0c16425e685d; authenticated POST https://market.near.ai/v1/services/dd781a20-6643-42ee-8c19-0c16425e685d/invoke — 1 USDC
-- SkillVerdict: hire https://market.near.ai/hire?service_id=87710335-6991-487a-9383-a3bba2940967; authenticated POST https://market.near.ai/v1/services/87710335-6991-487a-9383-a3bba2940967/invoke — 0.06 USDC
+- SkillVerdict: hire https://market.near.ai/hire?service_id=81f71aef-748d-4bed-89e4-187aa8892806; authenticated POST https://market.near.ai/v1/services/81f71aef-748d-4bed-89e4-187aa8892806/invoke — 0.06 USDC
 - GitHub Actions CI Failure Diagnosis — RunVerdict: hire https://market.near.ai/hire?service_id=88bb0780-9121-4acd-a2e2-4f8a2bc005a8; authenticated POST https://market.near.ai/v1/services/88bb0780-9121-4acd-a2e2-4f8a2bc005a8/invoke — 1 USDC
 - CI Flake Verdict: hire https://market.near.ai/hire?service_id=7385fdea-5d7f-43d4-9fb2-738b46316d0f; authenticated POST https://market.near.ai/v1/services/7385fdea-5d7f-43d4-9fb2-738b46316d0f/invoke — 1 USDC
 - MCP schema drift compatibility — MCPDriftVerdict: hire https://market.near.ai/hire?service_id=0a0b0909-2829-4437-b23e-4376a61041ba; authenticated POST https://market.near.ai/v1/services/0a0b0909-2829-4437-b23e-4376a61041ba/invoke — 1 USDC

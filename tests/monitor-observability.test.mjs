@@ -85,7 +85,7 @@ test("the scheduled acquisition snapshot has no marketplace mutation request pat
   assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
   assert.match(directory, /name: "search_servers"/);
 
-  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 9);
+  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 8);
   assert.match(distribution, /services\/\$\{encodeURIComponent\(String\(service\.id\)\)\}\/test[\s\S]{0,180}method: "POST"/);
   assert.equal((distribution.match(/method:\s*"(?:PUT|PATCH|DELETE)"/g) || []).length, 0);
   assert.equal((distribution.match(/params: \{ name: "(?:get|search_live)"/g) || []).length, 2);
@@ -861,6 +861,8 @@ test("production payment inspection exercises the Agentic Wallet-compatible Boun
   assert.match(smoke, /unpaid\.status !== 404/);
   assert.doesNotMatch(smoke, /if \(contract\.method === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType/);
   assert.doesNotMatch(smoke, /product === "single"\s*\?\s*\{\s*issue_url:/);
+  assert.match(distribution, /product === "single"[\s\S]*PRODUCT_CATALOG\.single\.path\}\?issue_url=\$\{encodeURIComponent/);
+  assert.doesNotMatch(distribution, /monitoredFetch\(url, product === "single"[\s\S]*method: "POST"/);
   assert.match(distribution, /const expectedMethod = product === "single" \? "GET" : PRODUCT_CATALOG\[product\]\.method/);
   assert.match(distribution, /if \(expectedMethod === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType !== "json"\)/);
 });

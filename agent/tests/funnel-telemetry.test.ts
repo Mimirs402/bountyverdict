@@ -5,6 +5,7 @@ import {
   classifyFunnelTailEvent,
   classifyDiscoveryTailEvent,
   classifyMcpTailEvents,
+  collectorLeaseDeadlineExceeded,
   createFunnelSnapshot,
   discoveryBuyerCandidateTotals,
   FUNNEL_COLLECTOR_CAPABILITIES,
@@ -18,6 +19,41 @@ import {
   recordMcpObservation,
   renewFunnelCollectorCapabilityLeases,
 } from "../src/funnel-telemetry.ts";
+
+test("collector lease watchdog allows startup grace and reconnects a stale or invalid stream", () => {
+  const startedAt = Date.parse("2026-07-28T13:00:00.000Z");
+  assert.equal(collectorLeaseDeadlineExceeded(
+    startedAt,
+    "1970-01-01T00:00:00.000Z",
+    startedAt + 90_000,
+    90_000,
+  ), false);
+  assert.equal(collectorLeaseDeadlineExceeded(
+    startedAt,
+    "1970-01-01T00:00:00.000Z",
+    startedAt + 90_001,
+    90_000,
+  ), true);
+  assert.equal(collectorLeaseDeadlineExceeded(
+    startedAt,
+    "2026-07-28T13:01:00.000Z",
+    startedAt + 150_000,
+    90_000,
+  ), false);
+  assert.equal(collectorLeaseDeadlineExceeded(
+    startedAt,
+    "2026-07-28T13:01:00.000Z",
+    startedAt + 150_001,
+    90_000,
+  ), true);
+  assert.equal(collectorLeaseDeadlineExceeded(
+    startedAt,
+    "2026-07-28T13:05:00.001Z",
+    startedAt + 300_000,
+    90_000,
+  ), false);
+  assert.equal(collectorLeaseDeadlineExceeded(Number.NaN, "invalid", startedAt, 90_000), true);
+});
 
 function event(path: string, status: number, headers: Record<string, string> = {}, method = "GET") {
   return {

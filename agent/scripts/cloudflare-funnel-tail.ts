@@ -6,6 +6,7 @@ import {
   classifyFunnelTailEvent,
   classifyDiscoveryTailEvent,
   classifyMcpTailEvents,
+  collectorLeaseDeadlineExceeded,
   activateFunnelCollectorCapabilities,
   createFunnelSnapshot,
   loadFunnelSnapshot,
@@ -129,6 +130,21 @@ async function sendReadinessProbe(): Promise<void> {
 }
 const readinessProbe = setInterval(() => void sendReadinessProbe(), 30_000);
 child.on("spawn", () => void sendReadinessProbe());
+const collectorStartedAtMs = Date.now();
+const collectorHeartbeatTimeoutMs = 90_000;
+let reconnectRequested = false;
+const collectorWatchdog = setInterval(() => {
+  if (reconnectRequested || !collectorLeaseDeadlineExceeded(
+    collectorStartedAtMs,
+    snapshot.collector_heartbeat_at,
+    Date.now(),
+    collectorHeartbeatTimeoutMs,
+  )) return;
+  reconnectRequested = true;
+  childFailure = true;
+  process.stderr.write("Cloudflare tail heartbeat became stale; reconnecting.\n");
+  child.kill("SIGTERM");
+}, 15_000);
 const parser = new JsonObjectStream();
 child.stdout.setEncoding("utf8");
 child.stdout.on("data", (chunk: string) => {
@@ -163,6 +179,7 @@ child.on("close", async (code, signal) => {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(readinessProbe);
+  clearInterval(collectorWatchdog);
   snapshot.collector_heartbeat_at = invalidCollectorHeartbeat;
   activateFunnelCollectorCapabilities(snapshot);
   try {

@@ -631,6 +631,34 @@ test("returns CAUTION when a maintainer-owned listing mirrors an external source
   assert.ok(result.signals.some((signal) => signal.label === "External source issue checked"));
 });
 
+test("returns AVOID when a bare-URL mirror points to an assigned source issue", async () => {
+  const mirrored = {
+    ...issue,
+    body: "https://github.com/upstream/project/issues/77\n",
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLinkedSource(githubMock([], null, mirrored), {
+      ...issue,
+      html_url: "https://github.com/upstream/project/issues/77",
+      assignees: [{ login: "existing-worker" }],
+      author_association: "OWNER",
+      comments: 0,
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.equal(result.linked_source.state, "CHECKED");
+  assert.equal(result.linked_source.url, "https://github.com/upstream/project/issues/77");
+  assert.equal(result.linked_source.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "External source issue is not actionable" && signal.hard_stop
+  ));
+});
+
 test("a Chinese mirror resolves its closed canonical source", async () => {
   const mirrored = {
     ...issue,

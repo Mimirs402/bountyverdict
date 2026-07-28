@@ -148,23 +148,49 @@ export async function verifyThe402Webhook(input: {
   );
 }
 
-export async function verifyThe402ApiKeyWebhookEnvelope(input: {
+export async function diagnoseThe402ApiKeyWebhookEnvelope(input: {
   raw_body: string;
   api_key_header: string | undefined;
   signature_header: string | undefined;
   timestamp_header: string | undefined;
   api_key: string | undefined;
   now_ms?: number;
-}): Promise<boolean> {
+}): Promise<{
+  body_valid: boolean;
+  api_key_configured: boolean;
+  api_key_header_present: boolean;
+  api_key_matches: boolean;
+  timestamp_format_valid: boolean;
+  timestamp_fresh: boolean;
+  signature_format_valid: boolean;
+}> {
   const bytes = new TextEncoder().encode(input.raw_body);
-  if (bytes.length === 0 || bytes.length > MAX_WEBHOOK_BYTES) return false;
-  if (!input.api_key || input.api_key.length < 16 || !input.api_key_header) return false;
-  if (!await constantTimeTextEqual(input.api_key_header, input.api_key)) return false;
-  if (!input.timestamp_header || !/^\d{10}$/.test(input.timestamp_header)) return false;
-  const timestamp = Number(input.timestamp_header);
+  const bodyValid = bytes.length > 0 && bytes.length <= MAX_WEBHOOK_BYTES;
+  const apiKeyConfigured = Boolean(input.api_key && input.api_key.length >= 16);
+  const apiKeyHeaderPresent = Boolean(input.api_key_header);
+  const apiKeyMatches = Boolean(
+    apiKeyConfigured && input.api_key_header &&
+    await constantTimeTextEqual(input.api_key_header, input.api_key!),
+  );
+  const timestampFormatValid = Boolean(input.timestamp_header && /^\d{10}$/.test(input.timestamp_header));
+  const timestamp = timestampFormatValid ? Number(input.timestamp_header) : Number.NaN;
   const nowSeconds = Math.floor((input.now_ms ?? Date.now()) / 1000);
-  if (!Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > MAX_WEBHOOK_AGE_SECONDS) return false;
-  return /^sha256=[a-f0-9]{64}$/.test(input.signature_header || "");
+  return {
+    body_valid: bodyValid,
+    api_key_configured: apiKeyConfigured,
+    api_key_header_present: apiKeyHeaderPresent,
+    api_key_matches: apiKeyMatches,
+    timestamp_format_valid: timestampFormatValid,
+    timestamp_fresh: Number.isSafeInteger(timestamp) && Math.abs(nowSeconds - timestamp) <= MAX_WEBHOOK_AGE_SECONDS,
+    signature_format_valid: /^sha256=[a-f0-9]{64}$/.test(input.signature_header || ""),
+  };
+}
+
+export async function verifyThe402ApiKeyWebhookEnvelope(
+  input: Parameters<typeof diagnoseThe402ApiKeyWebhookEnvelope>[0],
+): Promise<boolean> {
+  const diagnostics = await diagnoseThe402ApiKeyWebhookEnvelope(input);
+  return Object.values(diagnostics).every(Boolean);
 }
 
 export function parseThe402JobDispatch(

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
 import {
+  diagnoseThe402ApiKeyWebhookEnvelope,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
@@ -131,6 +132,19 @@ test("the402 API-key fallback still requires the exact bearer, fresh timestamp, 
   assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, timestamp_header: "1785232499" }), false);
   assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, signature_header: "sha256=bad" }), false);
   assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, raw_body: "" }), false);
+  assert.deepEqual(await diagnoseThe402ApiKeyWebhookEnvelope({
+    ...valid,
+    api_key_header: undefined,
+    signature_header: "invalid",
+  }), {
+    body_valid: true,
+    api_key_configured: true,
+    api_key_header_present: false,
+    api_key_matches: false,
+    timestamp_format_valid: true,
+    timestamp_fresh: true,
+    signature_format_valid: false,
+  });
 });
 
 test("the402 dispatch parser binds a known service and exact callback origin", () => {

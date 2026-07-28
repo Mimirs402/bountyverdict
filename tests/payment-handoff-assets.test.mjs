@@ -30,6 +30,11 @@ test("public guidance states the real wallet boundary and exact handoff contract
     assert.match(value, /remote MCP connection does not (?:itself )?provide a wallet/i);
     assert.match(value, /x402-aware MCP client/i);
   }
+  assert.match(
+    readme,
+    /\*\*Payment quickstart:\*\* \[inspect and cap an x402 payment\]\(https:\/\/mimirs402\.github\.io\/bountyverdict\/agents\.html#pay-title\), or follow the \[MCP paid-call handoff\]\(llms-install\.md#paid-call-handoff\)\./,
+  );
+  assert.ok(readme.indexOf("**Payment quickstart:**") < readme.indexOf("Seven paid, bounded decision APIs"));
   assert.match(guide, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);
   assert.match(guide, /exact method and fully encoded URL/);
   assert.match(guide, /validated JSON body and its SHA-256/);

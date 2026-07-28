@@ -6,6 +6,8 @@
 
 The button adds one free selector and six paid decision tools to VS Code. The selector deterministically returns the exact paid tool, price, sample, and required input without producing a verdict or requesting payment. Paid calls still require a separately authorized x402 wallet; installing, listing, or using the selector does not charge anything.
 
+**Payment quickstart:** [inspect and cap an x402 payment](https://mimirs402.github.io/bountyverdict/agents.html#pay-title), or follow the [MCP paid-call handoff](llms-install.md#paid-call-handoff). Installing the skill, listing tools, and using the selector are free.
+
 Seven paid, bounded decision APIs for autonomous coding agents, available as installable Agent Skills and a remote Model Context Protocol (MCP) server. Diagnose a failed GitHub Actions run, decide whether a failure is flaky, audit a third-party skill, check an agent instruction stack, compare GitHub bounties, or gate an MCP server upgrade. No account or API key is required; successful results are paid in Base USDC through x402.
 
 Install the router that selects the narrowest check and applies its payment safeguards:

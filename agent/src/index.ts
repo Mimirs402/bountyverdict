@@ -17,7 +17,7 @@ import { createLlmsText, createOpenApi } from "./openapi.ts";
 import { checkBountyPortfolio, validatePortfolioUrls } from "./portfolio.ts";
 import { checkGithubHarness, HarnessError, parseRepositoryUrl } from "./harness.ts";
 import { harnessDiscoveryExtension, harnessExample } from "./harness-discovery.ts";
-import { checkGithubSkill, normalizeSkillPath } from "./skill.ts";
+import { checkGithubSkill, normalizeSkillPath, SkillError } from "./skill.ts";
 import {
   SKILL_DISCOVERY_DESCRIPTION,
   skillDiscoveryExtension,
@@ -1247,7 +1247,7 @@ app.get(SKILL_ENDPOINT, async (c) => {
     const audit = await checkGithubSkill(repoUrl, skillPath, { GITHUB_TOKEN: c.env.GITHUB_TOKEN });
     return c.json(audit);
   } catch (error) {
-    if (error instanceof HarnessError) {
+    if (error instanceof SkillError) {
       return c.json({ error: error.code, message: error.message }, error.status as 400);
     }
     console.error(error);
@@ -1329,7 +1329,10 @@ app.post("/api/near-market/:product", async (c) => {
     });
     return c.json(output);
   } catch (error) {
-    if (error instanceof CheckError || error instanceof HarnessError || error instanceof FlakeError || error instanceof McpDriftError) {
+    if (
+      error instanceof CheckError || error instanceof SkillError || error instanceof HarnessError ||
+      error instanceof FlakeError || error instanceof McpDriftError
+    ) {
       return c.json({ error: error.code, message: error.message }, error.status as 400);
     }
     if (error instanceof Error && /must|invalid|too large|empty/i.test(error.message)) {

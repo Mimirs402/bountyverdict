@@ -4,27 +4,31 @@ import app from "../src/index.ts";
 import {
   NEAR_MARKET_LISTINGS,
   NEAR_MARKET_PROVIDER_ID,
+  nearMarketManifest,
   parseNearMarketInput,
   parseNearMarketProduct,
 } from "../src/near-market.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 
-test("NEAR Market publishes only the six frozen automated products", () => {
+test("NEAR Market publishes seven automated products including SkillVerdict", () => {
   assert.match(NEAR_MARKET_PROVIDER_ID, /^[a-f0-9-]{36}$/);
   assert.deepEqual(NEAR_MARKET_LISTINGS.map(({ product }) => product).sort(), [
-    "flake", "harness", "mcpdrift", "portfolio", "run", "single",
+    "flake", "harness", "mcpdrift", "portfolio", "run", "single", "skill",
   ]);
-  assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ endpoint_url }) => endpoint_url)).size, 6);
-  assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ service_id }) => service_id)).size, 6);
+  assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ endpoint_url }) => endpoint_url)).size, 7);
+  assert.equal(new Set(NEAR_MARKET_LISTINGS.map(({ service_id }) => service_id)).size, 7);
   for (const listing of NEAR_MARKET_LISTINGS) {
     assert.match(listing.service_id, /^[a-f0-9-]{36}$/);
-    assert.equal(listing.price_amount, "1");
+    assert.equal(listing.price_amount, listing.product === "skill" ? "0.06" : "1");
     assert.equal(listing.price_token, "USDC");
     assert.equal(listing.pricing_model, "fixed");
     assert.equal(listing.enabled, true);
     assert.ok(listing.tags.length <= 10);
     assert.match(listing.endpoint_url, /^https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/api\/near-market\//);
   }
+  const skill = NEAR_MARKET_LISTINGS.find(({ product }) => product === "skill");
+  assert.equal(skill?.service_id, "87710335-6991-487a-9383-a3bba2940967");
+  assert.equal(nearMarketManifest().skillverdict_included, true);
 });
 
 test("NEAR Market request parsing accepts platform-wrapped and direct inputs", () => {
@@ -35,9 +39,30 @@ test("NEAR Market request parsing accepts platform-wrapped and direct inputs", (
     issue_url: "https://github.com/a/b/issues/1",
   });
   assert.equal(parseNearMarketProduct("harness"), "harness");
-  assert.equal(parseNearMarketProduct("skill"), null);
+  assert.equal(parseNearMarketProduct("skill"), "skill");
   assert.throws(() => parseNearMarketInput("[]"), /JSON object/);
   assert.throws(() => parseNearMarketInput(JSON.stringify({ input: "nope" })), /JSON object/);
+});
+
+test("NEAR Market returns SkillError details for invalid SkillVerdict input", async () => {
+  const response = await app.request("/api/near-market/skill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input: {
+        repo_url: "https://github.com/acme/skills",
+        skill_path: "../SKILL.md",
+      },
+    }),
+  }, {
+    NEAR_MARKET_AUTOMATION_ENABLED: "YES",
+    NEAR_MARKET_RATE_LIMITER: { limit: async () => ({ success: true }) },
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "INVALID_SKILL_PATH",
+    message: "skill_path must be a repository-relative directory or exact SKILL.md path.",
+  });
 });
 
 test("NEAR Market endpoint fulfills a wrapped deterministic MCP drift request", async () => {

@@ -1,0 +1,168 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { runMcpContractCanary } from "../src/mcp-functional-canary.ts";
+import {
+  MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
+  PAYMENT_NEXT_ACTION,
+} from "../src/payment-handoff.ts";
+
+const origin = "https://bountyverdict-agent-production.mimirslab.workers.dev";
+const args = { run_url: "https://github.com/owner/repo/actions/runs/1" };
+
+function jsonResponse(value: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+function selectorResponse(): Response {
+  const route = {
+    selector_call_payment_required: false,
+    total_price_usdc: "0.04",
+    next_call: {
+      tool_name: "diagnose_github_actions_run",
+      required_fields: ["run_url"],
+      payment_required: true,
+      authorization_required_before_settlement: true,
+      unsigned_call_action: "inspect_quote_then_authorize_or_stop",
+      preserve_arguments_on_retry: true,
+    },
+  };
+  return jsonResponse({
+    jsonrpc: "2.0",
+    id: 901,
+    result: {
+      content: [{ type: "text", text: JSON.stringify(route) }],
+      structuredContent: route,
+    },
+  });
+}
+
+function handoffResponse(): Response {
+  const bodyHash = "308edd07fa01b2765dfb5989941992ca6cbd4e93ee5fdbe4ca0e21236f8d58da";
+  const walletMcp = {
+    tool_name: "make_http_request_with_x402",
+    execution_kind: "equivalent_rest_request",
+    arguments: {
+      baseURL: origin,
+      path: "/api/github-actions-run-diagnosis",
+      method: "POST",
+      body: args,
+      maxAmountPerRequest: 40000,
+      preferredNetwork: "base",
+    },
+  };
+  const payment = {
+    charge_state: "unsigned_not_charged",
+    next_action: PAYMENT_NEXT_ACTION,
+    inspect_challenge_before_signing: true,
+    max_amount_atomic: "40000",
+    exact_request: {
+      method: "POST",
+      url: `${origin}/api/github-actions-run-diagnosis`,
+      body: args,
+      normalized_body_sha256: `sha256:${bodyHash}`,
+    },
+    authorization_scope: "resource_url_not_post_body",
+    coinbase_wallet_mcp: walletMcp,
+    agentic_wallet: {
+      executable: "npx",
+      argv: [
+        "awal@2.12.0", "x402", "pay", `${origin}/api/github-actions-run-diagnosis`,
+        "-X", "POST", "-d", JSON.stringify(args), "--max-amount", "40000", "--json",
+      ],
+      execute_as_argument_vector: true,
+      do_not_join_into_shell_string: true,
+    },
+    retry_semantics: {
+      transport: "rest_http",
+      reuse_exact_method_url_and_body: true,
+      payment_header: "Payment-Signature",
+      expected_success_status: 200,
+      never_raise_max_amount_without_new_authorization: true,
+    },
+  };
+  const challenge = {
+    accepts: [{ amount: "40000", network: "eip155:8453" }],
+    resource: { url: "mcp://tool/diagnose_github_actions_run" },
+    extensions: {
+      bazaar: { info: { input: { toolName: "diagnose_github_actions_run" } } },
+      [MCP_HTTP_PAYMENT_HANDOFF_EXTENSION]: {
+        info: {
+          version: "2",
+          direct_mcp: { automatic_payment_requires: "@x402/mcp" },
+          wallet_mcp: walletMcp,
+          payment,
+        },
+      },
+    },
+  };
+  return jsonResponse({
+    jsonrpc: "2.0",
+    id: 902,
+    result: {
+      isError: true,
+      content: [
+        { type: "text", text: JSON.stringify(challenge) },
+        { type: "text", text: "PAYMENT REQUIRED: obtain explicit authorization; otherwise stop." },
+      ],
+    },
+  });
+}
+
+test("recurring MCP canary proves the free selector and handoff without credentials or payment", async () => {
+  const requests: Array<{ url: string; init: RequestInit }> = [];
+  const responses = [selectorResponse(), handoffResponse()];
+  const report = await runMcpContractCanary(origin, {
+    fetch: async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return responses.shift()!;
+    },
+    monotonic: (() => {
+      let value = 0;
+      return () => value += 5;
+    })(),
+  });
+  assert.equal(report.healthy, true);
+  assert.equal(report.payment_or_signing_attempted, false);
+  assert.deepEqual(report.checks.map(({ kind, ok }) => ({ kind, ok })), [
+    { kind: "free_selector", ok: true },
+    { kind: "unsigned_paid_handoff_v2", ok: true },
+  ]);
+  assert.equal(requests.length, 2);
+  for (const [index, request] of requests.entries()) {
+    assert.equal(request.url, `${origin}/mcp`);
+    assert.equal(request.init.method, "POST");
+    const headers = new Headers(request.init.headers);
+    assert.equal(headers.has("Authorization"), false);
+    assert.equal(headers.has("Payment-Signature"), false);
+    assert.equal(headers.has("X-PAYMENT"), false);
+    assert.equal(headers.get("User-Agent"), "bountyverdict-owner-audit/1.0");
+    const rpc = JSON.parse(String(request.init.body));
+    assert.equal(rpc.method, "tools/call");
+    assert.deepEqual(rpc.params, index === 0 ? {
+      name: "choose_github_agent_decision",
+      arguments: { task: "github_actions_root_cause" },
+    } : {
+      name: "diagnose_github_actions_run",
+      arguments: args,
+    });
+  }
+});
+
+test("recurring MCP canary fails closed when the free selector asks for payment", async () => {
+  const responses = [
+    selectorResponse(),
+    handoffResponse(),
+  ];
+  responses[0] = jsonResponse(await responses[0].json(), { "Payment-Required": "challenge" });
+  const report = await runMcpContractCanary(origin, {
+    fetch: async () => responses.shift()!,
+  });
+  assert.equal(report.healthy, false);
+  assert.equal(report.checks[0].kind, "free_selector");
+  assert.equal(report.checks[0].ok, false);
+  assert.match(report.checks[0].error || "", /unexpectedly returned Payment-Required/);
+  assert.equal(report.payment_or_signing_attempted, false);
+});

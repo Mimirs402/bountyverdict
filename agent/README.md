@@ -151,7 +151,7 @@ Successful buyer provisioning atomically writes only its public address to `~/.c
 
 The hardened weekly units are in `ops/systemd/bountyverdict-settlement-canary.{service,timer}`. The service loads only the public buyer address from that accounting file; the canary process reads CDP credentials from the ignored `agent/.dev.vars`. Its application controls independently cap one Base-USDC payee and at most 400,000 atomic units per seven-day window, while durable state prevents a second run inside seven days or any retry after an ambiguous paid transport.
 
-The separate six-hour functional canary invokes each real paid handler against a hard-coded fixture without creating a settlement or accepting a customer-controlled target. It validates commit pinning, coverage, structured output, failed-job log retrieval, bounded flake classification, and deterministic MCP hash/proof behavior—not just HTTP availability. Its bearer token lives only in the Worker secret store, the repository Actions secret store, and a mode-0600 local token file:
+The separate six-hour functional canary invokes each real paid handler against a hard-coded fixture without creating a settlement or accepting a customer-controlled target. The same run also makes two credential-free, unsigned MCP calls: one proves that `choose_github_agent_decision` routes a GitHub Actions diagnosis without payment, and one stops at the `diagnose_github_actions_run` challenge while validating the canonical handoff-v2 REST binding, wallet-MCP arguments, amount cap, and pinned Agentic Wallet argv. It never supplies a payment header, invokes a wallet, signs, or settles. It validates commit pinning, coverage, structured output, failed-job log retrieval, bounded flake classification, and deterministic MCP hash/proof behavior—not just HTTP availability. Its bearer token lives only in the Worker secret store, the repository Actions secret store, and a mode-0600 local token file:
 
 ```bash
 CANARY_TOKEN=... npm run canary:production
@@ -159,6 +159,14 @@ CANARY_TOKEN=... npm run canary:production
 ```
 
 The latest result is written to `~/.local/state/bountyverdict/functional-canary.json`. The internal endpoint is absent from OpenAPI and Bazaar metadata, returns only a compact fixture summary, responds as not found without the exact secret, and rate-limits each authenticated product canary at the Cloudflare edge.
+
+The daily review controller first reduces existing local monitor, funnel, canary, experiment, demand, and autonomous-work state to a deterministic scorecard capped at 10 KiB:
+
+```bash
+npm run review:daily
+```
+
+Raw funnel state is reduced through the same buyer-candidate cohort functions used by production reporting, so owner automation, registry health, and passive marketplace inspection stay excluded. Commerce comes only from the monitor's verified non-owner settlement totals. Volatile timestamps and immaterial high-volume reach increments do not change the material fingerprint. A healthy first baseline or materially unchanged healthy scorecard skips Codex entirely; a reliability alert or material accounting, conversion-stage, experiment, or work-state delta sends only the compact scorecard and changed paths to a read-only ephemeral review. The controller never gives that review network credentials, wallet/signing access, or permission to browse, contact, bid, buy, deploy, push, or merge. It adds no timer; an existing owner-controlled daily service may invoke this command.
 
 ## Deployment inputs
 

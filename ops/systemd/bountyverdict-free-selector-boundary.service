@@ -1,0 +1,29 @@
+[Unit]
+Description=Freeze the free-selector experiment before the next audited marketplace pass
+After=network-online.target bountyverdict-funnel-tail.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict-monitor-current/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=AUDITED_MONITOR=distribution
+Environment=PRODUCTION_API_URL=https://bountyverdict-agent-production.mimirslab.workers.dev
+Environment=REVENUE_WALLET=0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614
+Environment=START_BLOCK=48876000
+Environment=SETTLEMENT_CANARY_ENABLED=NO
+Environment=TRACKED_COSTS_USDC=1.012
+Environment=REPORT_ONLY=YES
+EnvironmentFile=-%h/.config/bountyverdict/settlement-buyer.env
+EnvironmentFile=%h/.config/bountyverdict/the402.env
+EnvironmentFile=%h/.config/bountyverdict/near-market.env
+EnvironmentFile=%h/.config/bountyverdict/payan.env
+ExecCondition=/usr/bin/env node --experimental-strip-types scripts/check-free-selector-boundary.ts
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/run-audited-monitor.ts
+ExecStartPost=/usr/bin/systemctl --user enable --now bountyverdict-distribution-monitor.timer
+ExecStartPost=/usr/bin/systemctl --user disable --now bountyverdict-free-selector-boundary.timer
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+TimeoutStartSec=5min
+

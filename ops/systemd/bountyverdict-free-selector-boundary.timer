@@ -1,0 +1,12 @@
+[Unit]
+Description=Check the free-selector boundary every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=bountyverdict-free-selector-boundary.service
+
+[Install]
+WantedBy=timers.target

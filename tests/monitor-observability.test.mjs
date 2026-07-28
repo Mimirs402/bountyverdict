@@ -1107,6 +1107,25 @@ test("the normal distribution timer is report-only and retains explicit accounti
   assert.doesNotMatch(service, /run-audited-monitor/);
 });
 
+test("the free-selector boundary gate freezes locally before rearming audited distribution", async () => {
+  const [service, timer, script] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-free-selector-boundary.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-free-selector-boundary.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/check-free-selector-boundary.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /ExecCondition=.*scripts\/check-free-selector-boundary\.ts/);
+  assert.match(service, /ExecStart=.*scripts\/run-audited-monitor\.ts/);
+  assert.ok(service.indexOf("ExecCondition=") < service.indexOf("ExecStart="));
+  assert.match(service, /ExecStartPost=.*enable --now bountyverdict-distribution-monitor\.timer/);
+  assert.match(service, /ExecStartPost=.*disable --now bountyverdict-free-selector-boundary\.timer/);
+  assert.match(service, /Environment=AUDITED_MONITOR=distribution/);
+  assert.match(timer, /OnUnitInactiveSec=5min/);
+  assert.match(timer, /Persistent=true/);
+  assert.doesNotMatch(script, /\bfetch\(|https?:\/\/|run-audited-monitor|distribution-monitor/);
+  assert.match(script, /checkpointFreeSelectorBoundary/);
+  assert.match(script, /writeMeasurementExperimentCheckpoint/);
+});
+
 test("the functional canary schedules a fresh run after every timer activation", async () => {
   const timer = await readFile(functionalCanaryTimerUrl, "utf8");
   assert.match(timer, /OnActiveSec=1min/);

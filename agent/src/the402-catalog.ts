@@ -27,7 +27,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
 }> = Object.freeze([
   {
     product: "single",
-    service_id: "svc_5e36dabc8b434e95",
+    service_id: "svc_4462e481fedf4afc",
     name: "BountyVerdict",
     description: "Is this public GitHub bounty worth pursuing? Check live eligibility, reward provenance, and claimability before coding. Detect transferred or deleted issues, assignments, explicit soft locks, trusted Algora claim status, rewarded or unverified listings, competing pull requests, and repository AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence and explicit truncation. Documentation: https://mimirs402.github.io/bountyverdict/agents.html",
     price: "$0.05",
@@ -45,7 +45,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
   {
     product: "portfolio",
-    service_id: "svc_780bf04bd8204b2f",
+    service_id: "svc_6df309e4408e4de7",
     name: "BountyVerdict Portfolio",
     description: "Rank GitHub bounty issues and compare two to ten public bounty candidates using the full evidence-linked due-diligence check, preserving partial failures and selecting the strongest non-AVOID option. Documentation: https://mimirs402.github.io/bountyverdict/agents.html",
     price: "$0.40",
@@ -69,7 +69,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
   {
     product: "harness",
-    service_id: "svc_df4baf282b7d48d5",
+    service_id: "svc_ca98b66ee3d24836",
     name: "GitHub Agent Instruction Audit — HarnessVerdict",
     description: "Audit coding agent repository instructions across AGENTS.md, CLAUDE.md, GEMINI.md, Copilot, Cursor, and SKILL.md surfaces in a public GitHub repository at an immutable commit, with portability checks for Codex, Claude Code, Gemini CLI, GitHub Copilot, and Cursor. Returns READY, REVIEW, or REPAIR with evidence-linked fixes; instant and read-only, with no repository clone or code execution.",
     price: "$0.03",
@@ -99,7 +99,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
   {
     product: "run",
-    service_id: "svc_cdd16073d02c4429",
+    service_id: "svc_f269590f47ae463f",
     name: "GitHub Actions CI Failure Diagnosis — RunVerdict",
     description: "GitHub Actions diagnosis for one failed public workflow run from bounded job metadata and failed-job logs. Returns PASS, WAIT, RETRY, FIX, or INVESTIGATE with a root-cause classification, retryability, redacted evidence, and concrete next actions. Instant, read-only, and never reruns CI or executes repository code.",
     price: "$0.04",
@@ -117,7 +117,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
   {
     product: "flake",
-    service_id: "svc_565a2a5c8e154b6e",
+    service_id: "svc_3cfea7eb5f574e6e",
     name: "CI Flake Verdict",
     description: "Make a GitHub Actions failure retry decision: is this CI failure a flake or flaky test, and should I retry or rerun this GitHub Action? Compare workflow attempts and logs to distinguish flaky CI from a real regression and return a retry-or-fix decision. Documentation: https://mimirs402.github.io/bountyverdict/agents.html",
     price: "$0.07",
@@ -136,7 +136,7 @@ export const THE402_LISTINGS: ReadonlyArray<{
   },
   {
     product: "mcpdrift",
-    service_id: "svc_40e97a390c5b4d71",
+    service_id: "svc_6bd98fed2d9a43d1",
     name: "MCP schema drift compatibility — MCPDriftVerdict",
     description: "MCP schema drift and MCP tools/list compatibility gate for agent upgrades. Compare complete baseline and current tools/list snapshots and return an exact-hash compatibility verdict without fetching or invoking tools. Documentation and strict input contract: https://mimirs402.github.io/bountyverdict/agents.html",
     price: "$0.02",

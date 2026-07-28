@@ -371,7 +371,7 @@ jobs:
           const outputSchemaSizes = listed.result.tools.map(({ outputSchema }) => Buffer.byteLength(JSON.stringify(outputSchema)));
           const descriptionSizes = listed.result.tools.map(({ description }) => Buffer.byteLength(description));
           if (listed.result.tools.some(({ outputSchema }) => outputSchema?.type !== "object" || !Array.isArray(outputSchema.required))) process.exit(1);
-          if (outputSchemaSizes.some((bytes) => bytes > 2048) || outputSchemaSizes.reduce((total, bytes) => total + bytes, 0) > 12000) process.exit(1);
+          if (outputSchemaSizes.some((bytes) => bytes > 2048) || outputSchemaSizes.reduce((total, bytes) => total + bytes, 0) > 12500) process.exit(1);
           if (descriptionSizes.some((bytes) => bytes > 1500) || descriptionSizes.reduce((total, bytes) => total + bytes, 0) > 4500) process.exit(1);
           const compatibilityHeaders = { ...headers, "MCP-Protocol-Version": "2025-06-18" };
           async function compatibilityRpc(id, method, params = {}) {

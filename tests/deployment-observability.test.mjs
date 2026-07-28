@@ -41,7 +41,7 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /\/\^PAYMENT REQUIRED:\//);
   assert.match(workflow, /economicalRoute\?\.next_call\?\.call_strategy !== "repeat_for_each_issue".*economicalRoute\?\.total_price_usdc !== "0\.35"/);
   assert.match(workflow, /rankedRoute\?\.next_call\?\.call_strategy !== "single_call".*rankedRoute\?\.total_price_usdc !== "0\.40"/);
-  assert.match(glamaVerifier, /choose_github_agent_decision: \/\^Call with no arguments for a free six-tool catalog\//);
+  assert.match(glamaVerifier, /choose_github_agent_decision: \/\^\(\?:Call with no arguments for a free six-tool catalog\|Choose the economical next call\)\//);
   assert.match(canary, /"User-Agent": "bountyverdict-owner-audit\/1\.0"/);
 });
 

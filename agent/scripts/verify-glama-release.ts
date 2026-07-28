@@ -21,7 +21,10 @@ const expectedTools = Object.freeze([
   ...expectedPaidTools,
 ]);
 const expectedTaskOpeners = Object.freeze({
-  choose_github_agent_decision: /^Call with no arguments for a free six-tool catalog/,
+  // The release image bridges the currently deployed remote. During the
+  // v1.1.12 -> v1.1.13 rollout, either exact reviewed selector description is
+  // valid; Worker contract tests independently pin the v1.1.13 catalog copy.
+  choose_github_agent_decision: /^(?:Call with no arguments for a free six-tool catalog|Choose the economical next call)/,
   check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
   rank_github_bounties: /^Which public GitHub bounty should I work on next/,
   audit_agent_harness: /^Can a coding agent safely work in this public repository/,

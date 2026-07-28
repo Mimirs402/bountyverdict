@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import app from "../src/index.ts";
 import {
-  diagnoseThe402ApiKeyWebhookEnvelope,
+  diagnoseThe402PlatformWebhookEnvelope,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
-  verifyThe402ApiKeyWebhookEnvelope,
+  verifyThe402PlatformWebhookEnvelope,
   verifyThe402Webhook,
 } from "../src/the402.ts";
 import {
@@ -116,23 +116,33 @@ test("the402 webhook verification pins API key, HMAC body, and five-minute repla
   assert.equal(await verifyThe402Webhook({ ...common, now_ms: nowMs + 301_000 }), false);
 });
 
-test("the402 API-key fallback still requires the exact bearer, fresh timestamp, and signature envelope", async () => {
+test("the402 platform fallback requires an authenticated origin, fresh timestamp, and signature envelope", async () => {
   const timestamp = "1785232800";
   const signatureHeader = `sha256=${"a".repeat(64)}`;
   const valid = {
     raw_body: body,
     api_key_header: apiKey,
+    cloudflare_worker_header: undefined,
     signature_header: signatureHeader,
     timestamp_header: timestamp,
     api_key: apiKey,
     now_ms: 1_785_232_800_000,
   };
-  assert.equal(await verifyThe402ApiKeyWebhookEnvelope(valid), true);
-  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, api_key_header: `${apiKey}_wrong` }), false);
-  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, timestamp_header: "1785232499" }), false);
-  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, signature_header: "sha256=bad" }), false);
-  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, raw_body: "" }), false);
-  assert.deepEqual(await diagnoseThe402ApiKeyWebhookEnvelope({
+  assert.equal(await verifyThe402PlatformWebhookEnvelope(valid), true);
+  assert.equal(await verifyThe402PlatformWebhookEnvelope({
+    ...valid,
+    api_key_header: undefined,
+    cloudflare_worker_header: "the402.ai",
+  }), true);
+  assert.equal(await verifyThe402PlatformWebhookEnvelope({
+    ...valid,
+    api_key_header: undefined,
+    cloudflare_worker_header: "attacker.example",
+  }), false);
+  assert.equal(await verifyThe402PlatformWebhookEnvelope({ ...valid, timestamp_header: "1785232499" }), false);
+  assert.equal(await verifyThe402PlatformWebhookEnvelope({ ...valid, signature_header: "sha256=bad" }), false);
+  assert.equal(await verifyThe402PlatformWebhookEnvelope({ ...valid, raw_body: "" }), false);
+  assert.deepEqual(await diagnoseThe402PlatformWebhookEnvelope({
     ...valid,
     api_key_header: undefined,
     signature_header: "invalid",
@@ -141,6 +151,8 @@ test("the402 API-key fallback still requires the exact bearer, fresh timestamp, 
     api_key_configured: true,
     api_key_header_present: false,
     api_key_matches: false,
+    cloudflare_worker_header_present: false,
+    cloudflare_worker_matches: false,
     timestamp_format_valid: true,
     timestamp_fresh: true,
     signature_format_valid: false,

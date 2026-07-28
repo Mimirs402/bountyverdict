@@ -33,6 +33,18 @@ test("the MCP Registry publisher is version- and digest-pinned", async () => {
   assert.match(source, /sha256sum --check --strict/);
 });
 
+test("the MCP Registry publisher retries transient network failures without weakening semantic checks", async () => {
+  const source = await readFile(new URL("../.github/workflows/publish-mcp.yml", import.meta.url), "utf8");
+  assert.match(source, /Verify live MCP endpoint[\s\S]*--retry 6[\s\S]*--retry-all-errors/);
+  assert.match(source, /Verify live MCP endpoint[\s\S]*--connect-timeout 10[\s\S]*--max-time 30/);
+  assert.match(
+    source,
+    /\.result\.protocolVersion == "2025-11-25" and \.result\.serverInfo\.name == "BountyVerdict" and \.result\.serverInfo\.version == \$version/,
+  );
+  assert.match(source, /Check whether this immutable version already exists[\s\S]*--retry-all-errors/);
+  assert.match(source, /Verify registry listing[\s\S]*--retry-all-errors/);
+});
+
 test("the MCP Registry manifest keeps schema-bounded public metadata", async () => {
   const manifest = JSON.parse(await readFile(new URL("../server.json", import.meta.url), "utf8"));
   assert.equal(manifest.version, "1.1.12");

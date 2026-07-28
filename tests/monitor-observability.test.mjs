@@ -850,7 +850,10 @@ test("production reporting keeps the executable MCP payment handoff visible", as
 });
 
 test("production payment inspection exercises the Agentic Wallet-compatible BountyVerdict transport", async () => {
-  const smoke = await readFile(paymentSmokeUrl, "utf8");
+  const [smoke, distribution] = await Promise.all([
+    readFile(paymentSmokeUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
   assert.match(smoke, /if \(product === "single"\) url\.searchParams\.set\("issue_url", issueUrl\)/);
   assert.match(smoke, /const expectedMethod = product === "single" \? "GET" : contract\.method/);
   assert.match(smoke, /if \(expectedMethod === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType !== "json"\)/);
@@ -858,6 +861,8 @@ test("production payment inspection exercises the Agentic Wallet-compatible Boun
   assert.match(smoke, /unpaid\.status !== 404/);
   assert.doesNotMatch(smoke, /if \(contract\.method === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType/);
   assert.doesNotMatch(smoke, /product === "single"\s*\?\s*\{\s*issue_url:/);
+  assert.match(distribution, /const expectedMethod = product === "single" \? "GET" : PRODUCT_CATALOG\[product\]\.method/);
+  assert.match(distribution, /if \(expectedMethod === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType !== "json"\)/);
 });
 
 test("Gemini CLI extension exposes only the hosted paid MCP without secrets", async () => {

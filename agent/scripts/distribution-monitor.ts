@@ -636,12 +636,12 @@ async function inspectChallenge(
   if (requirement.payTo.toLowerCase() !== wallet.toLowerCase()) {
     throw new Error(`${product} endpoint recipient does not match the revenue wallet.`);
   }
-  const expectedMethod = PRODUCT_CATALOG[product].method;
+  const expectedMethod = product === "single" ? "GET" : PRODUCT_CATALOG[product].method;
   const method = challenge.extensions?.bazaar?.info?.input?.method;
   if (method !== expectedMethod) {
     throw new Error(`${product} Bazaar method is ${method || "missing"}; expected ${expectedMethod}.`);
   }
-  if (PRODUCT_CATALOG[product].method === "POST" && challenge.extensions?.bazaar?.info?.input?.bodyType !== "json") {
+  if (expectedMethod === "POST" && challenge.extensions?.bazaar?.info?.input?.bodyType !== "json") {
     throw new Error(`${product} Bazaar bodyType is missing or not json.`);
   }
   return {

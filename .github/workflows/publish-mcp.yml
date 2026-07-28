@@ -40,6 +40,11 @@ jobs:
         run: |
           payload=$(jq -cn --arg version "$SERVER_VERSION" '{jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"registry-release-check",version:$version}}}')
           response=$(curl --fail --silent --show-error \
+            --retry 6 \
+            --retry-delay 2 \
+            --retry-all-errors \
+            --connect-timeout 10 \
+            --max-time 30 \
             --user-agent "bountyverdict-owner-audit/1.0" \
             --header "Accept: application/json, text/event-stream" \
             --header "Content-Type: application/json" \
@@ -55,7 +60,10 @@ jobs:
           SERVER_VERSION: ${{ steps.manifest.outputs.version }}
         run: |
           encoded_name=$(jq -rn --arg value "$SERVER_NAME" '$value|@uri')
-          response=$(curl --fail --silent --show-error "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
+          response=$(curl --fail --silent --show-error \
+            --retry 6 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 \
+            "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
           if jq -e --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" '.servers[]? | select(.server.name == $name and .server.version == $version)' <<<"$response" >/dev/null; then
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
@@ -67,6 +75,8 @@ jobs:
         run: |
           asset="mcp-publisher_linux_amd64.tar.gz"
           curl --fail --location --silent --show-error \
+            --retry 6 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 10 --max-time 60 \
             "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.0/$asset" \
             --output "$asset"
           echo "1370446bbe74d562608e8005a6ccce02d146a661fbd78674e11cc70b9618d6cf  $asset" | sha256sum --check --strict
@@ -87,7 +97,10 @@ jobs:
         run: |
           encoded_name=$(jq -rn --arg value "$SERVER_NAME" '$value|@uri')
           for attempt in $(seq 1 12); do
-            response=$(curl --fail --silent --show-error "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
+            response=$(curl --fail --silent --show-error \
+              --retry 3 --retry-delay 1 --retry-all-errors \
+              --connect-timeout 10 --max-time 30 \
+              "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name")
             if jq -e --arg name "$SERVER_NAME" --arg version "$SERVER_VERSION" --arg remote "$SERVER_REMOTE" '.servers[]? | select(.server.name == $name and .server.version == $version and .server.remotes[0].type == "streamable-http" and .server.remotes[0].url == $remote)' <<<"$response" >/dev/null; then
               exit 0
             fi

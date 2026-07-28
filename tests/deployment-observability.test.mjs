@@ -4,10 +4,12 @@ import test from "node:test";
 
 const workflowUrl = new URL("../.github/workflows/deploy-worker.yml", import.meta.url);
 const canaryUrl = new URL("../agent/scripts/functional-canary.ts", import.meta.url);
+const glamaVerifierUrl = new URL("../agent/scripts/verify-glama-release.ts", import.meta.url);
 
 test("every production deployment probe identifies as owner automation", async () => {
   const workflow = await readFile(workflowUrl, "utf8");
   const canary = await readFile(canaryUrl, "utf8");
+  const glamaVerifier = await readFile(glamaVerifierUrl, "utf8");
   assert.match(workflow, /owner_curl\(\)/);
   assert.match(workflow, /curl --user-agent "bountyverdict-owner-audit\/1\.0"/);
   assert.equal((workflow.match(/\bowner_curl --/g) || []).length, 18);
@@ -33,6 +35,7 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /\/\^PAYMENT REQUIRED:\//);
   assert.match(workflow, /economicalRoute\?\.next_call\?\.call_strategy !== "repeat_for_each_issue".*economicalRoute\?\.total_price_usdc !== "0\.35"/);
   assert.match(workflow, /rankedRoute\?\.next_call\?\.call_strategy !== "single_call".*rankedRoute\?\.total_price_usdc !== "0\.40"/);
+  assert.match(glamaVerifier, /choose_github_agent_decision: \/\^Choose the economical next call\//);
   assert.match(canary, /"User-Agent": "bountyverdict-owner-audit\/1\.0"/);
 });
 

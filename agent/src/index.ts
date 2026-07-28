@@ -64,11 +64,11 @@ import {
 import {
   fulfillProduct,
   fulfillThe402Product,
-  diagnoseThe402ApiKeyWebhookEnvelope,
+  diagnoseThe402PlatformWebhookEnvelope,
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
-  verifyThe402ApiKeyWebhookEnvelope,
+  verifyThe402PlatformWebhookEnvelope,
   verifyThe402Webhook,
 } from "./the402.ts";
 import {
@@ -100,7 +100,7 @@ interface Env {
   THE402_SERVICE_MAP?: string;
   THE402_AUTOMATION_ENABLED?: string;
   THE402_REGISTRATION_WINDOW?: string;
-  THE402_API_KEY_WEBHOOK_AUTH_ENABLED?: string;
+  THE402_PLATFORM_ENVELOPE_AUTH_ENABLED?: string;
   NEAR_MARKET_AUTOMATION_ENABLED?: string;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
@@ -736,6 +736,7 @@ app.post("/api/the402/webhook", async (c) => {
   const verificationInput = {
     raw_body: rawBody,
     api_key_header: c.req.header("X-Platform-Secret"),
+    cloudflare_worker_header: c.req.header("CF-Worker"),
     signature_header: c.req.header("X-Webhook-Signature"),
     timestamp_header: c.req.header("X-Webhook-Timestamp"),
     api_key: c.env.THE402_API_KEY,
@@ -744,17 +745,18 @@ app.post("/api/the402/webhook", async (c) => {
     ...verificationInput,
     webhook_secret: c.env.THE402_WEBHOOK_SECRET,
   }) || (
-    c.env.THE402_API_KEY_WEBHOOK_AUTH_ENABLED === "YES" &&
-    await verifyThe402ApiKeyWebhookEnvelope(verificationInput)
+    c.env.THE402_PLATFORM_ENVELOPE_AUTH_ENABLED === "YES" &&
+    await verifyThe402PlatformWebhookEnvelope(verificationInput)
   );
   if (!verified || !c.env.THE402_API_KEY) {
     if (
-      verificationInput.api_key_header || verificationInput.signature_header ||
+      verificationInput.api_key_header || verificationInput.cloudflare_worker_header ||
+      verificationInput.signature_header ||
       verificationInput.timestamp_header
     ) {
       console.warn(
         "Rejected the402 signing envelope:",
-        await diagnoseThe402ApiKeyWebhookEnvelope(verificationInput),
+        await diagnoseThe402PlatformWebhookEnvelope(verificationInput),
       );
     }
     return c.json({ error: "NOT_FOUND" }, 404);

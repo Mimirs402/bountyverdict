@@ -1341,8 +1341,12 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   const open = state.sources?.openjobs;
   const taskmarket = state.sources?.taskmarket;
   const taskmarketTracked = taskmarket?.tracked_worker;
+  const sourceStatus = state.source_status;
+  const degradedSources = state.degraded_sources ?? 0;
   if (state.schema_version !== 2 || state.read_only !== true || state.actions_enabled !== false ||
-    state.errors !== 0 || typeof state.checked_at !== "string" || !Number.isFinite(Date.parse(state.checked_at)) ||
+    !Number.isSafeInteger(state.errors) || state.errors < 0 ||
+    typeof state.checked_at !== "string" || !Number.isFinite(Date.parse(state.checked_at)) ||
+    !Number.isSafeInteger(degradedSources) || degradedSources < 0 ||
     !molt || typeof molt !== "object" || Array.isArray(molt) ||
     !open || typeof open !== "object" || Array.isArray(open) ||
     !taskmarket || typeof taskmarket !== "object" || Array.isArray(taskmarket) ||
@@ -1351,6 +1355,35 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   }
   const ageMs = Date.now() - Date.parse(state.checked_at);
   if (ageMs < 0 || ageMs > 30 * 60 * 1000) throw new Error("Public demand watcher state is stale.");
+  let trackedSnapshotAt = state.checked_at;
+  if (sourceStatus !== undefined) {
+    if (!sourceStatus || typeof sourceStatus !== "object" || Array.isArray(sourceStatus)) {
+      throw new Error("Public demand watcher source status is malformed.");
+    }
+    const keys = ["moltjobs", "openjobs", "taskmarket_inventory", "taskmarket_tracked"];
+    let sourceErrors = 0;
+    for (const key of keys) {
+      const status = sourceStatus[key];
+      if (!status || typeof status !== "object" || Array.isArray(status) ||
+        typeof status.last_attempt_at !== "string" || !Number.isFinite(Date.parse(status.last_attempt_at)) ||
+        typeof status.last_good_at !== "string" || !Number.isFinite(Date.parse(status.last_good_at)) ||
+        Date.parse(status.last_attempt_at) > Date.parse(state.checked_at) ||
+        Date.parse(status.last_good_at) > Date.parse(status.last_attempt_at) ||
+        (status.error !== null && typeof status.error !== "string")) {
+        throw new Error(`Public demand watcher ${key} source status is malformed.`);
+      }
+      if (status.error !== null) sourceErrors += 1;
+    }
+    if (sourceErrors !== degradedSources) {
+      throw new Error("Public demand watcher degraded-source count disagrees with source status.");
+    }
+    trackedSnapshotAt = sourceStatus.taskmarket_tracked.last_good_at;
+  } else if (degradedSources !== 0) {
+    throw new Error("Public demand watcher reports degraded sources without source status.");
+  }
+  if (state.errors !== degradedSources) {
+    throw new Error("Public demand watcher error count disagrees with degraded sources.");
+  }
   for (const [source, fields] of [[molt, [
     "open_jobs", "verified_funded_open_jobs", "exact_candidate_count",
     "rejected_unfunded_or_expired", "rejected_funded_non_matches",
@@ -1425,7 +1458,7 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   let preExpiryWindowClosedPending = 0;
   let preExpiryWindowClosedGrossAtomic = 0n;
   let preExpiryWindowClosedNetAtomic = 0n;
-  const snapshotMs = Date.parse(state.checked_at);
+  const snapshotMs = Date.parse(trackedSnapshotAt);
   const consumedReceiptEvidence = new Set<string>();
   const consumedCanonicalEvents = new Set<string>();
   for (const record of taskmarketTracked.submissions as Array<Record<string, any>>) {
@@ -1594,11 +1627,13 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     throw new Error("Taskmarket pending opportunity buckets do not reconcile with their records or legacy totals.");
   }
   return {
-    healthy: true,
+    healthy: degradedSources === 0,
     checked_at: state.checked_at,
     age_seconds: Math.round(ageMs / 1000),
     read_only: true,
     actions_enabled: false,
+    degraded_sources: degradedSources,
+    source_status: sourceStatus || null,
     moltjobs: molt,
     openjobs: open,
     taskmarket,

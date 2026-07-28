@@ -21,7 +21,7 @@ const expectedTools = Object.freeze([
   ...expectedPaidTools,
 ]);
 const expectedTaskOpeners = Object.freeze({
-  choose_github_agent_decision: /^Which tool should I use/,
+  choose_github_agent_decision: /^Choose the economical next call/,
   check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
   rank_github_bounties: /^Which public GitHub bounty should I work on next/,
   audit_agent_harness: /^Can a coding agent safely work in this public repository/,

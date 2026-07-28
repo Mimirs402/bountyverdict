@@ -97,6 +97,7 @@ interface Env {
   THE402_WEBHOOK_SECRET?: string;
   THE402_SERVICE_MAP?: string;
   THE402_AUTOMATION_ENABLED?: string;
+  THE402_REGISTRATION_WINDOW?: string;
   NEAR_MARKET_AUTOMATION_ENABLED?: string;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
@@ -720,6 +721,14 @@ app.post("/api/the402/webhook", async (c) => {
   c.header("X-Robots-Tag", "noindex, nofollow");
   if (c.env.THE402_AUTOMATION_ENABLED !== "YES") {
     return c.json({ error: "NOT_FOUND" }, 404);
+  }
+  if (
+    c.env.THE402_REGISTRATION_WINDOW === "YES" &&
+    !c.req.header("X-Platform-Secret") &&
+    !c.req.header("X-Webhook-Signature") &&
+    !c.req.header("X-Webhook-Timestamp")
+  ) {
+    return c.json({ accepted: true, action: "registration_probe" });
   }
   const declaredLength = c.req.header("Content-Length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > 65_536) {

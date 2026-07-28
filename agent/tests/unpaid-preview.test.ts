@@ -186,6 +186,20 @@ test("legacy BountyVerdict GET remains a payable compatibility transport", async
   assert.equal(body.payment.authorization_scope, "resource_url");
 });
 
+test("Agentic Wallet can use the canonical Bazaar URL as a validated GET transport", async () => {
+  const response = await app.request(
+    "/api/bounty-preflight?issue_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo%2Fissues%2F1",
+    {},
+    env,
+  );
+  assert.equal(response.status, 402);
+  const body = await response.json() as any;
+  assert.equal(body.product, "BountyVerdict");
+  assert.equal(body.payment.exact_request.method, "GET");
+  assert.match(body.payment.exact_request.url, /\/api\/bounty-preflight\?issue_url=/);
+  assert.equal(body.payment.authorization_scope, "resource_url");
+});
+
 test("migrated legacy GET routes remain payable compatibility transports", async () => {
   const legacyCases = [
     ["/api/harness?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo", "HarnessVerdict"],

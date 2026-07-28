@@ -106,11 +106,10 @@ const FIXTURES: Readonly<Record<SettlementCanaryProduct, SettlementCanaryFixture
       product: "single",
       service: "BountyVerdict",
       amountAtomic: "50000",
-      method: "POST",
-      url: fixtureUrl(PRODUCT_CATALOG.single.path),
-      body: JSON.stringify({
-        issue_url: "https://github.com/typeorm/typeorm/issues/3357",
-      }),
+      method: "GET",
+      url: fixtureUrl(PRODUCT_CATALOG.single.path, [
+        ["issue_url", "https://github.com/typeorm/typeorm/issues/3357"],
+      ]),
     }),
     portfolio: Object.freeze({
       product: "portfolio",

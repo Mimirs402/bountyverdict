@@ -332,7 +332,10 @@ test("ignores samples, internal routes, wrong methods, hosts, and scripts", () =
   assert.equal(readiness.source, "owner_automation");
   assert.equal(classifyFunnelTailEvent(event("/_internal/canary/single", 200)), null);
   assert.equal(classifyFunnelTailEvent(event("/api/portfolio", 402, {}, "GET")), null);
-  assert.equal(classifyFunnelTailEvent(event("/api/bounty-preflight", 402, {}, "GET")), null);
+  assert.equal(
+    classifyFunnelTailEvent(event("/api/bounty-preflight", 402, {}, "GET"))?.product,
+    "single",
+  );
   assert.equal(classifyFunnelTailEvent(event("/api/verdict", 402, {}, "POST")), null);
   assert.equal(classifyFunnelTailEvent({ ...event("/api/verdict", 402), scriptName: "other" }), null);
   const otherHost = event("/api/verdict", 402);

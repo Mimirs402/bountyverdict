@@ -15,7 +15,7 @@ test("product catalog has unique service, route, sample, and accounting price", 
   }
 });
 
-test("fresh canonical POST and legacy GET transports remain one accounting product", () => {
+test("canonical POST and GET compatibility transports remain one accounting product", () => {
   const transports = [
     ["single", "/api/bounty-preflight", "/api/verdict"],
     ["harness", "/api/repository-agent-instructions-audit", "/api/harness"],
@@ -29,7 +29,10 @@ test("fresh canonical POST and legacy GET transports remain one accounting produ
     assert.equal(LEGACY_GET_PATHS[product], legacyPath);
     assert.equal(productForTransport(canonicalPath, "POST"), product);
     assert.equal(productForTransport(legacyPath, "GET"), product);
-    assert.equal(productForTransport(canonicalPath, "GET"), null);
+    assert.equal(
+      productForTransport(canonicalPath, "GET"),
+      product === "single" ? "single" : null,
+    );
     assert.equal(productForTransport(legacyPath, "POST"), null);
     assert.equal(productForTransport(canonicalPath, "PUT"), null);
   }

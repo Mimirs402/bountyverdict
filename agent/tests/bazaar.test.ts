@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { validateDiscoveryExtension, validateDiscoveryExtensionSpec } from "@x402/extensions/bazaar";
 import {
+  agenticWalletDiscoveryExtension,
   discoveryExtension,
   exampleVerdict,
   portfolioDiscoveryExtension,
@@ -54,7 +55,7 @@ test("BountyVerdict canonical POST declaration passes Bazaar schema and protocol
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
 });
 
-test("canonical BountyVerdict POST example survives preflight and returns a payable challenge", async () => {
+test("strict canonical BountyVerdict POST remains payable without advertising an incompatible Bazaar transport", async () => {
   const input = discoveryExtension.bazaar.info.input;
   const response = await app.request("/api/bounty-preflight", {
     method: "POST",
@@ -67,8 +68,27 @@ test("canonical BountyVerdict POST example survives preflight and returns a paya
   const challenge = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
   assert.equal(challenge.resource.url, "http://localhost/api/bounty-preflight");
   assert.ok(challenge.resource.description.length <= CDP_RESOURCE_DESCRIPTION_MAX_LENGTH);
-  assert.equal(challenge.extensions.bazaar.info.input.method, "POST");
-  assert.equal(challenge.extensions.bazaar.info.input.bodyType, "json");
+  assert.equal(challenge.extensions?.bazaar, undefined);
+});
+
+test("Agentic Wallet GET declaration survives preflight at the canonical Bazaar resource URL", async () => {
+  const extension = agenticWalletDiscoveryExtension.bazaar;
+  assert.equal(extension.info.input.method, "GET");
+  assert.deepEqual(extension.info.input.queryParams, {
+    issue_url: "https://github.com/typeorm/typeorm/issues/3357",
+  });
+  assert.deepEqual(validateDiscoveryExtensionSpec(extension), { valid: true });
+  assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
+
+  const query = new URLSearchParams(extension.info.input.queryParams);
+  const response = await app.request(`/api/bounty-preflight?${query}`, {}, crawlerEnv);
+  assert.equal(response.status, 402);
+  const encoded = response.headers.get("payment-required");
+  assert.ok(encoded);
+  const challenge = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(challenge.resource.url, `http://localhost/api/bounty-preflight?${query}`);
+  assert.equal(challenge.extensions.bazaar.info.input.method, "GET");
+  assert.equal(challenge.extensions.bazaar.info.input.bodyType, undefined);
 });
 
 test("portfolio POST declaration passes Bazaar schema and protocol validation", () => {

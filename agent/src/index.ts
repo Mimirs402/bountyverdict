@@ -7,8 +7,8 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { parseIssueUrl } from "../../analysis.js";
 import { CheckError, checkGithubIssue } from "./check.ts";
 import {
+  agenticWalletDiscoveryExtension,
   BOUNTY_DISCOVERY_DESCRIPTION,
-  discoveryExtension,
   exampleVerdict,
   portfolioDiscoveryExtension,
   portfolioExample,
@@ -41,11 +41,11 @@ import {
 } from "./mcp-drift-discovery.ts";
 import {
   LEGACY_FLAKE_PATH,
-  LEGACY_GET_PATHS,
   LEGACY_HARNESS_PATH,
   LEGACY_RUN_PATH,
   LEGACY_SINGLE_PATH,
   PRODUCT_CATALOG,
+  productForTransport,
 } from "./product-catalog.ts";
 import { buildPaymentHandoff } from "./payment-handoff.ts";
 import { PRODUCT_SELECTION_PREVIEWS } from "./selection-preview.ts";
@@ -300,11 +300,8 @@ async function unpaidDecisionBody(
     throw new Error(`Validated POST body is unavailable for ${selection.product}; refusing to construct a payment challenge.`);
   }
   const catalog = PRODUCT_CATALOG[preview.productKey];
-  const canonical = catalog.method === preview.method && !preview.legacyTransport;
   const requestPath = new URL(requestUrl).pathname;
-  const legacyPath = LEGACY_GET_PATHS[preview.productKey as keyof typeof LEGACY_GET_PATHS];
-  const legacy = preview.method === "GET" && preview.legacyTransport === true && legacyPath === requestPath;
-  if (!canonical && !legacy) {
+  if (productForTransport(requestPath, preview.method) !== preview.productKey) {
     throw new Error(`Payment handoff method drifted for ${selection.product}.`);
   }
   const payment = await buildPaymentHandoff({
@@ -379,6 +376,13 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "single",
       method: "GET",
       legacyTransport: true,
+    }, context, network),
+  };
+  const agenticWalletSingleRouteConfig: RouteConfig = {
+    ...legacySingleRouteConfig,
+    unpaidResponseBody: (context) => unpaidDecisionBody({
+      productKey: "single",
+      method: "GET",
     }, context, network),
   };
   const harnessRouteConfig: RouteConfig = {
@@ -493,6 +497,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
   const middleware = paymentMiddleware(
     {
       [`POST ${SINGLE_ENDPOINT}`]: routeConfig,
+      [`GET ${SINGLE_ENDPOINT}`]: agenticWalletSingleRouteConfig,
       [`GET ${LEGACY_SINGLE_PATH}`]: legacySingleRouteConfig,
       [`POST ${PORTFOLIO_ENDPOINT}`]: portfolioRouteConfig,
       [`POST ${HARNESS_ENDPOINT}`]: harnessRouteConfig,
@@ -509,7 +514,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
   // Attach already-enriched metadata after middleware construction. The Hono
   // adapter otherwise auto-loads the eval-based validator that Workers reject.
   // x402HTTPResourceServer retains this same route object for payment responses.
-  routeConfig.extensions = discoveryExtension;
+  agenticWalletSingleRouteConfig.extensions = agenticWalletDiscoveryExtension;
   portfolioRouteConfig.extensions = portfolioDiscoveryExtension;
   harnessRouteConfig.extensions = harnessDiscoveryExtension;
   skillRouteConfig.extensions = skillDiscoveryExtension;
@@ -1127,6 +1132,7 @@ const legacyFlakePreflight: MiddlewareHandler<AppBindings> = async (c, next) => 
 };
 
 app.use(SINGLE_ENDPOINT, singlePreflight);
+app.use(SINGLE_ENDPOINT, legacySinglePreflight);
 app.use(LEGACY_SINGLE_PATH, legacySinglePreflight);
 app.use(PORTFOLIO_ENDPOINT, portfolioPreflight);
 app.use(HARNESS_ENDPOINT, harnessPreflight);
@@ -1196,6 +1202,7 @@ const singleHandler = async (c: Context<AppBindings>) => {
 };
 
 app.post(SINGLE_ENDPOINT, singleHandler);
+app.get(SINGLE_ENDPOINT, singleHandler);
 app.get(LEGACY_SINGLE_PATH, singleHandler);
 
 app.post(PORTFOLIO_ENDPOINT, async (c) => {

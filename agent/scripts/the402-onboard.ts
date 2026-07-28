@@ -151,6 +151,13 @@ const results: Array<{
 for (const definition of definitions) {
   const previous = existing.find(({ id }) => id === definition.service_id) ||
     existing.find(({ name }) => name === definition.name);
+  // The platform's owned-service collection omits inactive services. Once an
+  // authoritative ID is committed, update that exact resource directly so a
+  // temporarily inactive listing cannot be duplicated by name.
+  const configuredId = definition.service_id.endsWith("_PENDING")
+    ? null
+    : definition.service_id;
+  const targetId = configuredId || previous?.id || null;
   const payload = {
     name: definition.name,
     description: definition.description,
@@ -165,15 +172,15 @@ for (const definition of definitions) {
     deliverable_schema: definition.deliverable_schema,
     status: stagePending ? "inactive" : "active",
   };
-  const response = await platformFetch(previous ? `/services/${previous.id}` : "/services", {
-    method: previous ? "PUT" : "POST",
+  const response = await platformFetch(targetId ? `/services/${targetId}` : "/services", {
+    method: targetId ? "PUT" : "POST",
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`the402 ${definition.product} listing returned HTTP ${response.status}: ${error.slice(0, 500)}`);
   }
-  const id = previous?.id || serviceId(await response.json());
+  const id = targetId || serviceId(await response.json());
   if (stagePending) {
     const deactivate = await platformFetch(`/services/${id}`, {
       method: "PUT",
@@ -188,9 +195,9 @@ for (const definition of definitions) {
   results.push({
     product: definition.product,
     service_id: id,
-    previous_service_id: previous?.id || null,
-    action: previous
-      ? previous.id === definition.service_id ? "updated" : "recovered"
+    previous_service_id: targetId,
+    action: targetId
+      ? targetId === definition.service_id ? "updated" : "recovered"
       : "created",
   });
 }

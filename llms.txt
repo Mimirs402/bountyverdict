@@ -62,7 +62,7 @@
 - BountyVerdict: POST https://api.the402.ai/v1/services/svc_4462e481fedf4afc/purchase — agent price $0.053 USDC; instant fulfillment
 - BountyVerdict Portfolio: POST https://api.the402.ai/v1/services/svc_6df309e4408e4de7/purchase — agent price $0.42 USDC; instant fulfillment
 - GitHub Agent Instruction Audit — HarnessVerdict: POST https://api.the402.ai/v1/services/svc_ca98b66ee3d24836/purchase — agent price $0.032 USDC; instant fulfillment
-- SkillVerdict: POST https://api.the402.ai/v1/services/svc_7f39caef9bf64340/purchase — agent price $0.063 USDC; instant fulfillment
+- SkillVerdict: POST https://api.the402.ai/v1/services/svc_75dc3d5021bb4a22/purchase — agent price $0.063 USDC; instant fulfillment
 - GitHub Actions CI Failure Diagnosis — RunVerdict: POST https://api.the402.ai/v1/services/svc_f269590f47ae463f/purchase — agent price $0.042 USDC; instant fulfillment
 - CI Flake Verdict: POST https://api.the402.ai/v1/services/svc_3cfea7eb5f574e6e/purchase — agent price $0.074 USDC; instant fulfillment
 - MCP schema drift compatibility — MCPDriftVerdict: POST https://api.the402.ai/v1/services/svc_6bd98fed2d9a43d1/purchase — agent price $0.021 USDC; instant fulfillment

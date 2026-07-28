@@ -12,7 +12,7 @@ const serviceIds: Record<MarketplaceProduct, string> = {
   single: "88c3e8f6-07f4-414e-bc43-c5ad61cf21fd",
   portfolio: "3b496165-8b2c-4c97-8593-1242e5d15384",
   harness: "dd781a20-6643-42ee-8c19-0c16425e685d",
-  skill: "87710335-6991-487a-9383-a3bba2940967",
+  skill: "81f71aef-748d-4bed-89e4-187aa8892806",
   run: "88bb0780-9121-4acd-a2e2-4f8a2bc005a8",
   flake: "7385fdea-5d7f-43d4-9fb2-738b46316d0f",
   mcpdrift: "0a0b0909-2829-4437-b23e-4376a61041ba",

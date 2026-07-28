@@ -205,7 +205,7 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-07-28T17:09:35.370Z",
+  "updated_at": "2026-07-28T17:14:05.354Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",
@@ -332,9 +332,9 @@
         },
         {
           "name": "SkillVerdict",
-          "service_id": "87710335-6991-487a-9383-a3bba2940967",
-          "hire_url": "https://market.near.ai/hire?service_id=87710335-6991-487a-9383-a3bba2940967",
-          "invoke_endpoint": "https://market.near.ai/v1/services/87710335-6991-487a-9383-a3bba2940967/invoke",
+          "service_id": "81f71aef-748d-4bed-89e4-187aa8892806",
+          "hire_url": "https://market.near.ai/hire?service_id=81f71aef-748d-4bed-89e4-187aa8892806",
+          "invoke_endpoint": "https://market.near.ai/v1/services/81f71aef-748d-4bed-89e4-187aa8892806/invoke",
           "method": "POST",
           "authentication": "NEAR Agent Market bearer token",
           "price_usdc": "0.06"

@@ -27,7 +27,7 @@ test("NEAR Market publishes seven automated products including SkillVerdict", ()
     assert.match(listing.endpoint_url, /^https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/api\/near-market\//);
   }
   const skill = NEAR_MARKET_LISTINGS.find(({ product }) => product === "skill");
-  assert.equal(skill?.service_id, "87710335-6991-487a-9383-a3bba2940967");
+  assert.equal(skill?.service_id, "81f71aef-748d-4bed-89e4-187aa8892806");
   assert.equal(nearMarketManifest().skillverdict_listing_status, "active");
 });
 

@@ -15,6 +15,9 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /CLOUDFLARE_WORKER_VERSION_OVERRIDE=\$deployed_version/);
   assert.match(workflow, /Cloudflare-Workers-Version-Overrides: bountyverdict-agent-production=/);
   assert.match(workflow, /bountyverdict-release-override-check/);
+  for (const stage of ["exact-version-override", "root", "samples", "x402-manifest", "discovery-documents", "ai-catalog", "agent-manifest", "agent-skill", "mcp", "openapi", "payment-challenges", "external-glama-bridge"]) {
+    assert.match(workflow, new RegExp(`verify_stage ${stage}`));
+  }
   assert.equal((workflow.match(/\bowner_curl --/g) || []).length, 18);
   assert.doesNotMatch(workflow, /\n\s+curl --(?:fail|silent|show-error)/);
   assert.match(workflow, /io\.github\.Mimirs402\/bountyverdict\/http-payment-handoff/);

@@ -171,8 +171,12 @@ jobs:
               --user-agent "bountyverdict-owner-audit/1.0" \
               "$@"
           }
+          verify_stage() {
+            echo "Verifying production contract stage: $1"
+          }
           # Confirm the exact deployed version is globally addressable before
           # probing its individual discovery documents.
+          verify_stage exact-version-override
           override_ready=false
           for attempt in {1..30}; do
             if node <<'NODE'
@@ -213,6 +217,7 @@ jobs:
           # A successful HTTP response can still come from the previous Worker
           # while Cloudflare propagates a new version. Wait for the new root
           # contract, rather than retrying only transport failures.
+          verify_stage root
           root_ready=false
           for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/" | node -e '
@@ -244,6 +249,7 @@ jobs:
             echo "Production root did not converge to the deployed contract" >&2
             exit 1
           fi
+          verify_stage samples
           owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/api/sample" >/dev/null
           owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/api/portfolio/sample" >/dev/null
           owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/api/harness/sample" >/dev/null
@@ -265,6 +271,7 @@ jobs:
           # A newly added route can briefly resolve to the previous Worker at a
           # different edge after deploy. A stale response is HTTP 200, so curl's
           # transport retry is insufficient: retry semantic convergence too.
+          verify_stage x402-manifest
           x402_ready=false
           for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/x402" | node -e '
@@ -289,6 +296,7 @@ jobs:
             echo "Production x402 manifest did not converge to the deployed contract" >&2
             exit 1
           fi
+          verify_stage discovery-documents
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/.well-known/mcp.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
@@ -335,6 +343,7 @@ jobs:
           # The route can return a valid stale document from another edge while
           # a new Worker version propagates. Retry the semantic release contract,
           # not only transport errors.
+          verify_stage ai-catalog
           ai_catalog_ready=false
           for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/ai-catalog.json" | node -e '
@@ -359,6 +368,7 @@ jobs:
             echo "Production AI catalog did not converge to the deployed contract" >&2
             exit 1
           fi
+          verify_stage agent-manifest
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
@@ -373,6 +383,7 @@ jobs:
               if (value.payment?.network !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.pay_to || "")) process.exit(1);
             });
           '
+          verify_stage agent-skill
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/SKILL.md" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               if (!body.startsWith("---\nname: bountyverdict-agent-decisions\n") || !body.includes("### HarnessVerdict") || !body.includes("### MCPDriftVerdict") || body.includes("### SkillVerdict")) process.exit(1);
@@ -381,6 +392,7 @@ jobs:
           '
           # MCP verification spans several requests. During edge propagation a
           # sequence can otherwise mix the prior and new Worker versions.
+          verify_stage mcp
           mcp_release_ready=false
           for attempt in {1..30}; do
             if node <<'NODE'
@@ -522,6 +534,7 @@ jobs:
             echo "Production MCP contracts did not converge to the deployed release" >&2
             exit 1
           fi
+          verify_stage openapi
           owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/openapi.json" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const spec = JSON.parse(body);
@@ -536,6 +549,7 @@ jobs:
               if (mcp.requestBody?.content?.["application/json"]?.schema?.additionalProperties !== false) process.exit(1);
             });
           '
+          verify_stage payment-challenges
           for product in single portfolio harness skill run flake mcpdrift; do
             PRODUCT="$product" \
               RESOURCE_SERVER_URL="$PRODUCTION_API_URL" \
@@ -543,6 +557,7 @@ jobs:
               EXPECTED_ASSET="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" \
               npm run payment:inspect
           done
+          verify_stage external-glama-bridge
           GLAMA_EXPECT_FREE_SELECTOR=YES npm run glama:verify
 
       - name: Verify real production handlers

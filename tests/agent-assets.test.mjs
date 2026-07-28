@@ -23,6 +23,15 @@ const assertPortableWithoutMcpRuntime = (skill) => {
   for (const signal of agentPluginsMcpRuntimeSignals) assert.doesNotMatch(body, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 };
 
+test("production enables every published marketplace fulfillment adapter", async () => {
+  const wrangler = JSON.parse(await readFile(
+    new URL("../agent/wrangler.jsonc", import.meta.url),
+    "utf8",
+  ));
+  assert.equal(wrangler.env.production.vars.THE402_AUTOMATION_ENABLED, "YES");
+  assert.equal(wrangler.env.production.vars.NEAR_MARKET_AUTOMATION_ENABLED, "YES");
+});
+
 test("Kiro Power exposes only the secret-free production MCP contract", async () => {
   const [power, mcp] = await Promise.all([
     readFile(new URL("../POWER.md", import.meta.url), "utf8"),

@@ -643,6 +643,34 @@ test("x402scan monitoring follows the seven canonical paid transports", async ()
   assert.doesNotMatch(resources, /\/api\/verdict/);
 });
 
+test("marketplace monitoring admits SkillVerdict from catalog state without weakening revenue attribution", async () => {
+  const distribution = await readFile(distributionUrl, "utf8");
+  assert.match(distribution, /\{ product: "skill", query: "is this agent skill safe to install" \}/);
+  assert.match(distribution, /const enabledIntents = MARKETPLACE_SEARCH_INTENTS\.filter/);
+  assert.match(distribution, /the402Ids\.size !== THE402_LISTINGS\.length/);
+  assert.match(distribution, /nearIds\.size !== NEAR_MARKET_LISTINGS\.length/);
+  assert.match(distribution, /enabledIntents\.length !== the402Ids\.size/);
+  assert.match(distribution, /enabledIntents\.length !== nearIds\.size/);
+  assert.match(distribution, /enabledIntents\.length !== PAYAN_OFFERS\.length/);
+
+  assert.match(distribution, /expected_service_count: expectedIds\.size/);
+  assert.match(distribution, /skillverdict_listed: catalogHasProduct\(THE402_LISTINGS, "skill"\)/);
+  assert.match(distribution, /expected_service_count: expected\.size/);
+  assert.match(distribution, /skillverdict_listed: catalogHasProduct\(NEAR_MARKET_LISTINGS, "skill"\)/);
+  assert.match(distribution, /expected_offer_count: PAYAN_OFFERS\.length/);
+  assert.match(distribution, /skillverdict_listed: catalogHasProduct\(PAYAN_OFFERS, "skill"\)/);
+  assert.doesNotMatch(distribution, /SkillVerdict was added to the402 before its isolated experiment ended/);
+  assert.doesNotMatch(distribution, /exact six expected (?:services|offers)/);
+  assert.doesNotMatch(distribution, /SkillVerdict excluded during isolated experiment/);
+
+  assert.match(distribution, /THE402_PLATFORM_VERIFICATION_WALLET,[\s\S]+OWNER_CONTROLLED_CANARY_PAYER\.toLowerCase\(\),[\s\S]+wallet\.toLowerCase\(\)/);
+  assert.match(distribution, /normalizeThe402CustomerSettlement\([\s\S]+expectedIds,[\s\S]+excludedBuyerWallets,[\s\S]+retiredServiceIds/);
+  assert.match(distribution, /verifiedCustomerRevenueUsd = verifiedCustomerSettlements\.reduce/);
+  assert.match(distribution, /job\.creator_agent_id !== NEAR_MARKET_PROVIDER_ID/);
+  assert.match(distribution, /receipt\.buyerId !== PAYAN_PROVIDER_ID/);
+  assert.match(distribution, /already counted by direct onchain settlement accounting/);
+});
+
 test("directory PR monitoring uses authenticated GitHub reads instead of exhausted anonymous API quota", async () => {
   const [directory, telemetry, distribution] = await Promise.all([
     readFile(new URL("../agent/scripts/directory-monitor.ts", import.meta.url), "utf8"),

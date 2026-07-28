@@ -251,12 +251,13 @@ const BUYER_QUERY_BENCHMARK: Readonly<Record<ProductKey, readonly string[]>> = O
   ]),
 });
 const MARKETPLACE_SEARCH_INTENTS: ReadonlyArray<{
-  product: "single" | "portfolio" | "harness" | "run" | "flake" | "mcpdrift";
+  product: ProductKey;
   query: string;
 }> = [
   { product: "single", query: "is this GitHub issue bounty still available" },
   { product: "portfolio", query: "which GitHub bounty should I choose" },
   { product: "harness", query: "check repository instructions before coding" },
+  { product: "skill", query: "is this agent skill safe to install" },
   { product: "run", query: "why did this GitHub Actions run fail" },
   { product: "flake", query: "is this CI failure a flake or flaky test" },
   { product: "mcpdrift", query: "will this MCP schema update break existing agents" },
@@ -266,6 +267,9 @@ function expectedDiscoveryResources(): Record<ProductKey, string> {
     product,
     `${api}${contract.path}`,
   ])) as Record<ProductKey, string>;
+}
+function catalogHasProduct(entries: readonly { product: string }[], product: ProductKey): boolean {
+  return entries.some((entry) => entry.product === product);
 }
 if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
   throw new Error("REVENUE_WALLET must be a public 20-byte EVM address.");
@@ -989,10 +993,7 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const retiredServiceIds = new Set<string>(THE402_RETIRED_SERVICE_IDS);
   const owned = services.filter(({ id }) => expectedIds.has(String(id)));
   if (owned.length !== expectedIds.size || new Set(owned.map(({ id }) => id)).size !== expectedIds.size) {
-    throw new Error("the402 catalog does not contain the exact six expected services.");
-  }
-  if (services.some(({ name }) => name === "SkillVerdict")) {
-    throw new Error("SkillVerdict was added to the402 before its isolated experiment ended.");
+    throw new Error(`the402 catalog does not contain the exact ${expectedIds.size} expected services.`);
   }
   for (const service of owned) {
     const expected = expectedById.get(String(service.id));
@@ -1146,7 +1147,8 @@ async function the402Status(): Promise<Record<string, unknown>> {
     participant_id: the402ParticipantId,
     provider_wallet: String(earnings.wallet).toLowerCase(),
     service_count: owned.length,
-    skillverdict_excluded: true,
+    expected_service_count: expectedIds.size,
+    skillverdict_listed: catalogHasProduct(THE402_LISTINGS, "skill"),
     webhook_healthy: webhookReady,
     webhook_health_status: webhookHealth.healthy ? webhookHealth.status : "synthetic_test_verified",
     marketplace_webhook_healthy: webhookHealth.healthy,
@@ -1232,7 +1234,7 @@ async function nearMarketStatus(): Promise<Record<string, unknown>> {
   const expected = new Map(NEAR_MARKET_LISTINGS.map((listing) => [listing.service_id, listing]));
   const owned = services.filter(({ service_id }) => expected.has(String(service_id)));
   if (owned.length !== expected.size || new Set(owned.map(({ service_id }) => service_id)).size !== expected.size) {
-    throw new Error("catalog does not contain the exact six expected services.");
+    throw new Error(`catalog does not contain the exact ${expected.size} expected services.`);
   }
   for (const service of owned) {
     const listing = expected.get(String(service.service_id));
@@ -1262,6 +1264,8 @@ async function nearMarketStatus(): Promise<Record<string, unknown>> {
     listed: true,
     provider_id: NEAR_MARKET_PROVIDER_ID,
     service_count: owned.length,
+    expected_service_count: expected.size,
+    skillverdict_listed: catalogHasProduct(NEAR_MARKET_LISTINGS, "skill"),
     listing_contracts_verified: true,
     completed_external_jobs: completed.length,
     completed_external_job_ids: completed.map(({ job_id }) => job_id),
@@ -1282,7 +1286,7 @@ function payanOfferMap(): Record<string, string> {
   const expectedProducts = new Set(PAYAN_OFFERS.map(({ product }) => product));
   if (Object.keys(offerMap).length !== expectedProducts.size ||
     [...expectedProducts].some((product) => !/^[a-z0-9]{20,64}$/.test(offerMap[product] || ""))) {
-    throw new Error("PAYAN_OFFER_MAP does not contain the exact six expected offers.");
+    throw new Error(`PAYAN_OFFER_MAP does not contain the exact ${expectedProducts.size} expected offers.`);
   }
   return offerMap;
 }
@@ -1728,6 +1732,8 @@ async function payanStatus(): Promise<Record<string, unknown>> {
     listed: true,
     provider_id: PAYAN_PROVIDER_ID,
     offer_count: offers.length,
+    expected_offer_count: PAYAN_OFFERS.length,
+    skillverdict_listed: catalogHasProduct(PAYAN_OFFERS, "skill"),
     listing_contracts_verified: true,
     delivered_external_sales: delivered.length,
     delivered_offer_sales: deliveredOffers.length,
@@ -1755,10 +1761,26 @@ async function marketplaceSearchStatus(): Promise<Record<string, unknown>> {
     throw new Error("NEAR_MARKET_API_KEY is missing or invalid.");
   }
   const offerMap = payanOfferMap();
-  const the402Ids = new Map(THE402_LISTINGS.map(({ product, service_id }) => [product, service_id]));
-  const nearIds = new Map(NEAR_MARKET_LISTINGS.map(({ product, service_id }) => [product, service_id]));
+  const the402Ids = new Map<ProductKey, string>(
+    THE402_LISTINGS.map(({ product, service_id }) => [product, service_id]),
+  );
+  const nearIds = new Map<ProductKey, string>(
+    NEAR_MARKET_LISTINGS.map(({ product, service_id }) => [product, service_id]),
+  );
+  const enabledIntents = MARKETPLACE_SEARCH_INTENTS.filter(({ product }) =>
+    the402Ids.has(product) && nearIds.has(product) && Boolean(offerMap[product])
+  );
+  if (
+    the402Ids.size !== THE402_LISTINGS.length ||
+    nearIds.size !== NEAR_MARKET_LISTINGS.length ||
+    enabledIntents.length !== the402Ids.size ||
+    enabledIntents.length !== nearIds.size ||
+    enabledIntents.length !== PAYAN_OFFERS.length
+  ) {
+    throw new Error("Marketplace search identities do not cover the same expected products.");
+  }
 
-  const queries = await Promise.all(MARKETPLACE_SEARCH_INTENTS.map(async ({ product, query }) => {
+  const queries = await Promise.all(enabledIntents.map(async ({ product, query }) => {
     const the402Url = new URL(`${THE402_API}/services/catalog`);
     the402Url.searchParams.set("q", query);
     the402Url.searchParams.set("limit", "100");
@@ -2640,12 +2662,12 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Current acquisition experiment:** ${experiment.status || "unavailable"}${experiment.started_at ? ` (started ${experiment.started_at}; ends ${experiment.ends_at})` : " (clock starts on first verified directory placement)"}
 - **Experiment next action:** ${experiment.next_action?.code || "unavailable"} — ${experiment.next_action?.reason || "No classified action available."}
 - **Customer purchases:** ${totalPurchases} (${Number(purchases.total || 0)} direct x402; ${marketplacePurchases} the402 one-off jobs; ${subscriptionPurchases} the402 subscriptions; ${nearPurchases} NEAR Agent Market jobs; ${taskmarketPurchases} onchain-verified Taskmarket awards)
-- **the402 listing contracts:** ${report.marketplaces?.the402?.listing_contracts_verified ? "6 / 6 exact input and deliverable schemas verified" : "unavailable or drifted"}
+- **the402 listing contracts:** ${report.marketplaces?.the402?.listing_contracts_verified ? `${Number(report.marketplaces.the402.service_count || 0)} / ${Number(report.marketplaces.the402.expected_service_count || THE402_LISTINGS.length)} exact input and deliverable schemas verified` : "unavailable or drifted"}
 - **the402 buyer-request feed:** ${report.marketplaces?.the402?.request_notifications_enabled ? "enabled; unset minimum budgets normalized before exact-match autonomous bidding" : "unavailable"}
 - **the402 service attempts:** ${Number(the402OutcomeTotals.total_jobs || 0)} total (${Number(the402OutcomeTotals.successful_jobs || 0)} successful, ${Number(the402OutcomeTotals.failed_jobs || 0)} failed, ${Number(the402OutcomeTotals.disputed_jobs || 0)} disputed; marketplace telemetry, not settlement proof)
 - **the402 monthly bundle:** ${report.marketplaces?.the402?.subscription_plan?.active ? `$${Number(report.marketplaces.the402.subscription_plan.agent_price_usd).toFixed(2)} for up to ${report.marketplaces.the402.subscription_plan.maximum_monthly_requests} requests` : "unavailable"}
-- **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"}
-- **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
+- **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? `${Number(report.marketplaces.near.service_count || 0)} / ${Number(report.marketplaces.near.expected_service_count || NEAR_MARKET_LISTINGS.length)} exact contracts verified` : "unavailable or drifted"}
+- **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? `${Number(report.marketplaces.payan.offer_count || 0)} / ${Number(report.marketplaces.payan.expected_offer_count || PAYAN_OFFERS.length)} exact contracts verified` : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **Payan exact-fit demand capture:** ${payanDemand.healthy ? "enabled and healthy" : "unavailable or degraded"}; ${Number(payanDemand.open_requests_seen || 0)} open seen, ${Number(payanDemand.exact_matches || 0)} exact fits, ${Number(payanDemand.tracked_requests || 0)} tracked bids, ${Number(payanDemand.accepted || 0)} accepted, ${Number(payanDemand.fulfilled || 0)} fulfilled, ${Number(payanDemand.approved || 0)} approved (never bids on incomplete or mismatched briefs)
 - **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits; Taskmarket ${Number(taskmarketDemand.api_escrow_backed_open_tasks || 0)} API escrow-backed / $${String(taskmarketDemand.api_escrow_backed_reward_usdc || "0")} USDC and ${Number(taskmarketDemand.exact_candidate_count || 0)} exact existing-product fits (inventory is never revenue)
 - **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} live-window pending ($${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} expired awaiting requester finalization ($${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} pre-expiry closed awaiting finalization ($${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (all pending amounts are potential, and submissions, submit transactions, API award rows, or expiry alone remain zero purchases and zero revenue)
@@ -2796,10 +2818,10 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - Monetize Your Agent suite entry: ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - 402directory endpoints: ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} (${report.acquisition?.directory_402?.status || "unavailable"}; seven review submissions are not purchases)
 - 402 Index endpoints: ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} (${report.acquisition?.index_402?.status || "unavailable"}; MCPDrift body-bound preflight is not probe-compatible)
-- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "synthetic_test_verified" ? "platform webhook test verified" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict excluded during isolated experiment)
+- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / ${report.marketplaces?.the402?.expected_service_count ?? THE402_LISTINGS.length} (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "synthetic_test_verified" ? "platform webhook test verified" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict ${report.marketplaces?.the402?.skillverdict_listed ? "listed" : "not listed"})
 - the402 per-product service attempts: ${Object.entries(report.marketplaces?.the402?.service_outcomes || {}).map(([product, outcome]: [string, any]) => `${product} ${Number(outcome.total_jobs || 0)} total/${Number(outcome.failed_jobs || 0)} failed/${Number(outcome.disputed_jobs || 0)} disputed`).join("; ") || "unavailable"} (attempt telemetry only; settlements remain authoritative)
-- NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
-- PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded); exact-fit request automation ${report.marketplaces?.payan?.demand_capture?.healthy ? "healthy" : "unavailable"}
+- NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / ${report.marketplaces?.near?.expected_service_count ?? NEAR_MARKET_LISTINGS.length} (automated JSON fulfillment; SkillVerdict ${report.marketplaces?.near?.skillverdict_listed ? "listed" : "not listed"})
+- PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / ${report.marketplaces?.payan?.expected_offer_count ?? PAYAN_OFFERS.length} (Base x402 proxy; SkillVerdict ${report.marketplaces?.payan?.skillverdict_listed ? "listed" : "not listed"}); exact-fit request automation ${report.marketplaces?.payan?.demand_capture?.healthy ? "healthy" : "unavailable"}
 - Agentic Market automatic endpoints: ${report.marketplaces?.agentic_market?.endpoint_count ?? "unavailable"} / 7 (CDP Bazaar mirror; reported quality counters excluded from purchase and revenue accounting)
 - Edge funnel capture: ${funnel.available ? `${Number(funnel.trusted_external_402_challenges || 0)} trusted external challenges; ${Number(funnel.trusted_signed_payment_attempts || 0)} signed attempts in epoch ${Number(funnel.trusted_epoch_id || 1)} since ${funnel.trusted_capture_started_at || "the clean boundary"}; ${Number(funnel.external_402_challenges || 0)} older/lifetime external-or-unattributed challenges retained but excluded from rates` : "unavailable"} (aggregate HTTP telemetry only; onchain ledger remains authoritative)
 - Buyer-candidate discovery capture: ${funnel.available ? `${Number(funnel.trusted_buyer_candidate_discovery_requests || 0)} trusted since the clean boundary; ${Number(funnel.buyer_candidate_discovery_requests || 0)} lifetime` : "unavailable"} (direct/hidden, marketplace, web/GitHub, and other non-health discovery retained; Agent402 OpenAPI/x402 health, owner automation, x402 observer, and registry crawlers excluded)

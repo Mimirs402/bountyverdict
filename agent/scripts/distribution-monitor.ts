@@ -250,14 +250,15 @@ const BUYER_QUERY_BENCHMARK: Readonly<Record<ProductKey, readonly string[]>> = O
   ]),
 });
 const MARKETPLACE_SEARCH_INTENTS: ReadonlyArray<{
-  product: "single" | "portfolio" | "harness" | "run" | "flake";
+  product: "single" | "portfolio" | "harness" | "run" | "flake" | "mcpdrift";
   query: string;
 }> = [
-  { product: "single", query: "is this GitHub bounty still open and unclaimed" },
-  { product: "portfolio", query: "which GitHub bounty should I work on" },
-  { product: "harness", query: "check AGENTS.md and CLAUDE.md before editing this repository" },
+  { product: "single", query: "is this GitHub issue bounty still available" },
+  { product: "portfolio", query: "which GitHub bounty should I choose" },
+  { product: "harness", query: "check repository instructions before coding" },
   { product: "run", query: "why did this GitHub Actions run fail" },
-  { product: "flake", query: "should I rerun this failed workflow or fix the code" },
+  { product: "flake", query: "should I rerun this flaky workflow" },
+  { product: "mcpdrift", query: "will this MCP schema update break agents" },
 ];
 function expectedDiscoveryResources(): Record<ProductKey, string> {
   return Object.fromEntries(Object.entries(PRODUCT_CATALOG).map(([product, contract]) => [

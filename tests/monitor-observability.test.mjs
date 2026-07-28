@@ -387,7 +387,8 @@ test("marketplace retrieval uses a blind-agent task holdout instead of seller-sh
   const distribution = await readFile(distributionUrl, "utf8");
   assert.doesNotMatch(distribution, /public GitHub bounty worth pursuing/);
   assert.match(distribution, /why did this GitHub Actions run fail/);
-  assert.match(distribution, /check AGENTS\.md and CLAUDE\.md before editing this repository/);
+  assert.match(distribution, /check repository instructions before coding/);
+  assert.match(distribution, /will this MCP schema update break agents/);
   assert.match(distribution, /will this MCP tools list update break existing agents/);
   assert.match(distribution, /Two plain-language questions per product/);
   assert.match(distribution, /not observed marketplace query volume/);

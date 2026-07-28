@@ -169,7 +169,7 @@ jobs:
           # while Cloudflare propagates a new version. Wait for the new root
           # contract, rather than retrying only transport failures.
           root_ready=false
-          for attempt in {1..12}; do
+          for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/" | node -e '
               let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
                 const value = JSON.parse(body);
@@ -221,7 +221,7 @@ jobs:
           # different edge after deploy. A stale response is HTTP 200, so curl's
           # transport retry is insufficient: retry semantic convergence too.
           x402_ready=false
-          for attempt in {1..12}; do
+          for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/x402" | node -e '
               let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
                 const value = JSON.parse(body);
@@ -291,7 +291,7 @@ jobs:
           # a new Worker version propagates. Retry the semantic release contract,
           # not only transport errors.
           ai_catalog_ready=false
-          for attempt in {1..12}; do
+          for attempt in {1..30}; do
             if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/.well-known/ai-catalog.json" | node -e '
               let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
                 const value = JSON.parse(body);
@@ -337,7 +337,7 @@ jobs:
           # MCP verification spans several requests. During edge propagation a
           # sequence can otherwise mix the prior and new Worker versions.
           mcp_release_ready=false
-          for attempt in {1..12}; do
+          for attempt in {1..30}; do
             if node <<'NODE'
           const api = process.env.PRODUCTION_API_URL;
           const headers = {

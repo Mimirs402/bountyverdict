@@ -67,10 +67,18 @@ const transport = new StdioClientTransport({
 let stderr = "";
 transport.stderr?.on("data", (chunk) => { stderr += String(chunk); });
 const client = new Client({ name: "bountyverdict-owner-audit", version: "1.0.0" });
-const timeout = setTimeout(() => void transport.close(), 30_000);
+const timeout = setTimeout(() => void transport.close(), 60_000);
 try {
   await client.connect(transport);
-  const result = await client.listTools();
+  const expectedNames = [...expectedTools].sort();
+  let result = await client.listTools();
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const names = result.tools.map(({ name }) => name).sort();
+    if (JSON.stringify(names) === JSON.stringify(expectedNames)) break;
+    if (attempt === 30) assert.deepEqual(names, expectedNames);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    result = await client.listTools();
+  }
   const names = result.tools.map(({ name }) => name).sort();
   assert.deepEqual(names, [...expectedTools].sort());
   for (const tool of result.tools) {

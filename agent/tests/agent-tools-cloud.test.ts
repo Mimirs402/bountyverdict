@@ -95,6 +95,7 @@ test("Agent Tools Cloud rejects wrong-wallet, unknown-route, and invalid probe t
 });
 
 const expectedMcpTools = [
+  "choose_github_agent_decision",
   "check_github_bounty",
   "rank_github_bounties",
   "audit_agent_harness",
@@ -143,14 +144,14 @@ const mcpOptions = {
   expectedDescriptionPrefixes: expectedMcpDescriptionPrefixes,
 };
 
-test("Agent Tools Cloud verifies the refreshed six-tool x402 MCP listing", () => {
+test("Agent Tools Cloud verifies the free selector and six paid MCP tools", () => {
   const parsed = parseAgentToolsCloudMcpListing(mcpSearch, mcpPayload(), mcpOptions);
   assert.equal(parsed.status, "listed");
   assert.equal(parsed.x402_supported, true);
-  assert.equal(parsed.listed_tools, 6);
+  assert.equal(parsed.listed_tools, 7);
   assert.equal(parsed.safety_verdict, "clean");
   assert.deepEqual(parsed.tool_names, expectedMcpTools);
-  assert.equal(parsed.current_tool_descriptions, 6);
+  assert.equal(parsed.current_tool_descriptions, 7);
   assert.equal(parsed.tool_description_revision, "agent_question_v3");
 });
 

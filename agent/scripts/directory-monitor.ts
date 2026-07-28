@@ -105,6 +105,7 @@ const agentToolsCloudMcpX402Slugs = Object.freeze([
   "bountyverdict-agent-decision-tools-x402",
 ]);
 const agentToolsCloudMcpTools = Object.freeze([
+  "choose_github_agent_decision",
   "check_github_bounty",
   "rank_github_bounties",
   "audit_agent_harness",
@@ -113,6 +114,7 @@ const agentToolsCloudMcpTools = Object.freeze([
   "check_mcp_tool_drift",
 ]);
 const agentToolsCloudMcpToolDescriptionPrefixes = Object.freeze({
+  choose_github_agent_decision: "Choose the economical next call",
   check_github_bounty: "Is this public GitHub issue bounty still claimable",
   rank_github_bounties: "Which public GitHub bounty should I work on next?",
   audit_agent_harness: "Can a coding agent safely work in this public repository",

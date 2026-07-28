@@ -28,6 +28,17 @@ const issueUrls = process.env.ISSUE_URLS
   : defaultPortfolio;
 const contract = PRODUCT_CATALOG[product];
 const ownerProbeUserAgent = "bountyverdict-payment-smoke/1.0";
+const workerVersionOverride = process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE;
+if (workerVersionOverride && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionOverride)) {
+  throw new Error("CLOUDFLARE_WORKER_VERSION_OVERRIDE must be a lowercase UUID.");
+}
+const ownerHeaders = {
+  Accept: "application/json",
+  "User-Agent": ownerProbeUserAgent,
+  ...(workerVersionOverride
+    ? { "Cloudflare-Workers-Version-Overrides": `bountyverdict-agent-production="${workerVersionOverride}"` }
+    : {}),
+};
 const url = new URL(contract.path, baseUrl);
 const harnessRepo = process.env.REPO_URL || defaultRepo;
 if (product === "skill") {
@@ -62,11 +73,11 @@ const postBody: unknown = product === "single"
 const requestInit: RequestInit = postBody !== undefined
   ? {
       method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": ownerProbeUserAgent },
+      headers: { ...ownerHeaders, "Content-Type": "application/json" },
       body: JSON.stringify(postBody),
       redirect: "error",
     }
-    : { headers: { Accept: "application/json", "User-Agent": ownerProbeUserAgent }, redirect: "error" };
+    : { headers: ownerHeaders, redirect: "error" };
 
 function decodeHeader(value: string): any {
   return JSON.parse(Buffer.from(value, "base64").toString("utf8"));

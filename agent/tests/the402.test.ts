@@ -5,6 +5,7 @@ import {
   parseThe402JobDispatch,
   parseThe402ServiceMap,
   reportThe402Result,
+  verifyThe402ApiKeyWebhookEnvelope,
   verifyThe402Webhook,
 } from "../src/the402.ts";
 import {
@@ -112,6 +113,24 @@ test("the402 webhook verification pins API key, HMAC body, and five-minute repla
   assert.equal(await verifyThe402Webhook({ ...common, api_key_header: `${apiKey}x` }), false);
   assert.equal(await verifyThe402Webhook({ ...common, raw_body: `${body} ` }), false);
   assert.equal(await verifyThe402Webhook({ ...common, now_ms: nowMs + 301_000 }), false);
+});
+
+test("the402 API-key fallback still requires the exact bearer, fresh timestamp, and signature envelope", async () => {
+  const timestamp = "1785232800";
+  const signatureHeader = `sha256=${"a".repeat(64)}`;
+  const valid = {
+    raw_body: body,
+    api_key_header: apiKey,
+    signature_header: signatureHeader,
+    timestamp_header: timestamp,
+    api_key: apiKey,
+    now_ms: 1_785_232_800_000,
+  };
+  assert.equal(await verifyThe402ApiKeyWebhookEnvelope(valid), true);
+  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, api_key_header: `${apiKey}_wrong` }), false);
+  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, timestamp_header: "1785232499" }), false);
+  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, signature_header: "sha256=bad" }), false);
+  assert.equal(await verifyThe402ApiKeyWebhookEnvelope({ ...valid, raw_body: "" }), false);
 });
 
 test("the402 dispatch parser binds a known service and exact callback origin", () => {

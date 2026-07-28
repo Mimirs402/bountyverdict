@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DAILY_REVIEW_SCORECARD_MAX_BYTES,
+  applyDailyReviewModelBudget,
   buildDailyReviewGate,
   buildDailyReviewScorecard,
 } from "../src/daily-review-scorecard.ts";
@@ -232,4 +233,45 @@ test("paid-stage deltas and reliability alerts produce only a compact scorecard 
   assert.equal(reminderGate.reason, "unhealthy_periodic_reminder");
   assert.equal(reminderGate.action, "invoke_codex");
   assert.match(reminderGate.prompt || "", /health alerts only/);
+});
+
+test("scheduled review is model-free unless an external budget gate opts in", () => {
+  const first = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: snapshot(),
+    demand: { errors: [] },
+  }, now);
+  const changedSnapshot = snapshot();
+  recordMcpObservation(changedSnapshot, {
+    observed_at: now,
+    stage: "payment_required",
+    product: "run",
+    source: "unknown",
+    client_class: "agent_runtime",
+    client_family: "codex",
+    validation_kind: "not_applicable",
+    channel: "direct_or_hidden",
+  });
+  const changed = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: changedSnapshot,
+    demand: { errors: [] },
+  }, "2026-07-28T12:00:00.000Z");
+  const gate = buildDailyReviewGate(changed, first);
+
+  const held = applyDailyReviewModelBudget(gate, false);
+  assert.equal(held.action, "skip_codex");
+  assert.equal(held.reason, "model_budget_not_enabled");
+  assert.equal(held.prompt, null);
+  assert.equal(held.model_review_enabled, false);
+  assert.equal(held.codex_suppressed, true);
+
+  const enabled = applyDailyReviewModelBudget(gate, true);
+  assert.equal(enabled.action, "invoke_codex");
+  assert.equal(enabled.reason, "material_change");
+  assert.match(enabled.prompt || "", /Review only this compact/);
+  assert.equal(enabled.model_review_enabled, true);
+  assert.equal(enabled.codex_suppressed, false);
 });

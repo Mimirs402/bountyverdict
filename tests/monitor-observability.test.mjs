@@ -14,9 +14,16 @@ const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.serv
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
+const funnelTailServiceUrl = new URL("../ops/systemd/bountyverdict-funnel-tail.service", import.meta.url);
 const taskmarketPitchServiceUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.service", import.meta.url);
 const taskmarketPitchTimerUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.timer", import.meta.url);
 const geminiExtensionUrl = new URL("../gemini-extension.json", import.meta.url);
+
+test("funnel collector backs off during provider outages", async () => {
+  const service = await readFile(funnelTailServiceUrl, "utf8");
+  assert.match(service, /^Restart=always$/m);
+  assert.match(service, /^RestartSec=60s$/m);
+});
 
 test("frequent reporting samples merchant activity without semantic retrieval while full audits establish a drain", async () => {
   const [distribution, auditedRunner, directory] = await Promise.all([

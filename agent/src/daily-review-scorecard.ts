@@ -84,6 +84,12 @@ export type DailyReviewGate = {
   prompt: string | null;
 };
 
+export type DailyReviewExecutionGate = Omit<DailyReviewGate, "reason"> & {
+  reason: DailyReviewGate["reason"] | "model_budget_not_enabled";
+  model_review_enabled: boolean;
+  codex_suppressed: boolean;
+};
+
 const UNHEALTHY_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 function object(value: unknown): Record<string, any> {
@@ -399,6 +405,27 @@ export function buildDailyReviewGate(
     reason: "material_change",
     changed_paths: changes,
     prompt: compactReviewPrompt(scorecard, changes),
+  };
+}
+
+export function applyDailyReviewModelBudget(
+  gate: DailyReviewGate,
+  modelReviewEnabled: boolean,
+): DailyReviewExecutionGate {
+  if (gate.action === "invoke_codex" && !modelReviewEnabled) {
+    return {
+      action: "skip_codex",
+      reason: "model_budget_not_enabled",
+      changed_paths: gate.changed_paths,
+      prompt: null,
+      model_review_enabled: false,
+      codex_suppressed: true,
+    };
+  }
+  return {
+    ...gate,
+    model_review_enabled: modelReviewEnabled,
+    codex_suppressed: false,
   };
 }
 

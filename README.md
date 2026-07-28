@@ -1,4 +1,4 @@
-# BountyVerdict Agent Decision APIs
+# BountyVerdict — GitHub Actions Diagnosis & Agent Skills
 
 [![CI](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml/badge.svg)](https://github.com/Mimirs402/bountyverdict/actions/workflows/ci.yml) [![skills.sh placement](https://skills.sh/b/Mimirs402/bountyverdict)](https://skills.sh/Mimirs402/bountyverdict)
 
@@ -6,7 +6,7 @@
 
 The button adds one free selector and six paid decision tools to VS Code. The selector deterministically returns the exact paid tool, price, sample, and required input without producing a verdict or requesting payment. Paid calls still require a separately authorized x402 wallet; installing, listing, or using the selector does not charge anything.
 
-Seven paid, bounded decision APIs for autonomous coding agents. Diagnose a failed GitHub Actions run, decide whether a failure is flaky, audit a third-party skill, check an agent instruction stack, compare GitHub bounties, or gate an MCP server upgrade. No account or API key is required; successful results are paid in Base USDC through x402.
+Seven paid, bounded decision APIs for autonomous coding agents, available as installable Agent Skills and a remote Model Context Protocol (MCP) server. Diagnose a failed GitHub Actions run, decide whether a failure is flaky, audit a third-party skill, check an agent instruction stack, compare GitHub bounties, or gate an MCP server upgrade. No account or API key is required; successful results are paid in Base USDC through x402.
 
 Install the router that selects the narrowest check and applies its payment safeguards:
 

@@ -49,7 +49,7 @@ test("the402 request parser pins the posting identity and platform-relative URLs
 test("the402 bidder selects only exact existing-product briefs with explicit intent", () => {
   const decision = selectThe402Bid(posting, new Date("2026-07-20T18:00:00Z"));
   assert.equal(decision?.product, "run");
-  assert.equal(decision?.service_id, "svc_cdd16073d02c4429");
+  assert.equal(decision?.service_id, "svc_f269590f47ae463f");
   assert.equal(decision?.price_usd, 0.04);
   assert.equal(selectThe402Bid({ ...posting, title: "Write a CI article" }), null);
   assert.equal(selectThe402Bid({ ...posting, brief: { run_url: posting.brief.run_url, output: "markdown" } }), null);
@@ -74,7 +74,7 @@ test("the402 bidder disambiguates RunVerdict from FlakeVerdict and excludes Skil
     budget_min_usd: 0.07,
   });
   assert.equal(flake?.product, "flake");
-  assert.equal(flake?.service_id, "svc_565a2a5c8e154b6e");
+  assert.equal(flake?.service_id, "svc_3cfea7eb5f574e6e");
   assert.equal(selectThe402Bid({
     ...posting,
     title: "Audit this agent skill before installation",
@@ -103,7 +103,7 @@ test("the402 request evaluation fetches one official posting and places one auth
   assert.deepEqual(await requests[1].json(), {
     price_usd: 0.04,
     eta_hours: 1,
-    service_id: "svc_cdd16073d02c4429",
+    service_id: "svc_f269590f47ae463f",
     pitch: "GitHub Actions CI Failure Diagnosis — RunVerdict is an existing automated, evidence-linked service with a published exact input and deliverable contract. Delivery is within one hour and normally completes in seconds.",
   });
 });

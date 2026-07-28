@@ -34,7 +34,9 @@
       "vars": {
         "X402_NETWORK": "eip155:8453",
         "X402_FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402",
-        "THE402_SERVICE_MAP": "{\"svc_5e36dabc8b434e95\":\"single\",\"svc_780bf04bd8204b2f\":\"portfolio\",\"svc_df4baf282b7d48d5\":\"harness\",\"svc_cdd16073d02c4429\":\"run\",\"svc_565a2a5c8e154b6e\":\"flake\",\"svc_40e97a390c5b4d71\":\"mcpdrift\"}"
+        "THE402_AUTOMATION_ENABLED": "YES",
+        "THE402_PLATFORM_ENVELOPE_AUTH_ENABLED": "YES",
+        "THE402_SERVICE_MAP": "{\"svc_4462e481fedf4afc\":\"single\",\"svc_6df309e4408e4de7\":\"portfolio\",\"svc_ca98b66ee3d24836\":\"harness\",\"svc_f269590f47ae463f\":\"run\",\"svc_3cfea7eb5f574e6e\":\"flake\",\"svc_6bd98fed2d9a43d1\":\"mcpdrift\"}"
       },
       "ratelimits": [
         {

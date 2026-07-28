@@ -148,6 +148,61 @@ export async function verifyThe402Webhook(input: {
   );
 }
 
+export async function diagnoseThe402PlatformWebhookEnvelope(input: {
+  raw_body: string;
+  api_key_header: string | undefined;
+  cloudflare_worker_header: string | undefined;
+  signature_header: string | undefined;
+  timestamp_header: string | undefined;
+  api_key: string | undefined;
+  now_ms?: number;
+}): Promise<{
+  body_valid: boolean;
+  api_key_configured: boolean;
+  api_key_header_present: boolean;
+  api_key_matches: boolean;
+  cloudflare_worker_header_present: boolean;
+  cloudflare_worker_matches: boolean;
+  timestamp_format_valid: boolean;
+  timestamp_fresh: boolean;
+  signature_format_valid: boolean;
+}> {
+  const bytes = new TextEncoder().encode(input.raw_body);
+  const bodyValid = bytes.length > 0 && bytes.length <= MAX_WEBHOOK_BYTES;
+  const apiKeyConfigured = Boolean(input.api_key && input.api_key.length >= 16);
+  const apiKeyHeaderPresent = Boolean(input.api_key_header);
+  const apiKeyMatches = Boolean(
+    apiKeyConfigured && input.api_key_header &&
+    await constantTimeTextEqual(input.api_key_header, input.api_key!),
+  );
+  const cloudflareWorkerHeaderPresent = Boolean(input.cloudflare_worker_header);
+  const cloudflareWorkerMatches = input.cloudflare_worker_header === "the402.ai";
+  const timestampFormatValid = Boolean(input.timestamp_header && /^\d{10}$/.test(input.timestamp_header));
+  const timestamp = timestampFormatValid ? Number(input.timestamp_header) : Number.NaN;
+  const nowSeconds = Math.floor((input.now_ms ?? Date.now()) / 1000);
+  return {
+    body_valid: bodyValid,
+    api_key_configured: apiKeyConfigured,
+    api_key_header_present: apiKeyHeaderPresent,
+    api_key_matches: apiKeyMatches,
+    cloudflare_worker_header_present: cloudflareWorkerHeaderPresent,
+    cloudflare_worker_matches: cloudflareWorkerMatches,
+    timestamp_format_valid: timestampFormatValid,
+    timestamp_fresh: Number.isSafeInteger(timestamp) && Math.abs(nowSeconds - timestamp) <= MAX_WEBHOOK_AGE_SECONDS,
+    signature_format_valid: /^sha256=[a-f0-9]{64}$/.test(input.signature_header || ""),
+  };
+}
+
+export async function verifyThe402PlatformWebhookEnvelope(
+  input: Parameters<typeof diagnoseThe402PlatformWebhookEnvelope>[0],
+): Promise<boolean> {
+  const diagnostics = await diagnoseThe402PlatformWebhookEnvelope(input);
+  return diagnostics.body_valid && diagnostics.api_key_configured &&
+    (diagnostics.api_key_matches || diagnostics.cloudflare_worker_matches) &&
+    diagnostics.timestamp_format_valid && diagnostics.timestamp_fresh &&
+    diagnostics.signature_format_valid;
+}
+
 export function parseThe402JobDispatch(
   rawBody: string,
   serviceMap: ReadonlyMap<string, The402Product>,

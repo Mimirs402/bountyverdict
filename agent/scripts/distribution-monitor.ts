@@ -257,8 +257,8 @@ const MARKETPLACE_SEARCH_INTENTS: ReadonlyArray<{
   { product: "portfolio", query: "which GitHub bounty should I choose" },
   { product: "harness", query: "check repository instructions before coding" },
   { product: "run", query: "why did this GitHub Actions run fail" },
-  { product: "flake", query: "should I rerun this flaky workflow" },
-  { product: "mcpdrift", query: "will this MCP schema update break agents" },
+  { product: "flake", query: "is this CI failure a flake or flaky test" },
+  { product: "mcpdrift", query: "will this MCP schema update break existing agents" },
 ];
 function expectedDiscoveryResources(): Record<ProductKey, string> {
   return Object.fromEntries(Object.entries(PRODUCT_CATALOG).map(([product, contract]) => [

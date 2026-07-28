@@ -561,16 +561,12 @@ function decodeChallenge(header: string): any {
 async function inspectChallenge(
   product: ProductKey,
 ): Promise<Record<string, unknown>> {
-  const url = product === "skill"
+  const url = product === "single"
+        ? `${api}${PRODUCT_CATALOG.single.path}?issue_url=${encodeURIComponent("https://github.com/typeorm/typeorm/issues/3357")}`
+        : product === "skill"
         ? `${api}/api/skill?repo_url=${encodeURIComponent("https://github.com/coinbase/agentic-wallet-skills")}&skill_path=${encodeURIComponent("skills/agentic-wallet")}`
         : `${api}${PRODUCT_CATALOG[product].path}`;
-  const response = await monitoredFetch(url, product === "single"
-    ? {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issue_url: "https://github.com/typeorm/typeorm/issues/3357" }),
-      }
-    : product === "portfolio"
+  const response = await monitoredFetch(url, product === "portfolio"
     ? {
         method: "POST",
         headers: { "Content-Type": "application/json" },

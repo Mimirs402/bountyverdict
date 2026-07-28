@@ -31,6 +31,7 @@ import {
 import {
   THE402_API,
   THE402_LISTINGS,
+  THE402_RETIRED_SERVICE_IDS,
   THE402_SUBSCRIPTION_PLAN,
 } from "../src/the402-catalog.ts";
 import {
@@ -985,6 +986,7 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const services = Array.isArray(catalog.services) ? catalog.services : [];
   const expectedById = new Map(THE402_LISTINGS.map((listing) => [listing.service_id, listing]));
   const expectedIds = new Set<string>(expectedById.keys());
+  const retiredServiceIds = new Set<string>(THE402_RETIRED_SERVICE_IDS);
   const owned = services.filter(({ id }) => expectedIds.has(String(id)));
   if (owned.length !== expectedIds.size || new Set(owned.map(({ id }) => id)).size !== expectedIds.size) {
     throw new Error("the402 catalog does not contain the exact six expected services.");
@@ -1104,6 +1106,7 @@ async function the402Status(): Promise<Record<string, unknown>> {
       settlementJobs[index],
       expectedIds,
       excludedBuyerWallets,
+      retiredServiceIds,
     );
     return verified ? [verified] : [];
   });

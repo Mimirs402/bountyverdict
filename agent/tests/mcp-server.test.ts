@@ -54,7 +54,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   });
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
-  assert.equal(body.result.serverInfo.version, "1.1.12");
+  assert.equal(body.result.serverInfo.version, "1.1.13");
   assert.equal(
     body.result.serverInfo.description,
     "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
@@ -83,16 +83,39 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
   assert.equal(body.result.tools.length, 7);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
   const router = body.result.tools.find((tool: any) => tool.name === FREE_SELECTION_TOOL_NAME);
-  assert.match(router.description, /^Choose the economical next call/);
-  assert.match(router.description, /Free deterministic router/);
+  assert.match(router.description, /^Call with no arguments for a free six-tool catalog/);
+  assert.match(router.description, /unsigned-quote semantics/);
   assert.deepEqual(router.inputSchema.properties.task.enum, FREE_SELECTION_TASKS);
-  assert.match(router.inputSchema.properties.task.description, /one_bounty = claimability/);
+  assert.match(router.inputSchema.properties.task.description, /Omit all arguments for the six-tool catalog/);
   assert.equal(router.inputSchema.properties.candidate_count.minimum, 2);
   assert.equal(router.inputSchema.properties.candidate_count.maximum, 10);
   assert.match(router.inputSchema.properties.needs_ranked_response.description, /cheaper repeated single checks/);
-  assert.deepEqual(router.inputSchema.required, ["task"]);
+  assert.equal(router.inputSchema.required, undefined);
   assert.equal(router.inputSchema.additionalProperties, false);
+  assert.equal(router.outputSchema.type, "object");
   assert.equal(router.outputSchema.additionalProperties, false);
+  assert.deepEqual(router.outputSchema.required, ["selector_call_payment_required"]);
+  assert.deepEqual(router.outputSchema.properties.next_call.required, [
+    "tool_name",
+    "call_strategy",
+    "required_fields",
+    "arguments_template",
+    "payment_required",
+    "authorization_required_before_settlement",
+    "unsigned_call_action",
+    "preserve_arguments_on_retry",
+  ]);
+  assert.equal(router.outputSchema.properties.next_call.additionalProperties, false);
+  assert.equal(router.outputSchema.properties.tools.minItems, 6);
+  assert.equal(router.outputSchema.properties.tools.maxItems, 6);
+  assert.deepEqual(router.outputSchema.properties.tools.items.required, [
+    "task",
+    "natural_task",
+    "tool_name",
+    "price_usdc",
+    "required_fields",
+    "free_sample",
+  ]);
   assert.deepEqual(router.annotations, {
     readOnlyHint: true,
     destructiveHint: false,
@@ -155,6 +178,53 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
   assert.ok(run.outputSchema.required.includes("diagnosis"));
   assert.ok(flake.outputSchema.required.includes("decision"));
   assert.ok(drift.outputSchema.required.includes("action"));
+});
+
+test("free router accepts no arguments and returns a deterministic non-charging six-tool catalog", async () => {
+  const expected = [
+    ["one_bounty", "check_github_bounty", "0.05", ["issue_url"], "/api/sample"],
+    ["bounty_portfolio", "rank_github_bounties", "0.40", ["issue_urls"], "/api/portfolio/sample"],
+    ["repository_agent_instructions", "audit_agent_harness", "0.03", ["repo_url"], "/api/harness/sample"],
+    ["github_actions_root_cause", "diagnose_github_actions_run", "0.04", ["run_url"], "/api/run/sample"],
+    ["github_actions_retry_decision", "classify_github_actions_flake", "0.07", ["run_url"], "/api/flake/sample"],
+    ["mcp_tools_change", "check_mcp_tool_drift", "0.02", ["contract_version", "subject", "annotation_source_trust", "baseline", "current"], "/api/mcp-drift/sample"],
+  ] as const;
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const logs: string[] = [];
+  globalThis.fetch = async () => { throw new Error("zero-argument catalog attempted network access"); };
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    const response = await rpcBody(39, "tools/call", {
+      name: FREE_SELECTION_TOOL_NAME,
+      arguments: {},
+    });
+    assert.equal(response.result.isError, undefined);
+    const catalog = response.result.structuredContent;
+    assert.equal(catalog.selector_call_payment_required, false);
+    assert.equal(catalog.unsigned_quote_cannot_charge, true);
+    assert.match(catalog.next_action, /inspect the unsigned quote before authorizing or stopping/);
+    assert.equal(catalog.tools.length, 6);
+    assert.deepEqual(
+      catalog.tools.map((tool: any) => [
+        tool.task,
+        tool.tool_name,
+        tool.price_usdc,
+        tool.required_fields,
+        new URL(tool.free_sample).pathname,
+      ]),
+      expected,
+    );
+    assert.equal(catalog.tools.every((tool: any) => typeof tool.natural_task === "string" && tool.natural_task.length > 20), true);
+    assert.deepEqual(JSON.parse(response.result.content[0].text), catalog);
+    assert.doesNotMatch(JSON.stringify(response), /"accepts"|x402Version|payment-response/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } })
+    .filter((event) => event.type === "bountyverdict_mcp_funnel");
+  assert.deepEqual(events.map((event) => [event.stage, event.product]), [["selection_preview", null]]);
 });
 
 test("free router maps every bounded task without payment, network access, or a verdict", async () => {
@@ -335,6 +405,13 @@ test("free router rejects missing or misplaced portfolio routing context", async
   });
   assert.equal(misplaced.result.isError, true);
   assert.equal(misplaced.result.structuredContent, undefined);
+
+  const misplacedCatalog = await rpcBody(48, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { candidate_count: 2 },
+  });
+  assert.equal(misplacedCatalog.result.isError, true);
+  assert.equal(misplacedCatalog.result.structuredContent, undefined);
 });
 
 test("MCP success contracts stay within the catalog context budget", async () => {

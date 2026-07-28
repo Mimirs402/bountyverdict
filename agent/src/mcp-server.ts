@@ -12,14 +12,19 @@ import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
 import { MCP_DRIFT_MAX_BODY_BYTES, McpDriftError, parseAndAnalyzeMcpDrift } from "./mcp-drift.ts";
 import { mcpDriftInputSchema } from "./mcp-drift-discovery.ts";
-import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME, freeSelectionRoute } from "./free-selection-router.ts";
+import {
+  FREE_SELECTION_TASKS,
+  FREE_SELECTION_TOOL_NAME,
+  freeSelectionCatalog,
+  freeSelectionRoute,
+} from "./free-selection-router.ts";
 import { MCP_FREE_SELECTION_OUTPUT_SCHEMA, MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
 import { declareMcpHttpPaymentHandoff } from "./payment-handoff.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
 
 const MCP_BODY_LIMIT_BYTES = MCP_DRIFT_MAX_BODY_BYTES + 64 * 1024;
-const MCP_SERVER_VERSION = "1.1.12";
+const MCP_SERVER_VERSION = "1.1.13";
 const MCP_ALLOWED_BROWSER_ORIGINS = new Set(["https://playground.ai.cloudflare.com"]);
 const GITHUB_ISSUE_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/;
 const GITHUB_REPOSITORY_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
@@ -263,7 +268,7 @@ function emitMcpEvent(
   request: RequestClassification,
   validationKind: McpValidationKind = "not_applicable",
 ): void {
-  if (product || stage === "tool_not_found") request.toolStageEmitted = true;
+  if (product || stage === "tool_not_found" || stage === "selection_preview") request.toolStageEmitted = true;
   console.log(JSON.stringify({
     type: "bountyverdict_mcp_funnel",
     schema_version: 3,
@@ -383,15 +388,22 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
 
   server.registerTool(FREE_SELECTION_TOOL_NAME, {
     title: "Choose the right GitHub agent decision tool for free",
-    description: "Choose the economical next call for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change. Free deterministic router: returns total price, sample, exact required fields, a safe argument template, and payment-quote continuation semantics without inspecting the target.",
+    description: "Call with no arguments for a free six-tool catalog, or choose the economical next call for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change. Returns exact prices, samples, required fields, and unsigned-quote semantics without inspecting the target.",
     inputSchema: z.object({
-      task: z.enum(FREE_SELECTION_TASKS).describe("Exact task: one_bounty = claimability of one issue; bounty_portfolio = economical handling of 2-10 issues; repository_agent_instructions = pre-coding instruction audit; github_actions_root_cause = why a run failed; github_actions_retry_decision = retry once versus fix; mcp_tools_change = compatibility of complete tools/list snapshots."),
+      task: z.enum(FREE_SELECTION_TASKS).optional().describe("Optional exact task. Omit all arguments for the six-tool catalog. one_bounty = claimability of one issue; bounty_portfolio = economical handling of 2-10 issues; repository_agent_instructions = pre-coding instruction audit; github_actions_root_cause = why a run failed; github_actions_retry_decision = retry once versus fix; mcp_tools_change = compatibility of complete tools/list snapshots."),
       candidate_count: z.number().int().min(2).max(10).optional().describe("Required only for bounty_portfolio: exact number of distinct issue URLs."),
       needs_ranked_response: z.boolean().optional().describe("For bounty_portfolio only. True when one ranked, partial-failure-aware response is worth the premium; otherwise 2-7 route to cheaper repeated single checks."),
     }).strict(),
     outputSchema: MCP_FREE_SELECTION_OUTPUT_SCHEMA,
     annotations: closedWorldAnnotations,
   }, async (selection) => {
+    if (selection.task === undefined) {
+      if (selection.candidate_count !== undefined || selection.needs_ranked_response !== undefined) {
+        return selectionErrorResult("The zero-argument catalog does not accept portfolio routing fields.");
+      }
+      emitMcpEvent("selection_preview", null, request);
+      return jsonResult(freeSelectionCatalog(origin));
+    }
     if (selection.task === "bounty_portfolio" && selection.candidate_count === undefined) {
       return selectionErrorResult("candidate_count is required for bounty_portfolio.");
     }

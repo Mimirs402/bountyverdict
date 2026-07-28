@@ -678,6 +678,8 @@ function exactMcpLogEvent(value: unknown): {
   if (stage === "capacity_rejected" && (!versionThree || product !== "flake")) return null;
   if (stage === "initialize" || stage === "tools_list" || stage === "protocol_error" || stage === "tool_not_found") {
     if (product !== null) return null;
+  } else if (stage === "selection_preview") {
+    if (product === null ? !versionThree : !MCP_PRODUCTS.includes(product as Exclude<ProductKey, "skill">)) return null;
   } else if (!MCP_PRODUCTS.includes(product as Exclude<ProductKey, "skill">)) return null;
   const clientFamily = (versionTwo || versionThree) && MCP_CLIENT_FAMILIES.includes(record.client_family as McpClientFamily)
     ? record.client_family as McpClientFamily

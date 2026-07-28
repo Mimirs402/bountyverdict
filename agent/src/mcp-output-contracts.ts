@@ -156,39 +156,40 @@ const mcpDriftVerdictOutputSchema = z.object({
   service_reuse: z.string().min(1),
 }).passthrough();
 
+const freeSelectionNextCallSchema = z.object({
+  tool_name: z.string(),
+  call_strategy: z.enum(["single_call", "repeat_for_each_issue"]),
+  required_fields: z.array(z.string()),
+  arguments_template: z.record(z.unknown()),
+  payment_required: z.literal(true),
+  authorization_required_before_settlement: z.literal(true),
+  unsigned_call_action: z.literal("inspect_quote_then_authorize_or_stop"),
+  preserve_arguments_on_retry: z.literal(true),
+}).strict();
+
+// The MCP SDK only publishes and validates object-root output schemas. Keep both
+// response modes in one strict envelope; runtime tests enforce their distinct
+// required fields while the shared schema remains compact enough for tools/list.
 export const MCP_FREE_SELECTION_OUTPUT_SCHEMA = z.object({
-  task: z.enum([
-    "one_bounty",
-    "bounty_portfolio",
-    "repository_agent_instructions",
-    "github_actions_root_cause",
-    "github_actions_retry_decision",
-    "mcp_tools_change",
-  ]),
-  product: z.string().min(1),
-  total_price_usdc: z.string().regex(/^\d+\.\d{2}$/),
-  use_when: z.string().min(1),
-  not_for: z.string().min(1),
-  decision_returned: z.array(z.string().min(1)).min(1),
-  free_sample: z.string().url(),
   selector_call_payment_required: z.literal(false),
-  next_call: z.object({
-    tool_name: z.enum([
-      "check_github_bounty",
-      "rank_github_bounties",
-      "audit_agent_harness",
-      "diagnose_github_actions_run",
-      "classify_github_actions_flake",
-      "check_mcp_tool_drift",
-    ]),
-    call_strategy: z.enum(["single_call", "repeat_for_each_issue"]),
-    required_fields: z.array(z.string().min(1)).min(1),
-    arguments_template: z.record(z.unknown()),
-    payment_required: z.literal(true),
-    authorization_required_before_settlement: z.literal(true),
-    unsigned_call_action: z.literal("inspect_quote_then_authorize_or_stop"),
-    preserve_arguments_on_retry: z.literal(true),
-  }).strict(),
+  task: z.string().optional(),
+  product: z.string().optional(),
+  total_price_usdc: z.string().optional(),
+  use_when: z.string().optional(),
+  not_for: z.string().optional(),
+  decision_returned: z.array(z.string()).optional(),
+  free_sample: z.string().optional(),
+  next_call: freeSelectionNextCallSchema.optional(),
+  unsigned_quote_cannot_charge: z.literal(true).optional(),
+  next_action: z.string().optional(),
+  tools: z.array(z.object({
+    task: z.string(),
+    natural_task: z.string(),
+    tool_name: z.string(),
+    price_usdc: z.string(),
+    required_fields: z.array(z.string()),
+    free_sample: z.string(),
+  }).strict()).length(6).optional(),
 }).strict();
 
 export const MCP_SUCCESS_OUTPUT_SCHEMAS = Object.freeze({

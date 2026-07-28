@@ -245,7 +245,7 @@ export function createMcpServerCard(originInput: string, network: string) {
     serverInfo: {
       name: "io.github.Mimirs402/bountyverdict",
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.12",
+      version: "1.1.13",
     },
     description: MCP_DECISION_DESCRIPTION,
     iconUrl: `${SITE}/favicon.svg`,
@@ -262,7 +262,7 @@ export function createMcpServerCard(originInput: string, network: string) {
       required: false,
       schemes: [],
     },
-    instructions: `If the task is clear but the product is not, call ${FREE_SELECTION_TOOL_NAME} for a free deterministic route. Otherwise choose the paid tool whose opening question matches the task, then inspect its schema and price before calling. Validate complete input before authorizing any Base USDC payment.`,
+    instructions: `Call ${FREE_SELECTION_TOOL_NAME} with no arguments for the free six-tool catalog, or provide its exact task fields for one deterministic route. Otherwise choose the paid tool whose opening question matches the task, then inspect its schema and price before calling. Validate complete input before authorizing any Base USDC payment.`,
     tools: ["dynamic"],
     _meta: {
       payment: {
@@ -380,7 +380,7 @@ export function createAiCatalog(originInput: string) {
         ...MCP_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
       ],
       representativeQueries: [...AI_CATALOG_QUERIES],
-      version: "1.1.12",
+      version: "1.1.13",
       updatedAt: AI_CATALOG_UPDATED_AT,
       metadata: {
         authentication: "none",
@@ -420,7 +420,7 @@ Use the narrowest contract below before an autonomous agent spends coding time, 
 
 This discovery skill never signs, pays, executes repository code, mutates GitHub, fetches MCP catalog URLs, or invokes MCP tools.
 
-Agents with MCP 2025-11-25 Streamable HTTP and x402 support may connect directly to \`${origin}/mcp\`. It exposes a free deterministic selector plus the same six products as paid tools, validates semantic input before requesting payment, and excludes SkillVerdict. Use \`choose_github_agent_decision\` when the task is known but the product name is not, or inspect \`tools/list\` for exact schemas and prices.
+Agents with MCP 2025-11-25 Streamable HTTP and x402 support may connect directly to \`${origin}/mcp\`. It exposes a free deterministic selector plus the same six products as paid tools, validates semantic input before requesting payment, and excludes SkillVerdict. Call \`choose_github_agent_decision\` with no arguments for a compact six-tool catalog, or provide its existing exact task fields for one route.
 
 ## Safe calling sequence
 

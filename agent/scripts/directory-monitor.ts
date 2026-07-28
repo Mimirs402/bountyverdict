@@ -114,7 +114,7 @@ const agentToolsCloudMcpTools = Object.freeze([
   "check_mcp_tool_drift",
 ]);
 const agentToolsCloudMcpToolDescriptionPrefixes = Object.freeze({
-  choose_github_agent_decision: "Choose the economical next call",
+  choose_github_agent_decision: "Call with no arguments for a free six-tool catalog",
   check_github_bounty: "Is this public GitHub issue bounty still claimable",
   rank_github_bounties: "Which public GitHub bounty should I work on next?",
   audit_agent_harness: "Can a coding agent safely work in this public repository",
@@ -185,7 +185,7 @@ const agentSkillsMdSubmissionRecordedAt = "2026-07-22T00:05:36Z";
 const agentSkillsMdListingUrl = "https://agent-skills.md/skills/Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions";
 const agentSkillsMdTaskFirstDescription =
   "Diagnose why a GitHub Actions run failed and find its root cause; decide whether to retry that failed Action once; check or rank GitHub bounties; audit AGENTS.md readiness; detect MCP schema drift.";
-const githubSkillReleaseTag = "v1.1.12";
+const githubSkillReleaseTag = "v1.1.13";
 const mcpRepositoryUrl = "https://mcprepository.com/Mimirs402/bountyverdict";
 const mcpRepositoryMigrationIssueUrl = "https://github.com/mcprepository/mcp-index/issues/3";
 const mcpRepositoryMigrationRequestedAt = "2026-07-27T09:22:10Z";
@@ -1787,7 +1787,7 @@ async function geminiCliGalleryStatus(
     const entry = matches[0] as Record<string, unknown> | undefined;
     const listed = Boolean(entry);
     const contractVerified = Boolean(entry && entry.url === repository && entry.extensionName === "bountyverdict" &&
-      entry.extensionVersion === "1.1.12" && entry.hasMCP === true);
+      entry.extensionVersion === "1.1.13" && entry.hasMCP === true);
     return {
       url: "https://geminicli.com/extensions/",
       catalog_url: geminiCliGalleryUrl,

@@ -43,6 +43,15 @@ const ROUTES = Object.freeze({
   },
 } as const satisfies Record<FreeSelectionTask, SelectionRoute>);
 
+const NATURAL_TASKS = Object.freeze({
+  one_bounty: "Check whether one public GitHub issue bounty is still claimable.",
+  bounty_portfolio: "Compare and rank 2-10 public GitHub issue bounties.",
+  repository_agent_instructions: "Audit a public repository's coding-agent instructions before editing.",
+  github_actions_root_cause: "Diagnose why one public GitHub Actions run failed.",
+  github_actions_retry_decision: "Decide whether to retry a failed GitHub Actions run once or fix it.",
+  mcp_tools_change: "Compare complete MCP tools/list snapshots for breaking or safety changes.",
+} as const satisfies Record<FreeSelectionTask, string>);
+
 function selectedRoute(request: FreeSelectionRequest): SelectionRoute {
   if (
     request.task === "bounty_portfolio" &&
@@ -122,6 +131,25 @@ function totalPriceUsd(route: SelectionRoute, request: FreeSelectionRequest): st
   if (!match) throw new Error("Unsupported catalog price.");
   const totalCents = (BigInt(match[1]) * 100n + BigInt(match[2])) * BigInt(callCount);
   return `${totalCents / 100n}.${(totalCents % 100n).toString().padStart(2, "0")}`;
+}
+
+export function freeSelectionCatalog(origin: string) {
+  return {
+    selector_call_payment_required: false as const,
+    unsigned_quote_cannot_charge: true as const,
+    next_action: "Choose one tool, supply its complete real input, and inspect the unsigned quote before authorizing or stopping.",
+    tools: FREE_SELECTION_TASKS.map((task) => {
+      const route = ROUTES[task];
+      return {
+        task,
+        natural_task: NATURAL_TASKS[task],
+        tool_name: route.toolName,
+        price_usdc: PRODUCT_CATALOG[route.product].priceUsd.slice(1),
+        required_fields: [...route.requiredFields],
+        free_sample: `${origin}${PRODUCT_SELECTION_PREVIEWS[route.product].samplePath}`,
+      };
+    }),
+  };
 }
 
 export function freeSelectionRoute(request: FreeSelectionRequest, origin: string) {

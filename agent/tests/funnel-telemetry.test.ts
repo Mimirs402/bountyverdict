@@ -215,6 +215,31 @@ test("learns MCP conversion stages without retaining tool arguments or request i
   assert.equal(isFunnelSnapshot(snapshot), true);
 });
 
+test("records a zero-argument selector catalog hit without inventing product interest", () => {
+  const value = event("/mcp", 200, { "user-agent": "Codex/99" }, "POST");
+  Object.assign(value, { logs: [{ message: [JSON.stringify({
+    type: "bountyverdict_mcp_funnel",
+    schema_version: 3,
+    stage: "selection_preview",
+    product: null,
+    source: "external",
+    client_family: "not_applicable",
+    validation_kind: "not_applicable",
+  })] }] });
+
+  const observations = classifyMcpTailEvents(value);
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].stage, "selection_preview");
+  assert.equal(observations[0].product, null);
+
+  const snapshot = createFunnelSnapshot();
+  recordMcpObservation(snapshot, observations[0]);
+  assert.equal(snapshot.mcp_totals.selection_preview, 1);
+  assert.equal(snapshot.mcp_by_channel.direct_or_hidden.selection_preview, 1);
+  assert.equal(mcpBuyerCandidateTotals(snapshot).selection_preview, 1);
+  assert.equal(Object.values(snapshot.mcp_by_product).every((counters) => counters.selection_preview === 0), true);
+});
+
 test("retains only an allowlisted MCP initialize client family", () => {
   const value = event("/mcp", 200, { "user-agent": "private-client/123" }, "POST");
   Object.assign(value, { logs: [{ message: [JSON.stringify({

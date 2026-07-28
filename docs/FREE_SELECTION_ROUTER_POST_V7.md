@@ -10,7 +10,14 @@ The treatment tests one narrow hypothesis: a free callable router can turn catal
 
 ## Contract
 
-`choose_github_agent_decision` accepts one bounded task choice:
+`choose_github_agent_decision` accepts either no arguments or one bounded task
+choice. A zero-argument `{}` call returns a compact deterministic catalog of all
+six paid MCP tools. Every catalog row contains the natural task, exact USDC
+price, required fields, and free sample URL. The response explicitly states
+that the selector is free and that a first valid unsigned paid-tool call returns
+a quote without charging.
+
+The existing exact-task choices remain:
 
 - `one_bounty`
 - `bounty_portfolio`
@@ -27,7 +34,7 @@ partial-failure-aware response; eight to ten route to the $0.40 portfolio.
 Eight is price parity with eight single checks; nine and ten are cheaper per
 candidate.
 
-The selector returns the exact existing product, total USDC price for the
+With an exact task, the selector returns the exact existing product, total USDC price for the
 selected strategy, use and exclusion guidance, decision shape, public sample
 URL, and a structured `next_call` containing the exact paid tool, call strategy,
 required fields, safe argument template, and payment-quote continuation

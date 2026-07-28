@@ -55,6 +55,8 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /value\.surfaces\?\.length !== 8/);
   assert.match(workflow, /type === "http"\)\.length !== 7/);
   assert.match(workflow, /repository-agent-instructions-audit", "\/api\/skill", "\/api\/github-actions-run-diagnosis/);
+  assert.match(workflow, /const expected = \["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"\]/);
+  assert.match(workflow, /body\.includes\("### SkillVerdict"\)/);
   assert.match(workflow, /serverInfo\?\.version !== process\.env\.WORKER_RELEASE_VERSION/);
   assert.match(workflow, /ai_catalog_ready=false/);
   assert.match(workflow, /if \[\[ "\$ai_catalog_ready" != "true" \]\]/);

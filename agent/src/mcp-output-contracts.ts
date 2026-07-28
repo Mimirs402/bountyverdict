@@ -28,6 +28,14 @@ const bountyVerdictOutputSchema = rankedBountySchema.extend({
   version: z.literal("1.0"),
   service_reuse: serviceReuseSchema,
   signals: evidenceObjectsSchema,
+  linked_source: z.object({
+    state: z.enum(["NOT_APPLICABLE", "CHECKED", "UNAVAILABLE", "DEPTH_LIMITED"]),
+    url: nullableStringSchema,
+    verdict: z.enum(["AVOID", "CAUTION", "VIABLE"]).nullable(),
+    reward_state: z.enum(["LISTED", "PROMISED", "UNVERIFIED", "NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED"]).nullable(),
+    reward_verification: z.enum(["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API", "MAINTAINER_STATEMENT", "UNVERIFIED", "NONE"]).nullable(),
+    error_code: nullableStringSchema,
+  }).strict(),
   checked_at: checkedAtSchema,
 }).passthrough();
 
@@ -147,6 +155,41 @@ const mcpDriftVerdictOutputSchema = z.object({
   findings: evidenceObjectsSchema.max(256),
   service_reuse: z.string().min(1),
 }).passthrough();
+
+export const MCP_FREE_SELECTION_OUTPUT_SCHEMA = z.object({
+  task: z.enum([
+    "one_bounty",
+    "bounty_portfolio",
+    "repository_agent_instructions",
+    "github_actions_root_cause",
+    "github_actions_retry_decision",
+    "mcp_tools_change",
+  ]),
+  product: z.string().min(1),
+  total_price_usdc: z.string().regex(/^\d+\.\d{2}$/),
+  use_when: z.string().min(1),
+  not_for: z.string().min(1),
+  decision_returned: z.array(z.string().min(1)).min(1),
+  free_sample: z.string().url(),
+  selector_call_payment_required: z.literal(false),
+  next_call: z.object({
+    tool_name: z.enum([
+      "check_github_bounty",
+      "rank_github_bounties",
+      "audit_agent_harness",
+      "diagnose_github_actions_run",
+      "classify_github_actions_flake",
+      "check_mcp_tool_drift",
+    ]),
+    call_strategy: z.enum(["single_call", "repeat_for_each_issue"]),
+    required_fields: z.array(z.string().min(1)).min(1),
+    arguments_template: z.record(z.unknown()),
+    payment_required: z.literal(true),
+    authorization_required_before_settlement: z.literal(true),
+    unsigned_call_action: z.literal("inspect_quote_then_authorize_or_stop"),
+    preserve_arguments_on_retry: z.literal(true),
+  }).strict(),
+}).strict();
 
 export const MCP_SUCCESS_OUTPUT_SCHEMAS = Object.freeze({
   check_github_bounty: bountyVerdictOutputSchema,

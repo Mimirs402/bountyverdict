@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Mimirs402/bountyverdict",
   "title": "BountyVerdict Agent Decision Tools",
-  "description": "Read-only GitHub bounty, agent harness, Actions failure, flake, and MCP tool-drift decisions.",
-  "version": "1.1.9",
+  "description": "Free selector plus read-only GitHub bounty, agent harness, Actions, flake, and MCP drift decisions.",
+  "version": "1.1.11",
   "icons": [
     {
       "src": "https://mimirs402.github.io/bountyverdict/favicon.svg",
@@ -42,6 +42,7 @@
       ],
       "documentation": "https://mimirs402.github.io/bountyverdict/",
       "useCases": [
+        "Choose the exact decision tool from a bounded GitHub engineering task category for free",
         "Check one public GitHub bounty before coding",
         "Rank 2-10 public GitHub bounty opportunities",
         "Audit repository instructions before assigning a coding agent",
@@ -50,6 +51,7 @@
         "Gate an MCP tools/list update for compatibility and safety regressions"
       ],
       "tools": [
+        { "name": "choose_github_agent_decision", "price": "free", "task": "Choose the correct GitHub agent decision tool", "returns": "Exact paid tool, price, sample, and required input without a verdict" },
         { "name": "check_github_bounty", "price": "$0.05 USDC", "task": "Assess one bounty's claimability and delivery risk", "returns": "AVOID, CAUTION, or VIABLE with evidence and reuse guidance" },
         { "name": "rank_github_bounties", "price": "$0.40 USDC", "task": "Choose the best of 2-10 bounty issues", "returns": "Ranked verdicts, best candidate, partial failures, and reuse guidance" },
         { "name": "audit_agent_harness", "price": "$0.03 USDC", "task": "Audit coding-agent repository instructions", "returns": "READY, REVIEW, or REPAIR with commit-pinned findings" },

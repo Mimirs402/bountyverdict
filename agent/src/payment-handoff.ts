@@ -12,15 +12,37 @@ export type ExactPaymentRequest = {
   body?: unknown;
 };
 
+export const PAYMENT_NEXT_ACTION =
+  "This unsigned response did not charge. If already authorized to spend up to max_amount_atomic, call the wallet tool named by this payment object's coinbase_wallet_mcp.tool_name with its coinbase_wallet_mcp.arguments, or execute agentic_wallet.executable with agentic_wallet.argv as an argument vector. Otherwise stop and request authorization.";
+
+type CoinbaseWalletNetwork = "base" | "base-sepolia";
+
+export type CoinbaseWalletMcpHandoff = {
+  tool_name: "make_http_request_with_x402";
+  execution_kind: "equivalent_rest_request";
+  arguments: {
+    baseURL: string;
+    path: string;
+    method: ExactPaymentRequest["method"];
+    queryParams?: Record<string, string>;
+    body?: unknown;
+    maxAmountPerRequest: number;
+    preferredNetwork: CoinbaseWalletNetwork;
+  };
+};
+
 export type PaymentHandoff = {
   protocol: "x402 v2";
-  network: "Base";
+  network: "Base" | "Base Sepolia";
   asset: "USDC";
+  charge_state: "unsigned_not_charged";
+  next_action: typeof PAYMENT_NEXT_ACTION;
   max_amount_atomic: string;
   inspect_challenge_before_signing: true;
   request_binding: string;
   exact_request: ExactPaymentRequest & { normalized_body_sha256?: string };
   authorization_scope: "resource_url" | "resource_url_not_post_body";
+  coinbase_wallet_mcp: CoinbaseWalletMcpHandoff;
   agentic_wallet: {
     executable: "npx";
     argv: string[];
@@ -28,6 +50,7 @@ export type PaymentHandoff = {
     do_not_join_into_shell_string: true;
   };
   retry_semantics: {
+    transport: "rest_http";
     reuse_exact_method_url_and_body: true;
     payment_header: "Payment-Signature";
     expected_success_status: 200;
@@ -40,7 +63,7 @@ const HTTP_HANDOFF_SCHEMA = Object.freeze({
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   properties: {
-    version: { type: "string", const: "1" },
+    version: { type: "string", const: "2" },
     direct_mcp: {
       type: "object",
       properties: {
@@ -53,10 +76,27 @@ const HTTP_HANDOFF_SCHEMA = Object.freeze({
     wallet_mcp: {
       type: "object",
       properties: {
-        capability: { type: "string", const: "make_x402_request" },
-        use_exact_request: { type: "boolean", const: true },
+        tool_name: { type: "string", const: "make_http_request_with_x402" },
+        execution_kind: { type: "string", const: "equivalent_rest_request" },
+        arguments: {
+          type: "object",
+          properties: {
+            baseURL: { type: "string", format: "uri" },
+            path: { type: "string" },
+            method: { type: "string", enum: ["GET", "POST"] },
+            queryParams: {
+              type: "object",
+              additionalProperties: { type: "string" },
+            },
+            body: {},
+            maxAmountPerRequest: { type: "integer", minimum: 1 },
+            preferredNetwork: { type: "string", enum: ["base", "base-sepolia"] },
+          },
+          required: ["baseURL", "path", "method", "maxAmountPerRequest", "preferredNetwork"],
+          additionalProperties: false,
+        },
       },
-      required: ["capability", "use_exact_request"],
+      required: ["tool_name", "execution_kind", "arguments"],
       additionalProperties: false,
     },
     selection_preview: {
@@ -112,13 +152,30 @@ function requiredStringArray(args: Record<string, unknown>, key: string): string
 export async function buildPaymentHandoff(
   exactRequest: ExactPaymentRequest,
   maxAmountAtomic: string,
+  x402Network: string,
 ): Promise<PaymentHandoff> {
   if (!/^\d+$/.test(maxAmountAtomic) || BigInt(maxAmountAtomic) <= 0n) {
     throw new Error("Payment handoff requires a positive atomic amount.");
   }
+  if (BigInt(maxAmountAtomic) > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Payment handoff amount exceeds the wallet MCP safe integer range.");
+  }
+  const walletNetwork = (() => {
+    switch (x402Network) {
+      case "eip155:8453":
+        return { label: "Base" as const, preferred: "base" as const };
+      case "eip155:84532":
+        return { label: "Base Sepolia" as const, preferred: "base-sepolia" as const };
+      default:
+        throw new Error("Payment handoff requires a Coinbase wallet-compatible Base network.");
+    }
+  })();
   const requestUrl = new URL(exactRequest.url);
   if ((requestUrl.protocol !== "https:" && requestUrl.protocol !== "http:") || requestUrl.username || requestUrl.password) {
     throw new Error("Payment handoff request must use http(s) without URL credentials.");
+  }
+  if (requestUrl.hash) {
+    throw new Error("Payment handoff request cannot include a URL fragment.");
   }
   if (exactRequest.method === "GET" && exactRequest.body !== undefined) {
     throw new Error("GET payment handoffs cannot include a request body.");
@@ -144,11 +201,33 @@ export async function buildPaymentHandoff(
     awalArgv.push("-X", "POST", "-d", normalizedBodyJson as string);
   }
   awalArgv.push("--max-amount", maxAmountAtomic, "--json");
+  const queryParams: Record<string, string> = {};
+  for (const [key, value] of requestUrl.searchParams) {
+    if (Object.hasOwn(queryParams, key)) {
+      throw new Error("Payment handoff request cannot contain duplicate query parameter names.");
+    }
+    queryParams[key] = value;
+  }
+  const coinbaseWalletMcp: CoinbaseWalletMcpHandoff = {
+    tool_name: "make_http_request_with_x402",
+    execution_kind: "equivalent_rest_request",
+    arguments: {
+      baseURL: requestUrl.origin,
+      path: requestUrl.pathname,
+      method: exactRequest.method,
+      ...(Object.keys(queryParams).length === 0 ? {} : { queryParams }),
+      ...(exactRequest.body === undefined ? {} : { body: exactRequest.body }),
+      maxAmountPerRequest: Number(maxAmountAtomic),
+      preferredNetwork: walletNetwork.preferred,
+    },
+  };
 
   return {
     protocol: "x402 v2",
-    network: "Base",
+    network: walletNetwork.label,
     asset: "USDC",
+    charge_state: "unsigned_not_charged",
+    next_action: PAYMENT_NEXT_ACTION,
     max_amount_atomic: maxAmountAtomic,
     inspect_challenge_before_signing: true,
     request_binding: requestHint,
@@ -159,6 +238,7 @@ export async function buildPaymentHandoff(
       ...(normalizedBodySha256 === undefined ? {} : { normalized_body_sha256: normalizedBodySha256 }),
     },
     authorization_scope: exactRequest.method === "POST" ? "resource_url_not_post_body" : "resource_url",
+    coinbase_wallet_mcp: coinbaseWalletMcp,
     agentic_wallet: {
       executable: "npx",
       argv: awalArgv,
@@ -166,6 +246,7 @@ export async function buildPaymentHandoff(
       do_not_join_into_shell_string: true,
     },
     retry_semantics: {
+      transport: "rest_http",
       reuse_exact_method_url_and_body: true,
       payment_header: "Payment-Signature",
       expected_success_status: 200,
@@ -229,24 +310,23 @@ export async function declareMcpHttpPaymentHandoff(
   origin: string,
   product: ProductKey,
   normalizedArgs: Record<string, unknown>,
+  x402Network: string,
 ): Promise<Record<string, unknown>> {
   const exactRequest = exactRestRequestForProduct(origin, product, normalizedArgs);
   const payment = await buildPaymentHandoff(
     exactRequest,
     PRODUCT_CATALOG[product].amountAtomic.toString(),
+    x402Network,
   );
   const preview = PRODUCT_SELECTION_PREVIEWS[product];
   const declaration = {
     info: {
-      version: "1",
+      version: "2",
       direct_mcp: {
         automatic_payment_requires: "@x402/mcp",
         payment_meta_key: "x402/payment",
       },
-      wallet_mcp: {
-        capability: "make_x402_request",
-        use_exact_request: true,
-      },
+      wallet_mcp: payment.coinbase_wallet_mcp,
       selection_preview: {
         product: preview.product,
         price: PRODUCT_CATALOG[product].priceUsd,

@@ -1,12 +1,14 @@
 export const TASK_LEADING_DESCRIPTION_EXPERIMENT_ID = "mcp-task-leading-descriptions-v2";
 export const AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID = "mcp-agent-question-descriptions-v6";
 export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-descriptions-v7";
+export const FREE_SELECTION_ROUTER_EXPERIMENT_ID = "mcp-free-selection-router-v1";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export type DescriptionExperimentId =
   | typeof TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
   | typeof AGENT_QUESTION_DESCRIPTION_V6_EXPERIMENT_ID
-  | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID;
+  | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID
+  | typeof FREE_SELECTION_ROUTER_EXPERIMENT_ID;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "initialize",
@@ -14,6 +16,7 @@ export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "protocol_error",
   "tool_not_found",
   "validation_error",
+  "selection_preview",
   "capacity_rejected",
   "payment_required",
   "payment_present",
@@ -120,7 +123,7 @@ function counters(value: unknown, label: string): TaskLeadingDescriptionCounters
   }
   const record = value as Record<string, unknown>;
   return Object.fromEntries(TASK_LEADING_DESCRIPTION_COUNTER_KEYS.map((key) => {
-    const count = Number(record[key]);
+    const count = key === "selection_preview" && record[key] === undefined ? 0 : Number(record[key]);
     if (!Number.isSafeInteger(count) || count < 0) throw new Error(`${label} ${key} is invalid.`);
     return [key, count];
   })) as TaskLeadingDescriptionCounters;
@@ -136,7 +139,7 @@ function countersMonotonic(
 function validPrevious(value: unknown, experimentId: DescriptionExperimentId): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
-  return record.id === experimentId && record.accounting_schema_version === 1
+  return record.id === experimentId && (record.accounting_schema_version === 1 || record.accounting_schema_version === 2)
     ? record
     : null;
 }
@@ -160,10 +163,16 @@ function matchingFreshEpoch(
     record.activated_at === activation.epoch_activated_at;
 }
 
-function decisionFor(delta: TaskLeadingDescriptionCounters): { decision: string; interpretation: string } {
+function decisionFor(
+  delta: TaskLeadingDescriptionCounters,
+  experimentId: DescriptionExperimentId,
+): { decision: string; interpretation: string } {
+  const freeRouter = experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID;
   if (delta.paid_success > 0) return {
-    decision: "paid_conversion_observed_without_task_copy_attribution",
-    interpretation: "A paid success occurred in the post-release sample; aggregate counters cannot attribute it to task-leading descriptions.",
+    decision: freeRouter ? "paid_conversion_observed_after_free_router_release" : "paid_conversion_observed_without_task_copy_attribution",
+    interpretation: freeRouter
+      ? "A paid success occurred in the bounded post-router sample; aggregate counters cannot establish that the same agent first used the free selector."
+      : "A paid success occurred in the post-release sample; aggregate counters cannot attribute it to task-leading descriptions.",
   };
   if (delta.paid_error > 0) return {
     decision: "paid_execution_or_settlement_error_observed",
@@ -178,8 +187,16 @@ function decisionFor(delta: TaskLeadingDescriptionCounters): { decision: string;
     interpretation: "A valid call reached a capacity gate; copy is not the nearest observed blocker.",
   };
   if (delta.payment_required > 0) return {
-    decision: "known_valid_tool_interest_observed_without_task_copy_attribution",
-    interpretation: "A known valid tool call reached payment, but aggregate telemetry cannot attribute selection to task-leading descriptions.",
+    decision: freeRouter ? "paid_tool_interest_observed_after_free_router_release" : "known_valid_tool_interest_observed_without_task_copy_attribution",
+    interpretation: freeRouter
+      ? "A paid tool call reached payment in the bounded post-router sample; aggregate telemetry cannot establish a same-agent selector-to-paid-tool journey."
+      : "A known valid tool call reached payment, but aggregate telemetry cannot attribute selection to task-leading descriptions.",
+  };
+  if (delta.selection_preview > 0) return {
+    decision: freeRouter ? "free_selection_preview_observed" : "free_selection_preview_observed_without_task_copy_attribution",
+    interpretation: freeRouter
+      ? "The free router was called, proving selection beyond tools/list in the bounded clean epoch; this is not payment intent, a purchase, or revenue."
+      : "The free router was called, proving task selection beyond tools/list; aggregate telemetry cannot attribute that choice to a particular description exposure.",
   };
   if (delta.validation_error > 0) return {
     decision: "known_tool_input_friction_observed",
@@ -199,7 +216,7 @@ function decisionFor(delta: TaskLeadingDescriptionCounters): { decision: string;
   };
 }
 
-const CAUSALITY_LIMIT = "Privacy-preserving aggregate counters have no session, exposure, or retry linkage. They cannot establish that one agent read a task-leading description and then selected or paid for that tool, so this experiment never reports a causal copy conversion rate.";
+const CAUSALITY_LIMIT = "Privacy-preserving aggregate counters have no session, exposure, or retry linkage. They cannot establish that one agent saw the treatment and then selected or paid for a tool, so this experiment never reports a causal copy conversion rate or any other causal journey.";
 
 function inactive(
   status: string,
@@ -209,7 +226,7 @@ function inactive(
   const eligible = zeroTaskLeadingDescriptionCounters();
   return {
     id: experimentId,
-    accounting_schema_version: 1,
+    accounting_schema_version: 2,
     status,
     decision,
     activation_required: true,
@@ -296,12 +313,15 @@ export function updateTaskLeadingDescriptionExperiment(
   }
 
   const reached = eligible.tools_list >= TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST;
-  const terminal = decisionFor(eligible);
+  const terminal = decisionFor(eligible, experimentId);
   const boundary = previousBoundary || (activationVerified && reached ? {
     observed_at: input.observedAt,
-    observation_rule: experimentId === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
-      ? "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events"
-      : "first_monitor_report_at_or_above_25_eligible_agent_question_description_tools_list_events",
+    observation_rule:
+      experimentId === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
+        ? "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events"
+        : experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID
+          ? "first_monitor_report_at_or_above_25_eligible_free_selection_router_tools_list_events"
+          : "first_monitor_report_at_or_above_25_eligible_agent_question_description_tools_list_events",
     measurement_epoch_id: activation.measurement_epoch_id,
     eligible_prefix: zeroTaskLeadingDescriptionCounters(),
     eligible_delta: eligible,
@@ -330,7 +350,7 @@ export function updateTaskLeadingDescriptionExperiment(
 
   return {
     id: experimentId,
-    accounting_schema_version: 1,
+    accounting_schema_version: 2,
     status,
     decision,
     activation_required: false,
@@ -345,6 +365,9 @@ export function updateTaskLeadingDescriptionExperiment(
     event_ratios: {
       valid_call_per_tools_list_percent: eligible.tools_list > 0
         ? Math.round(validCallEvents / eligible.tools_list * 1_000) / 10
+        : null,
+      free_selection_preview_per_tools_list_percent: eligible.tools_list > 0
+        ? Math.round(eligible.selection_preview / eligible.tools_list * 1_000) / 10
         : null,
       payment_present_per_valid_call_percent: validCallEvents > 0
         ? Math.round(eligible.payment_present / validCallEvents * 1_000) / 10

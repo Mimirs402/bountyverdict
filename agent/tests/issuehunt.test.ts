@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   fetchIssueHuntEvidence,
   hasIssueHuntReference,
+  issueHuntReferenceRoutes,
   parseIssueHuntPage,
 } from "../src/issuehunt.ts";
 
@@ -86,7 +87,7 @@ test("fails closed on identity, aggregate, duplicate, and unknown funding drift"
   const cases = [
     payload({ repository: { ownerName: owner, name: repo, githubId: "999" } }),
     payload({ deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "3999", cancelled: false }] }),
-    payload({ anonymousDeposits: [{ amount: "4000" }] }),
+    payload({ anonymousDeposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "4000", cancelled: false }] }),
     payload({ organizationGithubIdBalanceAmountEntries: [{ amount: "4000" }] }),
     payload({ pullRequests: [
       {
@@ -106,6 +107,73 @@ test("fails closed on identity, aggregate, duplicate, and unknown funding drift"
         number: 12,
       },
     ] }),
+  ];
+  for (const value of cases) {
+    assert.equal(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), null);
+  }
+});
+
+test("includes bounded anonymous deposits without retaining funder identity", () => {
+  const value = payload({
+    issue: {
+      repositoryOwnerName: owner,
+      repositoryName: repo,
+      repositoryGithubId: String(repositoryId),
+      number: issueNumber,
+      status: "funded",
+      depositAmount: 5000,
+    },
+    anonymousDeposits: [{
+      _id: "6d82dd50a64b4b0068bae8f4",
+      amount: "1000",
+      cancelled: false,
+      email: "must-not-be-returned@example.test",
+    }],
+  });
+  assert.deepEqual(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), {
+    platform: "IssueHunt",
+    verification: "TRUSTED_PLATFORM_API",
+    state: "FUNDED",
+    amount: 50,
+    currency: "USD",
+    evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
+    submitted_pull_requests: ["https://github.com/acme/widget/pull/12"],
+  });
+});
+
+test("cancelled, duplicate, malformed, and over-capacity anonymous deposits fail closed", () => {
+  const cancelled = {
+    _id: "6d82dd50a64b4b0068bae8f4",
+    amount: "1000",
+    cancelled: true,
+  };
+  const cases = [
+    payload({
+      issue: {
+        repositoryOwnerName: owner,
+        repositoryName: repo,
+        repositoryGithubId: String(repositoryId),
+        number: issueNumber,
+        status: "funded",
+        depositAmount: 5000,
+      },
+      anonymousDeposits: [cancelled],
+    }),
+    payload({ anonymousDeposits: [{
+      _id: "5D82DD50A64B4B0068BAE8F4",
+      amount: "1000",
+      cancelled: false,
+    }] }),
+    payload({ anonymousDeposits: [{
+      _id: "6d82dd50a64b4b0068bae8f4",
+      amount: "10.00",
+      cancelled: false,
+    }] }),
+    payload({ anonymousDeposits: Array.from({ length: 20 }, (_, index) => ({
+      _id: `${(index + 1).toString(16).padStart(24, "0")}`,
+      amount: "1",
+      cancelled: false,
+    })) }),
   ];
   for (const value of cases) {
     assert.equal(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), null);
@@ -160,4 +228,19 @@ test("uses only exact IssueHunt links or the exact funded label as fetch trigger
   assert.equal(hasIssueHuntReference({ labels: [{ name: "Funded on Issuehunt" }] }, []), true);
   assert.equal(hasIssueHuntReference({ body: "https://oss.issuehunt.io/r/acme/widget/issues/4" }, []), true);
   assert.equal(hasIssueHuntReference({ body: "issuehunt might fund this later" }, []), false);
+});
+
+test("extracts a bounded set of exact same-issue IssueHunt routes", () => {
+  const routes = issueHuntReferenceRoutes({
+    body: [
+      "https://issuehunt.io/r/old-owner/widget/issues/4",
+      "https://oss.issuehunt.io/r/old-owner/widget/issues/4",
+      "https://issuehunt.io/r/acme/other/issues/5",
+    ].join(" "),
+  }, [{ body: "https://issuehunt.io/r/second-owner/widget.js/issues/4" }], 4);
+  assert.deepEqual(routes, [
+    { owner: "old-owner", repo: "widget", number: 4 },
+    { owner: "second-owner", repo: "widget.js", number: 4 },
+  ]);
+  assert.deepEqual(issueHuntReferenceRoutes({ body: "https://issuehunt.io/r/acme/widget/issues/4" }, [], 5), []);
 });

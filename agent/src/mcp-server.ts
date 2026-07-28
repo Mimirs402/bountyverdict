@@ -12,13 +12,14 @@ import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
 import { MCP_DRIFT_MAX_BODY_BYTES, McpDriftError, parseAndAnalyzeMcpDrift } from "./mcp-drift.ts";
 import { mcpDriftInputSchema } from "./mcp-drift-discovery.ts";
-import { MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
+import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME, freeSelectionRoute } from "./free-selection-router.ts";
+import { MCP_FREE_SELECTION_OUTPUT_SCHEMA, MCP_SUCCESS_OUTPUT_SCHEMAS } from "./mcp-output-contracts.ts";
 import { declareMcpHttpPaymentHandoff } from "./payment-handoff.ts";
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
 
 const MCP_BODY_LIMIT_BYTES = MCP_DRIFT_MAX_BODY_BYTES + 64 * 1024;
-const MCP_SERVER_VERSION = "1.1.9";
+const MCP_SERVER_VERSION = "1.1.11";
 const MCP_ALLOWED_BROWSER_ORIGINS = new Set(["https://playground.ai.cloudflare.com"]);
 const GITHUB_ISSUE_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/;
 const GITHUB_REPOSITORY_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
@@ -47,6 +48,7 @@ interface McpEnvironment extends X402ServerEnvironment {
 interface PaymentContext {
   resourceServer: ReturnType<typeof createX402ServerContext>["resourceServer"];
   accepts: Record<DistributedProduct, PaymentRequirements[]>;
+  network: `${string}:${string}`;
 }
 
 interface RequestClassification {
@@ -91,19 +93,20 @@ const TOOL_PRODUCT = Object.freeze({
 type ToolName = keyof typeof TOOL_PRODUCT;
 
 const TOOL_RECOVERY_TASKS = Object.freeze({
+  [FREE_SELECTION_TOOL_NAME]: "choose the right GitHub decision tool for free",
   check_github_bounty: "assess one public GitHub bounty",
   rank_github_bounties: "rank two to ten public GitHub bounties",
   audit_agent_harness: "audit repository coding-agent instructions",
   diagnose_github_actions_run: "diagnose one failed GitHub Actions run",
   classify_github_actions_flake: "decide retry once versus fix",
   check_mcp_tool_drift: "compare complete MCP tools/list snapshots",
-} as const satisfies Record<ToolName, string>);
+} as const satisfies Record<string, string>);
 
-const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free payment quote, selection summary, and payment handoff. Only an authorized signed retry can settle. Never call with missing, invented, or placeholder arguments.";
+const MCP_UNSIGNED_SELECTION_INSTRUCTIONS = "A first unsigned call with real canonical input cannot charge; it returns a free payment quote, selection summary, and payment handoff. Only an authorized continuation can settle: either the native x402 MCP retry or the declared equivalent REST wallet request. Never call with missing, invented, or placeholder arguments.";
 
 const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   check_github_bounty: "Is this public GitHub issue bounty still claimable, or is someone already working on it? Checks current status, reward evidence, competing work, and maintainer signals; returns AVOID, CAUTION, or VIABLE. For 2-7 issues, repeated single checks cost less unless one ranked response is worth the premium; use rank_github_bounties for 8-10.",
-  rank_github_bounties: "Which public GitHub bounty should I work on next? Compares 2-10 issue URLs, chooses the strongest non-AVOID candidate or recommends none, and returns cited evidence plus partial failures. It is unit-price economical for 8-10; repeated check_github_bounty calls cost less for 2-7 when ranked orchestration is unnecessary.",
+  rank_github_bounties: "Which public GitHub bounty should I work on next? Compares 2-10 issue URLs, chooses the strongest non-AVOID candidate or recommends none, and returns cited evidence plus partial failures. Its $0.40 price equals eight $0.05 single checks and is cheaper per candidate at 9-10; repeated check_github_bounty calls cost less for 2-7 when ranked orchestration is unnecessary.",
   audit_agent_harness: "Can a coding agent safely work in this public repository without missing project instructions? Audits AGENTS.md, CLAUDE.md, and related instructions at an immutable commit; does not diagnose CI.",
   diagnose_github_actions_run: "Why did this public GitHub Actions run fail, and what should I fix? Uses bounded failed-job logs and redacted evidence. Use classify_github_actions_flake only for retry-once versus fix.",
   classify_github_actions_flake: "Is this failed GitHub Actions run flaky—should I retry it once or fix the code? Uses the current attempt and bounded history. Use diagnose_github_actions_run for root cause.",
@@ -186,12 +189,49 @@ function errorResult(product: DistributedProduct, code: string, message: string)
   };
 }
 
+function selectionErrorResult(message: string): ToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        error: "INVALID_SELECTION_CONTEXT",
+        message,
+        payment_required: false,
+        verdict_produced: false,
+      }),
+    }],
+    isError: true,
+  };
+}
+
 function omitStructuredContentFromError(result: ToolResult): ToolResult {
   if (!result.isError || result.structuredContent === undefined) return result;
   // SDK 1.29 clients validate error structuredContent against the success schema.
   // x402 requires the identical JSON text fallback, so keep that and omit only this field.
   const { structuredContent: _structuredContent, ...compatible } = result;
   return compatible;
+}
+
+function appendPlainPaymentInstruction(result: ToolResult): ToolResult {
+  if (!result.isError || !Array.isArray(result.content) || result.content.length === 0) return result;
+  const first = result.content[0];
+  if (first.type !== "text" || typeof first.text !== "string") return result;
+  try {
+    const challenge = JSON.parse(first.text) as Record<string, unknown>;
+    if (challenge.x402Version !== 2 || !Array.isArray(challenge.accepts)) return result;
+  } catch {
+    return result;
+  }
+  return {
+    ...result,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: "PAYMENT REQUIRED: No successful settlement is reported by this response. Read content[0] as the x402 v2 requirement. Continue only with explicit authorization, preserve the exact arguments and declared maximum, and use @x402/mcp or the declared HTTP wallet handoff; otherwise stop.",
+      },
+    ],
+  };
 }
 
 export function classifyMcpClientFamily(value: unknown, ownerAutomation = false): McpClientFamily {
@@ -250,7 +290,11 @@ async function getPaymentContext(env: McpEnvironment): Promise<PaymentContext> {
       const entries = await Promise.all((Object.keys(PRODUCT_CATALOG) as ProductKey[])
         .filter((product): product is DistributedProduct => product !== "skill")
         .map(async (product) => [product, await context.resourceServer.buildPaymentRequirements({ scheme: "exact", network: context.network, payTo: context.payTo, price: PRODUCT_CATALOG[product].priceUsd, maxTimeoutSeconds: 300 })] as const));
-      return { resourceServer: context.resourceServer, accepts: Object.fromEntries(entries) as Record<DistributedProduct, PaymentRequirements[]> };
+      return {
+        resourceServer: context.resourceServer,
+        accepts: Object.fromEntries(entries) as Record<DistributedProduct, PaymentRequirements[]>,
+        network: context.network,
+      };
     })().catch((error) => { PAYMENT_CACHE.delete(context.cacheKey); throw error; });
     PAYMENT_CACHE.set(context.cacheKey, pending);
   }
@@ -274,7 +318,12 @@ async function paidCall(
   execute: () => Promise<ToolResult>,
 ): Promise<ToolResult> {
   const argumentsHash = await sha256(JSON.stringify(normalizedArgs));
-  const httpPaymentHandoff = await declareMcpHttpPaymentHandoff(origin, product, normalizedArgs);
+  const httpPaymentHandoff = await declareMcpHttpPaymentHandoff(
+    origin,
+    product,
+    normalizedArgs,
+    payment.network,
+  );
   const paymentPresent = hasPayment(extra);
   emitMcpEvent(paymentPresent ? "payment_present" : "payment_required", product, request);
   const wrapped = createPaymentWrapper(payment.resourceServer, {
@@ -297,7 +346,7 @@ async function paidCall(
       const settled = Boolean(result._meta?.["x402/payment-response"]);
       emitMcpEvent(settled && !result.isError ? "paid_success" : "paid_error", product, request);
     }
-    return omitStructuredContentFromError(result);
+    return appendPlainPaymentInstruction(omitStructuredContentFromError(result));
   } catch (error) {
     if (paymentPresent) emitMcpEvent("paid_error", product, request);
     throw error;
@@ -320,7 +369,6 @@ function normalizeRunUrl(value: string): string {
 }
 
 async function createMcpServer(env: McpEnvironment, origin: string, request: RequestClassification): Promise<McpServer> {
-  const payment = await getPaymentContext(env);
   const server = new McpServer({
     name: "BountyVerdict",
     title: "BountyVerdict Agent Decision Tools",
@@ -328,10 +376,40 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     description: "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
     websiteUrl: "https://mimirs402.github.io/bountyverdict/",
   }, {
-    instructions: `Choose by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. All six tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
+    instructions: `Unsure which tool fits? Call ${FREE_SELECTION_TOOL_NAME} first; it is free and returns the exact paid tool, price, sample, and required input without producing a verdict. Choose directly by task: one bounty -> check_github_bounty; 8-10 bounties -> rank_github_bounties; at 8 candidates its $0.40 price equals eight single checks, while 9-10 are cheaper per candidate; for 2-7, repeated single checks cost less unless one ranked partial-failure-aware response is worth the premium; repository coding-agent instructions -> audit_agent_harness; CI root cause and next action -> diagnose_github_actions_run; retry once versus fix using run history -> classify_github_actions_flake; proposed tools/list compatibility -> check_mcp_tool_drift. The six decision tools are paid and read-only. Invalid input is rejected before any payment challenge. ${MCP_UNSIGNED_SELECTION_INSTRUCTIONS} Each successful paid call charges the exact advertised USDC price on Base via x402. Payment identifies the fixed-price tool, not its arguments; preserve the exact normalized arguments when retrying with payment.`,
   });
   const githubAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const closedWorldAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+  server.registerTool(FREE_SELECTION_TOOL_NAME, {
+    title: "Choose the right GitHub agent decision tool for free",
+    description: "Choose the economical next call for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change. Free deterministic router: returns total price, sample, exact required fields, a safe argument template, and payment-quote continuation semantics without inspecting the target.",
+    inputSchema: z.object({
+      task: z.enum(FREE_SELECTION_TASKS).describe("Exact task: one_bounty = claimability of one issue; bounty_portfolio = economical handling of 2-10 issues; repository_agent_instructions = pre-coding instruction audit; github_actions_root_cause = why a run failed; github_actions_retry_decision = retry once versus fix; mcp_tools_change = compatibility of complete tools/list snapshots."),
+      candidate_count: z.number().int().min(2).max(10).optional().describe("Required only for bounty_portfolio: exact number of distinct issue URLs."),
+      needs_ranked_response: z.boolean().optional().describe("For bounty_portfolio only. True when one ranked, partial-failure-aware response is worth the premium; otherwise 2-7 route to cheaper repeated single checks."),
+    }).strict(),
+    outputSchema: MCP_FREE_SELECTION_OUTPUT_SCHEMA,
+    annotations: closedWorldAnnotations,
+  }, async (selection) => {
+    if (selection.task === "bounty_portfolio" && selection.candidate_count === undefined) {
+      return selectionErrorResult("candidate_count is required for bounty_portfolio.");
+    }
+    if (selection.task !== "bounty_portfolio" && (selection.candidate_count !== undefined || selection.needs_ranked_response !== undefined)) {
+      return selectionErrorResult("Portfolio routing fields are allowed only for bounty_portfolio.");
+    }
+    const selectionRequest = selection.task === "bounty_portfolio"
+      ? {
+        task: selection.task,
+        candidate_count: selection.candidate_count as number,
+        needs_ranked_response: selection.needs_ranked_response ?? false,
+      } as const
+      : { task: selection.task } as const;
+    const route = freeSelectionRoute(selectionRequest, origin);
+    emitMcpEvent("selection_preview", route.product_key, request);
+    const { product_key: _productKey, ...publicRoute } = route;
+    return jsonResult(publicRoute);
+  });
 
   server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {
     let normalized: string;
@@ -339,7 +417,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "single", request, "invalid_issue_url");
       return errorResult("single", "INVALID_ISSUE_URL", error instanceof Error ? error.message : "Invalid GitHub issue URL.");
     }
-    return paidCall(payment, origin, "check_github_bounty", "single", { issue_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "check_github_bounty", "single", { issue_url: normalized }, extra, request, async () => {
       try { return jsonResult(await checkGithubIssue(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof CheckError ? errorResult("single", error.code, error.message) : errorResult("single", "CHECK_FAILED", "The bounty verdict could not be produced."); }
     });
@@ -351,7 +429,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "portfolio", request, "invalid_portfolio");
       return errorResult("portfolio", error instanceof CheckError ? error.code : "INVALID_PORTFOLIO", error instanceof Error ? error.message : "Invalid bounty portfolio.");
     }
-    return paidCall(payment, origin, "rank_github_bounties", "portfolio", { issue_urls: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "rank_github_bounties", "portfolio", { issue_urls: normalized }, extra, request, async () => {
       try { return jsonResult(await checkBountyPortfolio(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof CheckError ? errorResult("portfolio", error.code, error.message) : errorResult("portfolio", "PORTFOLIO_CHECK_FAILED", "The bounty portfolio could not be produced."); }
     });
@@ -363,7 +441,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "harness", request, "invalid_repository_url");
       return errorResult("harness", "INVALID_REPOSITORY_URL", error instanceof Error ? error.message : "Invalid GitHub repository URL.");
     }
-    return paidCall(payment, origin, "audit_agent_harness", "harness", { repo_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "audit_agent_harness", "harness", { repo_url: normalized }, extra, request, async () => {
       try { return jsonResult(await checkGithubHarness(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof HarnessError ? errorResult("harness", error.code, error.message) : errorResult("harness", "HARNESS_CHECK_FAILED", "The agent harness audit could not be produced."); }
     });
@@ -375,7 +453,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "run", request, "invalid_run_or_attempt");
       return errorResult("run", "INVALID_RUN_URL", error instanceof Error ? error.message : "Invalid GitHub Actions run URL.");
     }
-    return paidCall(payment, origin, "diagnose_github_actions_run", "run", { run_url: normalized }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "diagnose_github_actions_run", "run", { run_url: normalized }, extra, request, async () => {
       try { return jsonResult(await diagnoseGithubRun(normalized, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof HarnessError ? errorResult("run", error.code, error.message) : errorResult("run", "RUN_DIAGNOSIS_FAILED", "The workflow run could not be diagnosed."); }
     });
@@ -405,7 +483,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("capacity_rejected", "flake", request);
       return errorResult("flake", error instanceof HarnessError ? error.code : "SERVICE_UNAVAILABLE", error instanceof Error ? error.message : "FlakeVerdict is temporarily unavailable.");
     }
-    return paidCall(payment, origin, "classify_github_actions_flake", "flake", { run_url: normalized, ...(normalizedAttempt === undefined ? {} : { attempt: normalizedAttempt }) }, extra, request, async () => {
+    return paidCall(await getPaymentContext(env), origin, "classify_github_actions_flake", "flake", { run_url: normalized, ...(normalizedAttempt === undefined ? {} : { attempt: normalizedAttempt }) }, extra, request, async () => {
       try { return jsonResult(await diagnoseGithubFlake(normalized, normalizedAttempt, { GITHUB_TOKEN: env.GITHUB_TOKEN })); }
       catch (error) { return error instanceof FlakeError ? errorResult("flake", error.code, error.message) : errorResult("flake", "FLAKE_CHECK_FAILED", "The workflow flake classification could not be produced."); }
     });
@@ -419,7 +497,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
       emitMcpEvent("validation_error", "mcpdrift", request, "invalid_mcp_snapshot");
       return error instanceof McpDriftError ? errorResult("mcpdrift", error.code, error.message) : errorResult("mcpdrift", "INVALID_INPUT", "The MCP snapshots are invalid.");
     }
-    return paidCall(payment, origin, "check_mcp_tool_drift", "mcpdrift", normalized, extra, request, async () => jsonResult(result));
+    return paidCall(await getPaymentContext(env), origin, "check_mcp_tool_drift", "mcpdrift", normalized, extra, request, async () => jsonResult(result));
   });
 
   return server;
@@ -497,7 +575,7 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   const validatedRpc = JSONRPCRequestSchema.safeParse(parsedBody);
   const validatedCall = CallToolRequestSchema.safeParse(parsedBody);
   const requestedTool = validatedCall.success ? validatedCall.data.params.name : null;
-  const knownTool = requestedTool !== null && Object.hasOwn(TOOL_PRODUCT, requestedTool);
+  const knownTool = requestedTool !== null && (Object.hasOwn(TOOL_PRODUCT, requestedTool) || requestedTool === FREE_SELECTION_TOOL_NAME);
   if (validatedRpc.success && validatedCall.success && !knownTool && !unsupportedProtocol) {
     emitMcpEvent("tool_not_found", null, classification);
     return respond(unknownToolError(validatedRpc.data.id));
@@ -513,9 +591,10 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
       if (!validatedRpc.success || !validatedCall.success) {
         emitMcpEvent("protocol_error", null, classification);
       } else {
-        const product = TOOL_PRODUCT[validatedCall.data.params.name as ToolName];
+        const calledTool = validatedCall.data.params.name;
+        const product = TOOL_PRODUCT[calledTool as ToolName];
         emitMcpEvent(
-          product ? "validation_error" : "tool_not_found",
+          product ? "validation_error" : calledTool === FREE_SELECTION_TOOL_NAME ? "protocol_error" : "tool_not_found",
           product || null,
           classification,
           product ? "schema_rejected_before_handler" : "not_applicable",
@@ -529,4 +608,5 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   }
 }
 
-export const MCP_DISTRIBUTED_TOOL_NAMES = Object.freeze(Object.keys(TOOL_PRODUCT) as ToolName[]);
+export const MCP_PAID_TOOL_NAMES = Object.freeze(Object.keys(TOOL_PRODUCT) as ToolName[]);
+export const MCP_DISTRIBUTED_TOOL_NAMES = Object.freeze([FREE_SELECTION_TOOL_NAME, ...MCP_PAID_TOOL_NAMES]);

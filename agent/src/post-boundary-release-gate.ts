@@ -1,0 +1,326 @@
+import { isDeepStrictEqual } from "node:util";
+
+export const EARNED_PLACEMENT_EXPERIMENT_NAME = "skillverdict_earned_directory_placement";
+export const EARNED_PLACEMENT_ENDS_AT = "2026-07-27T16:37:12.796Z";
+export const EARNED_PLACEMENT_BASELINE_GATE = Object.freeze({
+  total_installs: 8,
+  router_installs: 2,
+  skillverdict_installs: 1,
+  skillverdict_registry_queries: 0,
+  non_target_registry_queries: 0,
+  skillverdict_purchases: 0,
+  other_purchases: 0,
+});
+export const EARNED_PLACEMENT_PROVENANCE_GATE = Object.freeze({
+  install_counters: {
+    acquisition_field: "skills_sh_legacy_experiment",
+    measurement_role: "frozen_skillverdict_experiment_only",
+    source_repository: "cristianmoroaica/bountyverdict",
+    source_url: "https://skills.sh/cristianmoroaica/bountyverdict",
+    retrieval: "passive_exact_public_page_only",
+    authenticated: false,
+    mutated: false,
+    search_requests: 0,
+    canonical_business_distribution: false,
+    askill_substitution: false,
+  },
+  registry_queries: {
+    acquisition_field: "x402scout",
+  },
+  purchases: {
+    source: "recognized_non_owner_onchain_settlements",
+  },
+});
+export const POST_BOUNDARY_DRAIN_ID = "marketplace-audit-epoch-57";
+export const POST_BOUNDARY_DRAIN_REASON = "Autonomous marketplace retrieval audits can trigger unattributed downstream origin crawls; exclude the audit and drain until external aggregates are stable.";
+export const SNAPSHOT_SOURCE_COMMIT = "c25c3f5d1109a98850bb71745130e9e389b78296";
+export const SNAPSHOT_SOURCE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict";
+export const RELEASE_CANDIDATE_WORKTREE = "/home/mcr/Projects/sandbox/bountyverdict-conversion-release";
+export const RELEASE_CANDIDATE_BRANCH = "release/free-selector-executable-payment";
+export const SNAPSHOT_SERVICE_SHA256 = "bd3401a1ca6a210c605729bc302404bd62d5b1cb05f43c727c713ecc50a4f105";
+export const SNAPSHOT_TIMER_SHA256 = "30cde8ebdc07a95b76fd703d44a59d1b7bed8d1d2a4ec56ba7be121ea0ad14f2";
+const MAXIMUM_FREEZE_LAG_MS = 5 * 60 * 1000;
+const MAXIMUM_SERVICE_COMPLETION_LAG_MS = 2 * 60 * 1000;
+const SNAPSHOT_COMMANDS = Object.freeze([
+  "/usr/bin/env AUDITED_MONITOR=directory node --experimental-strip-types scripts/run-audited-monitor.ts",
+  "/usr/bin/env AUDITED_MONITOR=distribution node --experimental-strip-types scripts/run-audited-monitor.ts",
+]);
+
+const TERMINAL_STATUSES = new Set([
+  "target_purchase_success",
+  "off_target_purchase_success",
+  "install_to_purchase_failure",
+  "listing_to_install_failure",
+  "off_target_reach",
+  "reach_failure",
+]);
+
+export type SnapshotServiceState = {
+  Result: string;
+  ExecMainStatus: string | number;
+  ActiveState: string;
+  SubState: string;
+  InvocationID: string;
+  started_at: string;
+  completed_at: string;
+  NeedDaemonReload: string;
+  DropInPaths: string;
+  FragmentPath: string;
+  WorkingDirectory: string;
+  ExecStartCommands: string[];
+};
+
+export type SnapshotTimerState = {
+  last_trigger_at: string;
+  NeedDaemonReload: string;
+  DropInPaths: string;
+  FragmentPath: string;
+};
+
+export type SnapshotSourceState = {
+  worktree: string;
+  head: string;
+  porcelain: string;
+};
+
+export type SnapshotUnitEvidence = {
+  service_sha256: string;
+  timer_sha256: string;
+};
+
+export type ReleaseCandidateState = {
+  worktree: string;
+  branch: string;
+  head: string;
+  remote_head: string;
+  porcelain: string;
+};
+
+function record(value: unknown, label: string): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  return value as Record<string, any>;
+}
+
+function canonicalTimestamp(value: unknown, label: string): string {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString() !== value) {
+    throw new Error(`${label} must be a canonical ISO timestamp.`);
+  }
+  return value;
+}
+
+function exact(value: unknown, expected: unknown, label: string): void {
+  if (!isDeepStrictEqual(value, expected)) throw new Error(`${label} drifted.`);
+}
+
+function nonNegativeCounts(value: unknown, label: string): Record<string, number> {
+  const input = record(value, label);
+  const entries = Object.entries(input);
+  if (!entries.length) throw new Error(`${label} is empty.`);
+  for (const [key, count] of entries) {
+    if (!Number.isSafeInteger(count) || Number(count) < 0) {
+      throw new Error(`${label} ${key} is invalid.`);
+    }
+  }
+  return input as Record<string, number>;
+}
+
+export function verifyPostBoundaryReleaseGate(input: {
+  experiment: unknown;
+  distributionReport: unknown;
+  trustedFunnelLedger: unknown;
+  snapshotService: SnapshotServiceState;
+  snapshotTimer: SnapshotTimerState;
+  snapshotSource: SnapshotSourceState;
+  snapshotUnits: SnapshotUnitEvidence;
+  releaseCandidate: ReleaseCandidateState;
+}) {
+  const experiment = record(input.experiment, "Acquisition experiment state");
+  const report = record(input.distributionReport, "Distribution report");
+  const ledger = record(input.trustedFunnelLedger, "Trusted funnel epoch ledger");
+  const service = record(input.snapshotService, "Snapshot service state");
+  const timer = record(input.snapshotTimer, "Snapshot timer state");
+  const source = record(input.snapshotSource, "Snapshot source state");
+  const units = record(input.snapshotUnits, "Snapshot unit evidence");
+  const candidate = record(input.releaseCandidate, "Release candidate state");
+
+  if (candidate.worktree !== RELEASE_CANDIDATE_WORKTREE ||
+      candidate.branch !== RELEASE_CANDIDATE_BRANCH ||
+      !/^[a-f0-9]{40}$/i.test(String(candidate.head)) ||
+      candidate.head !== candidate.remote_head ||
+      candidate.porcelain !== "") {
+    throw new Error("Release candidate is dirty, on the wrong branch, or not synchronized to the reviewed business remote.");
+  }
+
+  if (service.Result !== "success" || Number(service.ExecMainStatus) !== 0 ||
+      service.ActiveState !== "inactive" || service.SubState !== "dead") {
+    throw new Error("Acquisition snapshot service did not finish successfully.");
+  }
+  if (!/^[a-f0-9]{32}$/i.test(String(service.InvocationID)) ||
+      service.NeedDaemonReload !== "no" || service.DropInPaths !== "" ||
+      service.FragmentPath !== "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.service" ||
+      service.WorkingDirectory !== `${SNAPSHOT_SOURCE_WORKTREE}/agent` ||
+      !isDeepStrictEqual(service.ExecStartCommands, SNAPSHOT_COMMANDS)) {
+    throw new Error("Acquisition snapshot service definition or invocation evidence drifted.");
+  }
+  if (timer.NeedDaemonReload !== "no" || timer.DropInPaths !== "" ||
+      timer.FragmentPath !== "/home/mcr/.config/systemd/user/bountyverdict-acquisition-snapshot.timer") {
+    throw new Error("Acquisition snapshot timer definition drifted.");
+  }
+  if (source.worktree !== SNAPSHOT_SOURCE_WORKTREE || source.head !== SNAPSHOT_SOURCE_COMMIT ||
+      source.porcelain !== "") {
+    throw new Error("Acquisition snapshot source is dirty or no longer at the reviewed commit.");
+  }
+  if (units.service_sha256 !== SNAPSHOT_SERVICE_SHA256 || units.timer_sha256 !== SNAPSHOT_TIMER_SHA256) {
+    throw new Error("Acquisition snapshot unit hashes drifted.");
+  }
+  if (experiment.name !== EARNED_PLACEMENT_EXPERIMENT_NAME) {
+    throw new Error("Acquisition experiment identity drifted.");
+  }
+  if (experiment.ends_at !== EARNED_PLACEMENT_ENDS_AT) {
+    throw new Error("Acquisition experiment boundary drifted.");
+  }
+  exact(experiment.baseline, EARNED_PLACEMENT_BASELINE_GATE, "Persisted acquisition baseline");
+  exact(
+    experiment.measurement_provenance,
+    EARNED_PLACEMENT_PROVENANCE_GATE,
+    "Persisted acquisition measurement provenance",
+  );
+
+  const terminal = record(experiment.terminal_result, "Acquisition terminal result");
+  if (terminal.name !== EARNED_PLACEMENT_EXPERIMENT_NAME ||
+      terminal.ends_at !== EARNED_PLACEMENT_ENDS_AT ||
+      !TERMINAL_STATUSES.has(String(terminal.status))) {
+    throw new Error("Acquisition terminal result identity, boundary, or status is invalid.");
+  }
+  if (terminal.measurement_valid !== true || terminal.currently_healthy !== true) {
+    throw new Error("Acquisition terminal result is unhealthy or measurement-invalid.");
+  }
+  exact(terminal.baseline, experiment.baseline, "Frozen acquisition baseline");
+  exact(
+    terminal.measurement_provenance,
+    experiment.measurement_provenance,
+    "Frozen acquisition measurement provenance",
+  );
+  const current = nonNegativeCounts(terminal.current, "Acquisition terminal current counters");
+  const delta = record(terminal.delta, "Acquisition terminal delta");
+  nonNegativeCounts(delta.installs, "Acquisition terminal install deltas");
+  for (const key of ["skillverdict_purchases", "other_purchases", "genuine_purchases"]) {
+    if (!Number.isSafeInteger(delta[key]) || Number(delta[key]) < 0) {
+      throw new Error(`Acquisition terminal delta ${key} is invalid.`);
+    }
+  }
+  if (Number(current.genuine_purchases) !== Number(delta.genuine_purchases)) {
+    throw new Error("Acquisition terminal purchase counters do not reconcile.");
+  }
+  const installDeltas = {
+    total: Number(current.total_installs) - EARNED_PLACEMENT_BASELINE_GATE.total_installs,
+    router: Number(current.router_installs) - EARNED_PLACEMENT_BASELINE_GATE.router_installs,
+    skillverdict: Number(current.skillverdict_installs) - EARNED_PLACEMENT_BASELINE_GATE.skillverdict_installs,
+  };
+  exact(delta.installs, installDeltas, "Acquisition terminal install deltas");
+  if (Number(current.skillverdict_purchases) + Number(current.other_purchases) !== Number(current.genuine_purchases) ||
+      Number(delta.skillverdict_purchases) !== Number(current.skillverdict_purchases) ||
+      Number(delta.other_purchases) !== Number(current.other_purchases)) {
+    throw new Error("Acquisition terminal product purchase counters do not reconcile.");
+  }
+  const targetedInstallDelta = Math.max(installDeltas.router, installDeltas.skillverdict);
+  const nonTargetInstallDelta = installDeltas.total -
+    Math.max(0, installDeltas.router) -
+    Math.max(0, installDeltas.skillverdict);
+  const expectedStatus = Number(current.skillverdict_purchases) >= 1
+    ? "target_purchase_success"
+    : Number(current.other_purchases) >= 1
+      ? "off_target_purchase_success"
+      : targetedInstallDelta >= 1
+        ? "install_to_purchase_failure"
+        : Number(current.skillverdict_registry_queries) >= 1
+          ? "listing_to_install_failure"
+          : nonTargetInstallDelta >= 1 || Number(current.non_target_registry_queries) >= 1
+            ? "off_target_reach"
+            : "reach_failure";
+  if (terminal.status !== expectedStatus) {
+    throw new Error("Acquisition terminal status does not reconcile with its counters.");
+  }
+  const expectedNextAction = {
+    target_purchase_success: "scale_proven_distribution",
+    off_target_purchase_success: "scale_purchased_product",
+    install_to_purchase_failure: "test_purchase_friction",
+    listing_to_install_failure: "improve_listing_conversion",
+    off_target_reach: "focus_reached_product",
+    reach_failure: "expand_earned_reach",
+  }[expectedStatus];
+  if (record(terminal.next_action, "Acquisition terminal next action").code !== expectedNextAction) {
+    throw new Error("Acquisition terminal next action does not reconcile with its status.");
+  }
+  if (terminal.primary_success !== (Number(current.skillverdict_purchases) >= 1) ||
+      terminal.commercial_success !== (Number(current.genuine_purchases) >= 1) ||
+      terminal.supporting_success !== (targetedInstallDelta >= 1) ||
+      !Number.isSafeInteger(terminal.elapsed_hours) || Number(terminal.elapsed_hours) < 168 ||
+      terminal.window_days !== 7) {
+    throw new Error("Acquisition terminal success flags or window do not reconcile.");
+  }
+
+  const frozenAt = canonicalTimestamp(terminal.frozen_at, "Acquisition frozen_at");
+  const serviceStartedAt = canonicalTimestamp(service.started_at, "Acquisition snapshot service start");
+  const serviceCompletedAt = canonicalTimestamp(service.completed_at, "Acquisition snapshot service completion");
+  const timerTriggeredAt = canonicalTimestamp(timer.last_trigger_at, "Acquisition snapshot timer trigger");
+  if (Date.parse(timerTriggeredAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT) ||
+      Date.parse(serviceStartedAt) < Date.parse(timerTriggeredAt) ||
+      Date.parse(serviceCompletedAt) < Date.parse(serviceStartedAt) ||
+      Date.parse(serviceCompletedAt) < Date.parse(frozenAt) ||
+      Date.parse(serviceCompletedAt) - Date.parse(frozenAt) > MAXIMUM_SERVICE_COMPLETION_LAG_MS) {
+    throw new Error("Acquisition snapshot invocation did not execute from the post-boundary timer.");
+  }
+  if (Date.parse(frozenAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
+    throw new Error("Acquisition terminal result froze before the experiment boundary.");
+  }
+  if (Date.parse(frozenAt) - Date.parse(EARNED_PLACEMENT_ENDS_AT) > MAXIMUM_FREEZE_LAG_MS) {
+    throw new Error("Acquisition terminal result froze too long after the experiment boundary.");
+  }
+  if (report.mode !== "full_marketplace_retrieval_audit" || report.network !== "eip155:8453" ||
+      report.healthy !== true || !Array.isArray(report.errors) || report.errors.length !== 0) {
+    throw new Error("Distribution report is unhealthy.");
+  }
+  const checkedAt = canonicalTimestamp(report.checked_at, "Distribution report checked_at");
+  if (checkedAt !== frozenAt) {
+    throw new Error("Distribution report does not belong to the terminal freeze observation.");
+  }
+  const acquisition = record(report.acquisition, "Distribution acquisition section");
+  exact(acquisition.experiment, terminal, "Distribution terminal experiment projection");
+  if (ledger.schema_version !== 2 || ledger.active_epoch_id !== 56 || !Array.isArray(ledger.epochs)) {
+    throw new Error("Trusted funnel ledger is not at the reviewed pre-release epoch.");
+  }
+  const rotation = record(ledger.rotation, "Trusted funnel post-boundary rotation");
+  const requestedAt = canonicalTimestamp(rotation.requested_at, "Trusted funnel rotation requested_at");
+  if (rotation.id !== POST_BOUNDARY_DRAIN_ID || rotation.status !== "draining" ||
+      rotation.target_epoch_id !== 57 || rotation.reason !== POST_BOUNDARY_DRAIN_REASON ||
+      Date.parse(requestedAt) < Date.parse(EARNED_PLACEMENT_ENDS_AT)) {
+    throw new Error("Trusted funnel post-boundary rotation is not the exact draining release boundary.");
+  }
+  const active = record(
+    ledger.epochs.find((candidate: Record<string, unknown>) => candidate?.id === 56),
+    "Trusted funnel active pre-release epoch",
+  );
+  if (active.status !== "draining" || active.conversion_eligible !== false ||
+      active.classification !== "excluded_unattributed_owner_triggered_downstream_probe") {
+    throw new Error("Trusted funnel pre-release epoch is not excluded by the release drain.");
+  }
+
+  return {
+    ready: true,
+    terminal_status: terminal.status as string,
+    ends_at: EARNED_PLACEMENT_ENDS_AT,
+    frozen_at: frozenAt,
+    checked_at: checkedAt,
+    measurement_valid: true,
+    currently_healthy: true,
+    genuine_purchases: Number(current.genuine_purchases),
+    next_action: expectedNextAction,
+    drain_rotation_id: POST_BOUNDARY_DRAIN_ID,
+    drain_status: "draining",
+    release_candidate_commit: candidate.head as string,
+  };
+}

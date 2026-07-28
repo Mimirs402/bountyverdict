@@ -44,7 +44,9 @@ import {
   appendCdpMerchantQualityHistory,
   normalizeAgenticMarketQuality,
   normalizeCdpMerchantQuality,
+  normalizeThe402CustomerSettlement,
   normalizeThe402ServiceOutcome,
+  normalizeThe402WebhookHealth,
 } from "../src/marketplace-telemetry.ts";
 import { loadDistributionMonitorConfiguration } from "../src/monitor-configuration.ts";
 import { canReuseMcpDownstreamStatus, glamaConnectorStatus, parseMcpubGetResponse, parseMcpubSearchLiveResponse, parseOneMcpRegistryShow, parseQtMcpRegistry } from "../src/mcp-downstreams.ts";
@@ -65,6 +67,7 @@ import {
 import { updateUnknownToolRecoveryExperiment } from "../src/recovery-experiment.ts";
 import {
   AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   TASK_LEADING_DESCRIPTION_EXPERIMENT_ID,
   updateTaskLeadingDescriptionExperiment,
 } from "../src/task-leading-description-experiment.ts";
@@ -94,7 +97,7 @@ const GITHUB_REPOSITORY = "Mimirs402/bountyverdict";
 const LEGACY_EXPERIMENT_SKILLS_REPOSITORY = "cristianmoroaica/bountyverdict";
 const LEGACY_EXPERIMENT_SKILLS_URL = `https://skills.sh/${LEGACY_EXPERIMENT_SKILLS_REPOSITORY}`;
 const MCP_REGISTRY_NAME = "io.github.Mimirs402/bountyverdict";
-const MCP_REGISTRY_VERSION = "1.1.9";
+const MCP_REGISTRY_VERSION = "1.1.11";
 const MCP_REGISTRY_TIMEOUT_MS = 45_000;
 const ONE_MCP_PACKAGE = "@1mcp/agent@0.34.3";
 const QT_MCP_REGISTRY = "https://qtccache.qt.io/mcp/registry.json";
@@ -102,6 +105,7 @@ const GLAMA_MCP_CONNECTOR = `https://glama.ai/mcp/connectors/${MCP_REGISTRY_NAME
 const MCPUB_MCP = "https://mcpub.dev/mcp";
 const MCP_INTENT_PAGE = "https://mimirs402.github.io/bountyverdict/mcp-github-actions-diagnosis.html";
 const MCP_DOWNSTREAM_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const THE402_PLATFORM_VERIFICATION_WALLET = "0x3289eb342c6d118b264cf02364e98f4fc0cbd949";
 const SMITHERY_API = "https://api.smithery.ai";
 const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
   id: "mcp-task-specific-description-post-release-v1",
@@ -127,6 +131,7 @@ const MCP_PREVIEW_COPY_ROLLOUT = Object.freeze({
     protocol_error: 0,
     tool_not_found: 0,
     validation_error: 0,
+    selection_preview: 0,
     capacity_rejected: 0,
     payment_required: 0,
     payment_present: 0,
@@ -147,6 +152,7 @@ const MCP_UNKNOWN_TOOL_RECOVERY_EXPERIMENT = Object.freeze({
     protocol_error: 0,
     tool_not_found: 0,
     validation_error: 0,
+    selection_preview: 0,
     capacity_rejected: 0,
     payment_required: 0,
     payment_present: 0,
@@ -173,6 +179,8 @@ const taskLeadingDescriptionExperimentStateFile = process.env.TASK_LEADING_DESCR
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-task-leading-descriptions-v2.json`;
 const agentQuestionDescriptionExperimentStateFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/experiments/mcp-agent-question-descriptions-v7.json`;
+const freeSelectionRouterExperimentStateFile = process.env.FREE_SELECTION_ROUTER_EXPERIMENT_STATE_FILE ||
+  `${homedir()}/.local/state/bountyverdict/experiments/mcp-free-selection-router-v1.json`;
 const payanDemandStateFile = process.env.PAYAN_DEMAND_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/payan-demand.json`;
 const publicDemandStateFile = process.env.DEMAND_WATCH_STATE_FILE ||
@@ -189,6 +197,8 @@ const taskLeadingDescriptionActivationFile = process.env.TASK_LEADING_DESCRIPTIO
   `${homedir()}/.config/bountyverdict/task-leading-description-experiment.activation.json`;
 const agentQuestionDescriptionActivationFile = process.env.AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ACTIVATION_FILE ||
   `${homedir()}/.config/bountyverdict/agent-question-description-experiment-v7.activation.json`;
+const freeSelectionRouterActivationFile = process.env.FREE_SELECTION_ROUTER_EXPERIMENT_ACTIVATION_FILE ||
+  `${homedir()}/.config/bountyverdict/free-selection-router-v1.activation.json`;
 const monitorNoteFile = process.env.MONITOR_NOTE_FILE || `${homedir()}/notes/mimirx402.md`;
 const trackedCostsInput = configuration.trackedCostsUsdc;
 const historicalTestGasEth = process.env.HISTORICAL_TEST_GAS_ETH || "0.00000525";
@@ -984,9 +994,6 @@ async function the402Status(): Promise<Record<string, unknown>> {
   if (services.some(({ name }) => name === "SkillVerdict")) {
     throw new Error("SkillVerdict was added to the402 before its isolated experiment ended.");
   }
-  if (!owned.every(({ webhook_healthy }) => webhook_healthy === true)) {
-    throw new Error("the402 reports an unhealthy BountyVerdict webhook.");
-  }
   for (const service of owned) {
     const expected = expectedById.get(String(service.id));
     if (!expected) throw new Error("the402 returned an unexpected service.");
@@ -1006,6 +1013,10 @@ async function the402Status(): Promise<Record<string, unknown>> {
   if (completedCounts.length !== 1 || !Number.isSafeInteger(completedCounts[0]) || completedCounts[0] < 0) {
     throw new Error("the402 completed-job telemetry is inconsistent or invalid.");
   }
+  const webhookHealth = normalizeThe402WebhookHealth(
+    owned.map(({ webhook_healthy }) => webhook_healthy),
+    completedCounts[0],
+  );
   const detailResponses = await Promise.all(owned.map(({ id }) =>
     monitoredFetch(`${THE402_API}/services/${encodeURIComponent(String(id))}`)));
   if (detailResponses.some((response) => !response.ok)) {
@@ -1053,6 +1064,39 @@ async function the402Status(): Promise<Record<string, unknown>> {
   const recentSettlements = Array.isArray(earnings.recent_settlements)
     ? earnings.recent_settlements as Array<Record<string, unknown>>
     : [];
+  if (recentSettlements.length > 100) throw new Error("the402 settlement history is unbounded.");
+  const settlementJobIds = recentSettlements.map((entry) => entry.job_id);
+  if (settlementJobIds.some((id) => typeof id !== "string" || !/^job_[A-Za-z0-9_-]{1,160}$/.test(id)) ||
+    new Set(settlementJobIds).size !== settlementJobIds.length) {
+    throw new Error("the402 settlement job identities are malformed or duplicated.");
+  }
+  const settlementJobResponses = await Promise.all(settlementJobIds.map((jobId) =>
+    monitoredFetch(`${THE402_API}/jobs/${encodeURIComponent(String(jobId))}`, {
+      headers: { "X-API-Key": the402ApiKey },
+    })));
+  if (settlementJobResponses.some((response) => !response.ok)) {
+    throw new Error("one or more the402 settlement job lookups failed.");
+  }
+  const settlementJobs = await Promise.all(settlementJobResponses.map((response) => response.json()));
+  const excludedBuyerWallets = new Set([
+    THE402_PLATFORM_VERIFICATION_WALLET,
+    OWNER_CONTROLLED_CANARY_PAYER.toLowerCase(),
+    wallet.toLowerCase(),
+    ...(settlementBuyer ? [settlementBuyer.toLowerCase()] : []),
+  ]);
+  const verifiedCustomerSettlements = recentSettlements.flatMap((settlement, index) => {
+    const verified = normalizeThe402CustomerSettlement(
+      settlement,
+      settlementJobs[index],
+      expectedIds,
+      excludedBuyerWallets,
+    );
+    return verified ? [verified] : [];
+  });
+  const verifiedCustomerRevenueUsd = verifiedCustomerSettlements.reduce(
+    (sum, settlement) => sum + settlement.amount_usd,
+    0,
+  );
   // A subscription is one purchase even when it later produces many covered
   // service calls. Only count settlements that the marketplace explicitly
   // attributes to our plan; never infer a subscription from price alone.
@@ -1086,7 +1130,8 @@ async function the402Status(): Promise<Record<string, unknown>> {
     provider_wallet: String(earnings.wallet).toLowerCase(),
     service_count: owned.length,
     skillverdict_excluded: true,
-    webhook_healthy: true,
+    webhook_healthy: webhookHealth.healthy,
+    webhook_health_status: webhookHealth.status,
     listing_contracts_verified: true,
     request_notifications_enabled: true,
     request_notification_failures: Number.isSafeInteger(notifications.consecutive_failures)
@@ -1106,13 +1151,24 @@ async function the402Status(): Promise<Record<string, unknown>> {
     service_outcome_totals: outcomeTotals,
     service_outcome_note: "Per-service marketplace attempt and reputation telemetry; customer purchases and revenue still require settlement attribution.",
     settled_usd: settledUsd,
+    verified_customer_revenue_usdc: verifiedCustomerRevenueUsd,
+    verified_external_purchases: verifiedCustomerSettlements.length,
+    verified_customer_settlements: verifiedCustomerSettlements,
+    quarantined_unattributed_settled_usd: Math.max(0, settledUsd - verifiedCustomerRevenueUsd),
     held_usd: heldUsd,
     pending_usd: pendingUsd,
     recent_settlement_count: recentSettlements.length,
     subscription_settlement_ids: subscriptionSettlements.map(({ settlement_id }) => settlement_id),
     subscription_settlements: subscriptionSettlements,
-    recent_settlements: recentSettlements.map((entry) => ({
-      service_id: typeof entry.service_id === "string" ? entry.service_id : null,
+    recent_settlements: recentSettlements.map((entry, index) => ({
+      settlement_id: typeof entry.id === "string" ? entry.id : null,
+      job_id: typeof entry.job_id === "string" ? entry.job_id : null,
+      service_id: typeof (settlementJobs[index] as Record<string, unknown>)?.service_id === "string"
+        ? (settlementJobs[index] as Record<string, unknown>).service_id
+        : null,
+      job_status: typeof (settlementJobs[index] as Record<string, unknown>)?.status === "string"
+        ? (settlementJobs[index] as Record<string, unknown>).status
+        : null,
       transaction_hash: typeof entry.transaction_hash === "string"
         ? entry.transaction_hash
         : typeof entry.tx_hash === "string" ? entry.tx_hash : null,
@@ -1314,6 +1370,9 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   for (const field of [
     "tracked_submissions", "pending_submissions", "rejected_submissions", "not_awarded_submissions",
     "unverified_award_submissions", "settled_submissions",
+    "submission_window_open_pending_submissions",
+    "expired_awaiting_finalization_pending_submissions",
+    "pre_expiry_window_closed_pending_submissions",
   ]) {
     if (!Number.isSafeInteger(taskmarketTracked[field]) || taskmarketTracked[field] < 0) {
       throw new Error(`Taskmarket tracked counter ${field} is invalid.`);
@@ -1334,13 +1393,25 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   let settledWorkerAtomic = 0n;
   let pendingGrossAtomic = 0n;
   let pendingNetAtomic = 0n;
+  let submissionWindowOpenPending = 0;
+  let submissionWindowOpenGrossAtomic = 0n;
+  let submissionWindowOpenNetAtomic = 0n;
+  let expiredAwaitingFinalizationPending = 0;
+  let expiredAwaitingFinalizationGrossAtomic = 0n;
+  let expiredAwaitingFinalizationNetAtomic = 0n;
+  let preExpiryWindowClosedPending = 0;
+  let preExpiryWindowClosedGrossAtomic = 0n;
+  let preExpiryWindowClosedNetAtomic = 0n;
+  const snapshotMs = Date.parse(state.checked_at);
   const consumedReceiptEvidence = new Set<string>();
   const consumedCanonicalEvents = new Set<string>();
   for (const record of taskmarketTracked.submissions as Array<Record<string, any>>) {
     if (!/^0x[a-f0-9]{64}$/i.test(record.task_id || "") ||
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(record.submission_id || "") ||
       !/^0x[a-f0-9]{64}$/i.test(record.submit_tx_hash || "") ||
-      !["pending_award", "rejected", "not_awarded", "award_unverified", "settled_award"].includes(record.submission_state)) {
+      !["pending_award", "rejected", "not_awarded", "award_unverified", "settled_award"].includes(record.submission_state) ||
+      typeof record.task_expiry_at !== "string" || !Number.isFinite(Date.parse(record.task_expiry_at)) ||
+      typeof record.submission_window_open !== "boolean") {
       throw new Error("Taskmarket tracked submission record is malformed.");
     }
     const recordEscrowReward = taskmarketUsdcAtomic(record.escrow_reward_usdc);
@@ -1355,6 +1426,30 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     if (record.submission_state === "pending_award") {
       pendingGrossAtomic += recordGrossPotential;
       pendingNetAtomic += recordNetPotential;
+      const expiryMs = Date.parse(record.task_expiry_at);
+      const expectedPendingPhase = record.submission_window_open && expiryMs > snapshotMs
+        ? "submission_window_open"
+        : expiryMs <= snapshotMs
+          ? "expired_awaiting_finalization"
+          : "pre_expiry_window_closed_awaiting_finalization";
+      if (record.pending_phase !== expectedPendingPhase) {
+        throw new Error("Taskmarket pending submission phase disagrees with its window and expiry.");
+      }
+      if (expectedPendingPhase === "submission_window_open") {
+        submissionWindowOpenPending += 1;
+        submissionWindowOpenGrossAtomic += recordGrossPotential;
+        submissionWindowOpenNetAtomic += recordNetPotential;
+      } else if (expectedPendingPhase === "expired_awaiting_finalization") {
+        expiredAwaitingFinalizationPending += 1;
+        expiredAwaitingFinalizationGrossAtomic += recordGrossPotential;
+        expiredAwaitingFinalizationNetAtomic += recordNetPotential;
+      } else {
+        preExpiryWindowClosedPending += 1;
+        preExpiryWindowClosedGrossAtomic += recordGrossPotential;
+        preExpiryWindowClosedNetAtomic += recordNetPotential;
+      }
+    } else if (record.pending_phase !== null) {
+      throw new Error("Taskmarket non-pending submission contains a pending phase.");
     }
     if (record.submission_state === "settled_award") {
       settledRecords += 1;
@@ -1440,6 +1535,40 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   if (reportedPendingGrossAtomic === null || reportedPendingNetAtomic === null ||
     reportedPendingGrossAtomic !== pendingGrossAtomic || reportedPendingNetAtomic !== pendingNetAtomic) {
     throw new Error("Taskmarket pending opportunity totals do not equal the pending submission records.");
+  }
+  const pendingBuckets = [
+    {
+      count: taskmarketTracked.submission_window_open_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.submission_window_open_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.submission_window_open_net_potential_usdc),
+      expectedCount: submissionWindowOpenPending,
+      expectedGross: submissionWindowOpenGrossAtomic,
+      expectedNet: submissionWindowOpenNetAtomic,
+    },
+    {
+      count: taskmarketTracked.expired_awaiting_finalization_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.expired_awaiting_finalization_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc),
+      expectedCount: expiredAwaitingFinalizationPending,
+      expectedGross: expiredAwaitingFinalizationGrossAtomic,
+      expectedNet: expiredAwaitingFinalizationNetAtomic,
+    },
+    {
+      count: taskmarketTracked.pre_expiry_window_closed_pending_submissions,
+      gross: taskmarketUsdcAtomic(taskmarketTracked.pre_expiry_window_closed_gross_potential_usdc),
+      net: taskmarketUsdcAtomic(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc),
+      expectedCount: preExpiryWindowClosedPending,
+      expectedGross: preExpiryWindowClosedGrossAtomic,
+      expectedNet: preExpiryWindowClosedNetAtomic,
+    },
+  ];
+  if (pendingBuckets.some(({ count, gross, net, expectedCount, expectedGross, expectedNet }) =>
+    count !== expectedCount || gross === null || net === null || gross !== expectedGross || net !== expectedNet
+  ) ||
+    pendingBuckets.reduce((sum, bucket) => sum + Number(bucket.count), 0) !== taskmarketTracked.pending_submissions ||
+    pendingBuckets.reduce((sum, bucket) => sum + (bucket.gross || 0n), 0n) !== reportedPendingGrossAtomic ||
+    pendingBuckets.reduce((sum, bucket) => sum + (bucket.net || 0n), 0n) !== reportedPendingNetAtomic) {
+    throw new Error("Taskmarket pending opportunity buckets do not reconcile with their records or legacy totals.");
   }
   return {
     healthy: true,
@@ -1841,6 +1970,7 @@ async function funnelStatus(
   previousRecoveryExperiment: unknown,
   previousTaskLeadingDescriptionExperiment: unknown,
   previousAgentQuestionDescriptionExperiment: unknown,
+  previousFreeSelectionRouterExperiment: unknown,
 ): Promise<Record<string, unknown>> {
   try {
     const readDescriptionActivation = async (path: string, label: string): Promise<unknown> => {
@@ -1870,6 +2000,10 @@ async function funnelStatus(
     const agentQuestionDescriptionActivation = await readDescriptionActivation(
       agentQuestionDescriptionActivationFile,
       "Agent-question description",
+    );
+    const freeSelectionRouterActivation = await readDescriptionActivation(
+      freeSelectionRouterActivationFile,
+      "Free selection router",
     );
     const monotonicDelta = (current: unknown, baseline: unknown, label: string): number => {
       const currentValue = Number(current || 0);
@@ -2108,6 +2242,17 @@ async function funnelStatus(
       trustedRotation: epochRotation,
       previous: previousAgentQuestionDescriptionExperiment,
     });
+    const mcpFreeSelectionRouterExperiment = updateTaskLeadingDescriptionExperiment({
+      experimentId: FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+      observedAt: new Date().toISOString(),
+      activation: freeSelectionRouterActivation,
+      currentEpochId: Number(trustedBaseline.epoch_id || 1),
+      measurementEligible,
+      cleanEpochDelta: effectiveTrustedMcp?.buyer_candidate_totals || null,
+      trustedBaselineInitializedAt: trustedBaseline.initialized_at,
+      trustedRotation: epochRotation,
+      previous: previousFreeSelectionRouterExperiment,
+    });
     const trustedBuyerCandidateDiscovery = trustedBuyerCandidateDiscoveryDelta(state, trustedBaseline);
     const effectiveBuyerCandidateDiscovery = measurementEligible
       ? trustedBuyerCandidateDiscovery
@@ -2206,6 +2351,7 @@ async function funnelStatus(
       mcp_unknown_tool_recovery_experiment: mcpUnknownToolRecoveryExperiment,
       mcp_task_leading_description_experiment: mcpTaskLeadingDescriptionExperiment,
       mcp_agent_question_description_experiment: mcpAgentQuestionDescriptionExperiment,
+      mcp_free_selection_router_experiment: mcpFreeSelectionRouterExperiment,
       mcp_learning_stage: mcpLearningStage,
       trusted_mcp_learning_stage: trustedMcpLearningStage,
       mcp_by_source: state.mcp_by_source,
@@ -2256,7 +2402,7 @@ function optionalCount(value: unknown): number | undefined {
 
 function renderMonitorNote(report: Record<string, any>): string {
   const directRevenueValue = Number(report.revenue?.recognized_usdc || 0);
-  const marketplaceRevenueValue = Number(report.marketplaces?.the402?.settled_usd || 0);
+  const marketplaceRevenueValue = Number(report.marketplaces?.the402?.verified_customer_revenue_usdc || 0);
   const nearRevenueValue = Number(report.marketplaces?.near?.earned_usdc_balance || 0);
   const taskmarketTracked = report.acquisition?.public_demand_watch?.taskmarket?.tracked_worker || {};
   const taskmarketRevenueValue = Number(taskmarketTracked.settled_worker_earnings_usdc || 0);
@@ -2266,7 +2412,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const costsValue = Number(trackedCostsInput);
   const profitValue = revenueValue - costsValue;
   const purchases = report.revenue?.purchases || {};
-  const marketplacePurchases = Number(report.marketplaces?.the402?.completed_jobs || 0);
+  const marketplacePurchases = Number(report.marketplaces?.the402?.verified_external_purchases || 0);
   const subscriptionPurchases = Number(report.marketplaces?.the402?.subscription_purchases || 0);
   const nearPurchases = Number(report.marketplaces?.near?.completed_external_jobs || 0);
   const taskmarketPurchases = Number(taskmarketTracked.settled_submissions || 0);
@@ -2311,6 +2457,8 @@ function renderMonitorNote(report: Record<string, any>): string {
   const mcpTaskLeadingDescriptionDelta = mcpTaskLeadingDescriptionExperiment.eligible_delta || {};
   const mcpAgentQuestionDescriptionExperiment = funnel.mcp_agent_question_description_experiment || {};
   const mcpAgentQuestionDescriptionDelta = mcpAgentQuestionDescriptionExperiment.eligible_delta || {};
+  const mcpFreeSelectionRouterExperiment = funnel.mcp_free_selection_router_experiment || {};
+  const mcpFreeSelectionRouterDelta = mcpFreeSelectionRouterExperiment.eligible_delta || {};
   const ratio = (value: unknown) => value !== null && value !== undefined && Number.isFinite(Number(value))
     ? `${Number(value)}%`
     : "not yet measurable";
@@ -2419,7 +2567,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Security action required:** revoke the x402.jobs API key that appeared in the tracked example file during local investigation; it was removed before commit or push and was never used. Store any future replacement only in an ignored mode-0600 user configuration after body-aware endpoint verification is supported.
 - **Historic owner-test gas:** approximately ${historicalTestGasEth} ETH (reported separately; not converted into tracked USD costs)
 - **Distribution milestone:** ${totalPurchases} / 10 genuine external purchases
-- **Pending Taskmarket opportunity estimate (not revenue):** ${Number(taskmarketTracked.pending_submissions || 0)} submissions; $${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net if awarded (pool-task net is explicitly operator-estimated from submitted record types; gross is scaled by that task's live reward/net contract, never the full escrow)
+- **Pending Taskmarket opportunity estimate (not revenue):** ${Number(taskmarketTracked.pending_submissions || 0)} submissions; $${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net if awarded. Live submission windows: ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} / $${String(taskmarketTracked.submission_window_open_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net. Expired awaiting requester finalization: ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} / $${String(taskmarketTracked.expired_awaiting_finalization_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net. Pre-expiry closed awaiting finalization: ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} / $${String(taskmarketTracked.pre_expiry_window_closed_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net. Expiry closes new submissions but does not itself revoke requester award actions; every bucket remains potential, never revenue. Pool-task net is explicitly operator-estimated from submitted record types; gross is scaled by that task's live reward/net contract, never the full escrow.
 - **Autonomous work safety gate (2026-07-21 snapshot):** minia2a gas task rejected after 79 competing submissions; minia2a CAPTCHA rejected for insufficient authorization, live request/price drift, duplicate payment choices, and unsafe public token delivery; BountyBook excluded because all 32 API-verified jobs reported payout failure, no payout transaction hash, and contract job ID 0. No payment or claim was made.
 - **Tollbooth compatibility probe:** submitted_unverified; its verifier parsed the exact $0.05 x402 v2 Base-USDC challenge and payee but the paid replay stayed at HTTP 402 with no settlement proof. The listing has zero calls and zero revenue; do not retry or weaken the production protocol until Tollbooth demonstrates compatible v2 payment replay.
 - **Smithery marketplace:** ${smitherySummary} at [mimirs402/bountyverdict](https://smithery.ai/servers/mimirs402/bountyverdict) (fixed owner-run retrieval and the public use counter are placement/use telemetry, not search volume, impressions, purchases, or revenue)
@@ -2438,6 +2586,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **MCP unknown-tool recovery experiment:** ${funnel.available ? `${mcpRecoveryExperiment.status || "unavailable"} on exact epoch ${Number(mcpRecoveryExperiment.measurement_epoch_id || 46)}; eligible zero-prefix delta ${Number(mcpRecoveryDelta.initialize || 0)} initialize / ${Number(mcpRecoveryDelta.tools_list || 0)} tools/list / ${Number(mcpRecoveryDelta.protocol_error || 0)} protocol error / ${Number(mcpRecoveryDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpRecoveryDelta.validation_error || 0)} invalid input / ${Number(mcpRecoveryDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpRecoveryDelta.payment_required || 0)} valid unpaid / ${Number(mcpRecoveryDelta.payment_present || 0)} payment presented / ${Number(mcpRecoveryDelta.paid_success || 0)} paid success / ${Number(mcpRecoveryDelta.paid_error || 0)} paid error; ${Number(mcpRecoveryExperiment.remaining_eligible_tools_list || 0)} eligible lists remaining; decision ${mcpRecoveryExperiment.decision || "pending"}` : "unavailable"} (first report at or above 25 eligible epoch-46 tools/list events is immutable; aggregate counters have no session/retry linkage and never establish a causal recovery rate, unique agents, purchases, or revenue)
 - **MCP task-leading description experiment:** ${funnel.available ? `${mcpTaskLeadingDescriptionExperiment.status || "unavailable"}; exact fresh epoch ${mcpTaskLeadingDescriptionExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpTaskLeadingDescriptionDelta.initialize || 0)} initialize / ${Number(mcpTaskLeadingDescriptionDelta.tools_list || 0)} tools/list / ${Number(mcpTaskLeadingDescriptionDelta.protocol_error || 0)} protocol error / ${Number(mcpTaskLeadingDescriptionDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpTaskLeadingDescriptionDelta.validation_error || 0)} invalid input / ${Number(mcpTaskLeadingDescriptionDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpTaskLeadingDescriptionDelta.payment_required || 0)} valid unpaid / ${Number(mcpTaskLeadingDescriptionDelta.payment_present || 0)} payment presented / ${Number(mcpTaskLeadingDescriptionDelta.paid_success || 0)} paid success / ${Number(mcpTaskLeadingDescriptionDelta.paid_error || 0)} paid error; ${Number(mcpTaskLeadingDescriptionExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpTaskLeadingDescriptionExperiment.decision || "pending"}` : "unavailable"} (inactive until exact reviewed release, production activation, completed drain rotation, and fresh epoch coordinates match the trusted ledger; first report at or above N=25 is immutable; aggregate counters have no session/exposure linkage and never establish a causal copy conversion rate, unique agents, purchases, or revenue)
 - **MCP agent-question description experiment:** ${funnel.available ? `${mcpAgentQuestionDescriptionExperiment.status || "unavailable"}; exact fresh epoch ${mcpAgentQuestionDescriptionExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpAgentQuestionDescriptionDelta.initialize || 0)} initialize / ${Number(mcpAgentQuestionDescriptionDelta.tools_list || 0)} tools/list / ${Number(mcpAgentQuestionDescriptionDelta.protocol_error || 0)} protocol error / ${Number(mcpAgentQuestionDescriptionDelta.tool_not_found || 0)} unknown-tool / ${Number(mcpAgentQuestionDescriptionDelta.validation_error || 0)} invalid input / ${Number(mcpAgentQuestionDescriptionDelta.capacity_rejected || 0)} capacity rejected / ${Number(mcpAgentQuestionDescriptionDelta.payment_required || 0)} valid unpaid / ${Number(mcpAgentQuestionDescriptionDelta.payment_present || 0)} payment presented / ${Number(mcpAgentQuestionDescriptionDelta.paid_success || 0)} paid success / ${Number(mcpAgentQuestionDescriptionDelta.paid_error || 0)} paid error; ${Number(mcpAgentQuestionDescriptionExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpAgentQuestionDescriptionExperiment.decision || "pending"}` : "unavailable"} (the completed v2 baseline and prior excluded question-description windows remain frozen; v7 starts from zero only when the exact current quality release, production activation, Agent Finder drain, and fresh epoch 55 match; aggregate counters are not unique agents, causal attribution, purchases, or revenue)
+- **MCP free selection router experiment:** ${funnel.available ? `${mcpFreeSelectionRouterExperiment.status || "unavailable"}; exact fresh epoch ${mcpFreeSelectionRouterExperiment.measurement_epoch_id ?? "pending activation"}; eligible zero-prefix delta ${Number(mcpFreeSelectionRouterDelta.initialize || 0)} initialize / ${Number(mcpFreeSelectionRouterDelta.tools_list || 0)} tools/list / ${Number(mcpFreeSelectionRouterDelta.selection_preview || 0)} free selections / ${Number(mcpFreeSelectionRouterDelta.validation_error || 0)} invalid input / ${Number(mcpFreeSelectionRouterDelta.payment_required || 0)} valid unpaid / ${Number(mcpFreeSelectionRouterDelta.payment_present || 0)} payment presented / ${Number(mcpFreeSelectionRouterDelta.paid_success || 0)} paid success / ${Number(mcpFreeSelectionRouterDelta.paid_error || 0)} paid error; ${Number(mcpFreeSelectionRouterExperiment.remaining_eligible_tools_list ?? 25)} eligible lists remaining; decision ${mcpFreeSelectionRouterExperiment.decision || "pending"}` : "unavailable"} (inactive until an exact v1.1.11 release, production activation, completed post-release drain rotation, and fresh eligible epoch are bound in the owner-private activation record; first report at or above N=25 is immutable; a free selection is not payment intent, a purchase, or revenue)
 - **MCP invalid-call learning:** ${funnel.available ? mcpValidationSummary : "unavailable"} (coarse categories only; no arguments, URLs, payloads, identities, or raw client names retained; pre-upgrade events remain legacy-unclassified)
 - **MCP directory-crawler activity:** ${funnel.available ? `${Number(mcpRegistryCrawler.initialize || 0)} initializations; ${Number(mcpRegistryCrawler.tools_list || 0)} tool-list requests; ${Number(mcpRegistryCrawler.payment_required || 0)} valid unpaid tool calls` : "unavailable"} (retained separately for distribution propagation, never treated as buyer intent)
 - **Kiro Power package:** repository contract published; registry submission not made because publisher terms require explicit acceptance; ${funnel.available ? `${Number(mcpKiroPower.initialize || 0)} declared-source initializations, ${Number(mcpKiroPower.tools_list || 0)} tool-list requests, ${Number(mcpKiroPower.payment_required || 0)} valid unpaid calls, ${Number(mcpKiroPower.payment_present || 0)} payment presentations` : "funnel unavailable"} (source marker is aggregate attribution, not proof of install, identity, or purchase)
@@ -2455,7 +2604,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **Dedicated Skills.sh adapter:** ${dedicatedSkillsSh.listed ? `listed at ${dedicatedSkillsSh.url}; exact search rank ${dedicatedSkillsShSearch.exact_rank || "unavailable"}; natural retrieval ${Number(dedicatedSkillsShSearch.natural_found || 0)} / ${Number(dedicatedSkillsShSearch.natural_expected || ASKILL_BUYER_QUERIES.length)} queries and ${Number(dedicatedSkillsShSearch.natural_top_three || 0)} top-three` : `${dedicatedSkillsSh.status || "awaiting audited catalog refresh"}; indexing request ${dedicatedSkillsSh.indexing_request?.issue_url || "https://github.com/vercel-labs/skills/issues/1754"}`} (upstream request, listing, and owner-run retrieval are not impressions, installs, tool calls, purchases, or revenue)
 - **Awesome Skills adapter:** ${awesomeSkills.contract_verified ? `listed with exact source, install command, task description, payment handoff, and ${Number(awesomeSkills.listed_tools || 0)} / ${Number(awesomeSkills.expected_tools || 6)} tools at ${awesomeSkills.url}` : awesomeSkills.status || "awaiting audited catalog refresh"} (account-free submission and listing contract are not impressions, installs, tool calls, purchases, or revenue)
 - **Agent-Skills.md adapter:** ${report.acquisition?.agent_skills_md?.status || "unavailable"} (${report.acquisition?.agent_skills_md?.contract_verified ? "task-first source and six-tool payment handoff verified" : "publication or contract verification pending"}; ${report.acquisition?.agent_skills_md?.listing_url || "https://agent-skills.md/skills/Mimirs402/bountyverdict-mcp-skill/route-github-agent-decisions"}; anonymous submission and listing presence are not impressions, installs, tool calls, purchases, or revenue)
-- **Glama release path:** build-ready secret-free stdio bridge to the existing six-tool remote; ${funnel.available ? `${Number(mcpGlama.initialize || 0)} source-marked initializations, ${Number(mcpGlama.tools_list || 0)} tool-list requests, ${Number(mcpGlama.payment_required || 0)} valid unpaid calls, ${Number(mcpGlama.payment_present || 0)} payment presentations` : "funnel unavailable"}; dashboard release and quality score pending (source marker and build checks are distribution evidence only, never installs, purchases, or revenue)
+- **Glama release path:** build-ready secret-free stdio bridge to the free selector plus six paid remote tools; ${funnel.available ? `${Number(mcpGlama.initialize || 0)} source-marked initializations, ${Number(mcpGlama.tools_list || 0)} tool-list requests, ${Number(mcpGlama.payment_required || 0)} valid unpaid calls, ${Number(mcpGlama.payment_present || 0)} payment presentations` : "funnel unavailable"}; dashboard release and quality score pending (source marker and build checks are distribution evidence only, never installs, purchases, or revenue)
 - **Authenticated GitHub PR telemetry:** ${githubPrTelemetrySummary}
 - **Superseded personal-account PRs:** ${Number(githubPrMonitoring.excluded_superseded_personal_pr_count || 0)} explicitly excluded from active health and workflow totals (${Array.isArray(githubPrMonitoring.excluded_superseded_personal_prs) ? githubPrMonitoring.excluded_superseded_personal_prs.map((entry: Record<string, any>) => `${entry.surface} ${entry.url} → ${entry.superseded_by}`).join("; ") : "provenance unavailable"})
 - **Official MCP Registry:** ${report.acquisition?.mcp_registry?.listed ? `${report.acquisition.mcp_registry.name}@${report.acquisition.mcp_registry.version} listed at the exact production Streamable HTTP endpoint` : `unavailable (${report.acquisition?.mcp_registry?.error || "not checked"})`} (placement only, never a purchase)
@@ -2480,7 +2629,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? "6 / 6 exact contracts verified" : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **Payan exact-fit demand capture:** ${payanDemand.healthy ? "enabled and healthy" : "unavailable or degraded"}; ${Number(payanDemand.open_requests_seen || 0)} open seen, ${Number(payanDemand.exact_matches || 0)} exact fits, ${Number(payanDemand.tracked_requests || 0)} tracked bids, ${Number(payanDemand.accepted || 0)} accepted, ${Number(payanDemand.fulfilled || 0)} fulfilled, ${Number(payanDemand.approved || 0)} approved (never bids on incomplete or mismatched briefs)
 - **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits; Taskmarket ${Number(taskmarketDemand.api_escrow_backed_open_tasks || 0)} API escrow-backed / $${String(taskmarketDemand.api_escrow_backed_reward_usdc || "0")} USDC and ${Number(taskmarketDemand.exact_candidate_count || 0)} exact existing-product fits (inventory is never revenue)
-- **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.pending_submissions || 0)} pending ($${String(taskmarketTracked.pending_gross_potential_usdc || "0")} gross / $${String(taskmarketTracked.pending_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (submissions, submit transactions, and API award rows alone remain zero purchases and zero revenue)
+- **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} live-window pending ($${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} expired awaiting requester finalization ($${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} pre-expiry closed awaiting finalization ($${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (all pending amounts are potential, and submissions, submit transactions, API award rows, or expiry alone remain zero purchases and zero revenue)
 - **Agentic Market automatic directory:** ${report.marketplaces?.agentic_market?.exact_contracts_verified ? `${report.marketplaces.agentic_market.endpoint_count} / 7 exact contracts indexed` : "unavailable or drifted"}${agenticMissing.length ? `; pending ${agenticMissing.join(", ")}` : ""}
 - **Agent402 open router:** ${report.acquisition?.agent402?.listed ? `listed and ${report.acquisition.agent402.routable ? "routable" : "not routable"}; ${report.acquisition.agent402.observed_tool_count ?? "unknown"} indexed operations versus ${report.acquisition.agent402.expected_paid_tool_count ?? 7} paid products; scope ${report.acquisition.agent402.indexed_scope_status || "unknown"}` : "unavailable or missing"} (${report.acquisition?.agent402?.listing_source || "unknown source"}; passive cached index health only, not impressions or demand; semantic owner-query monitoring disabled)
 - **x402scan registry:** ${report.acquisition?.x402scan?.listed_resources ?? "unavailable"} / ${report.acquisition?.x402scan?.expected_resources ?? 7} paid endpoints (${report.acquisition?.x402scan?.status || "unavailable"}; registry presence only, never a purchase)
@@ -2502,7 +2651,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **MCP.Directory:** ${report.acquisition?.mcp_directory?.status || "unavailable"} (${report.acquisition?.mcp_directory?.submission_recorded ? "free submission recorded from its HTTP 200 response" : "submission unavailable"}; ${report.acquisition?.mcp_directory?.listing_url || "https://mcp.directory/servers/bountyverdict"}; exact listing checks only, never search impressions, tool calls, purchases, or revenue)
 - **VaultPlane skill directory:** ${report.acquisition?.vaultplane?.status || "unavailable"} (free submission ${report.acquisition?.vaultplane?.submission_id || "8ffee7a8-d33b-486f-8eae-9483db40d75b"}; ${report.acquisition?.vaultplane?.listing_url || "https://www.vaultplane.com/skills/bountyverdict-agent-decision-router"}; exact listing checks only, never search impressions, installs, tool calls, purchases, or revenue)
 - **Tools for Agents:** ${report.acquisition?.tools_for_agents?.status || "unavailable"} (${report.acquisition?.tools_for_agents?.submission_recorded ? "free review submission recorded" : "submission unavailable"}; ${report.acquisition?.tools_for_agents?.listing_url || "https://www.toolsforagents.dev/tools/cristianmoroaica/bountyverdict"}; a generic route HTTP 200 is not counted as exposure)
-- **MCP Server Spot:** ${report.acquisition?.mcp_server_spot?.status || "unavailable"} (${report.acquisition?.mcp_server_spot?.contract_verified ? "exact six-tool remote contract verified" : "publication or contract verification pending"}; ${report.acquisition?.mcp_server_spot?.listing_url || "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools"}; listing presence is not an impression, tool call, purchase, or revenue)
+- **MCP Server Spot:** ${report.acquisition?.mcp_server_spot?.status || "unavailable"} (${report.acquisition?.mcp_server_spot?.contract_verified ? "exact seven-tool remote contract verified" : "publication or contract verification pending"}; ${report.acquisition?.mcp_server_spot?.listing_url || "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools"}; listing presence is not an impression, tool call, purchase, or revenue)
 - **Cline in-agent marketplace:** ${report.acquisition?.cline_marketplace?.status || "unavailable"}; ${funnel.available ? `${Number(mcpClineMarketplace.initialize || 0)} source-marked initializations, ${Number(mcpClineMarketplace.tools_list || 0)} tool-list requests, ${Number(mcpClineMarketplace.validation_error || 0)} invalid calls, ${Number(mcpClineMarketplace.payment_required || 0)} valid unpaid calls, ${Number(mcpClineMarketplace.payment_present || 0)} payment presentations, ${Number(mcpClineMarketplace.paid_success || 0)} paid successes` : "funnel unavailable"} (canonical MCP PR ${report.acquisition?.cline_marketplace?.mcp_pr?.pr_status || report.acquisition?.cline_marketplace?.pr_status || "unknown"} at ${report.acquisition?.cline_marketplace?.mcp_pr?.pr_url || report.acquisition?.cline_marketplace?.url || "https://github.com/cline/marketplace/pull/16"}; canonical routing-skill PR ${report.acquisition?.cline_marketplace?.skill_pr?.pr_status || "unknown"} at ${report.acquisition?.cline_marketplace?.skill_pr?.pr_url || "https://github.com/cline/marketplace/pull/15"}; superseded personal MCP PR #13 is excluded; aggregate events are not installs, unique agents, purchases, or revenue)
 - **Kilo in-agent marketplace:** ${report.acquisition?.kilo_marketplace?.status || "unavailable"}; ${funnel.available ? `${Number(mcpKiloMarketplace.initialize || 0)} source-marked initializations, ${Number(mcpKiloMarketplace.tools_list || 0)} tool-list requests, ${Number(mcpKiloMarketplace.validation_error || 0)} invalid calls, ${Number(mcpKiloMarketplace.payment_required || 0)} valid unpaid calls, ${Number(mcpKiloMarketplace.payment_present || 0)} payment presentations, ${Number(mcpKiloMarketplace.paid_success || 0)} paid successes` : "funnel unavailable"} (${report.acquisition?.kilo_marketplace?.url || "https://github.com/Kilo-Org/kilo-marketplace/pull/194"}; aggregate events, not installs, unique agents, purchases, or revenue)
 - **Cursor direct install:** official source-marked MCP deeplink is public in the canonical guide; Marketplace submission is not pursued because its Publisher Terms conflict with the paid x402 service model; aggregate source events are ${funnel.available ? `${Number(mcpCursorDeeplink.initialize || 0)} initialize / ${Number(mcpCursorDeeplink.tools_list || 0)} tools/list` : "unavailable"}, never clicks, installs, unique agents, purchases, or revenue
@@ -2614,10 +2763,10 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - MCP.Directory: ${report.acquisition?.mcp_directory?.status || "unavailable"}; submission ${report.acquisition?.mcp_directory?.submission_recorded ? "recorded from HTTP 200" : "unavailable"}; exact listing ${report.acquisition?.mcp_directory?.listed ? "active" : "pending review"}; remote metadata ${report.acquisition?.mcp_directory?.remote_metadata_verified ? "verified" : "not yet verified"} (${report.acquisition?.mcp_directory?.listing_url || "https://mcp.directory/servers/bountyverdict"}; exact-record checks only, never search impressions, tool calls, purchases, or revenue)
 - VaultPlane skill directory: ${report.acquisition?.vaultplane?.status || "unavailable"}; receipt ${report.acquisition?.vaultplane?.submission_id || "8ffee7a8-d33b-486f-8eae-9483db40d75b"}; exact listing ${report.acquisition?.vaultplane?.listed ? "active" : "pending review"} (${report.acquisition?.vaultplane?.listing_url || "https://www.vaultplane.com/skills/bountyverdict-agent-decision-router"}; submission and placement are never impressions, installs, tool calls, purchases, or revenue)
 - Tools for Agents: ${report.acquisition?.tools_for_agents?.status || "unavailable"}; exact listing ${report.acquisition?.tools_for_agents?.listed ? "active" : "pending review"} (${report.acquisition?.tools_for_agents?.listing_url || "https://www.toolsforagents.dev/tools/cristianmoroaica/bountyverdict"}; generic route resolution is never counted as exposure or demand)
-- MCP Server Spot: ${report.acquisition?.mcp_server_spot?.status || "unavailable"}; exact six-tool remote contract ${report.acquisition?.mcp_server_spot?.contract_verified ? "verified" : "pending"} (${report.acquisition?.mcp_server_spot?.listing_url || "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools"}; catalog presence is never an impression, tool call, purchase, or revenue)
+- MCP Server Spot: ${report.acquisition?.mcp_server_spot?.status || "unavailable"}; exact seven-tool remote contract ${report.acquisition?.mcp_server_spot?.contract_verified ? "verified" : "pending"} (${report.acquisition?.mcp_server_spot?.listing_url || "https://www.mcpserverspot.com/servers/bountyverdict-agent-decision-tools"}; catalog presence is never an impression, tool call, purchase, or revenue)
 - Cline in-agent marketplace: ${report.acquisition?.cline_marketplace?.status || "unavailable"}; canonical MCP PR ${report.acquisition?.cline_marketplace?.mcp_pr?.pr_status || report.acquisition?.cline_marketplace?.pr_status || "unknown"}; canonical routing-skill PR ${report.acquisition?.cline_marketplace?.skill_pr?.pr_status || "unknown"}; exact marketplace install/wizard contract ${report.acquisition?.cline_marketplace?.contract_verified ? "verified in the live catalog" : "pending catalog publication"} (${report.acquisition?.cline_marketplace?.mcp_pr?.pr_url || report.acquisition?.cline_marketplace?.url || "https://github.com/cline/marketplace/pull/16"}; ${report.acquisition?.cline_marketplace?.skill_pr?.pr_url || "https://github.com/cline/marketplace/pull/15"}; superseded personal MCP PR #13 excluded; PR or catalog presence is never an impression, install, tool call, purchase, or revenue)
 - Kilo in-agent marketplace: ${report.acquisition?.kilo_marketplace?.status || "unavailable"}; PR ${report.acquisition?.kilo_marketplace?.pr_status || "unknown"}; exact secret-free remote contract ${report.acquisition?.kilo_marketplace?.contract_verified ? "verified in the live catalog" : "pending catalog publication"} (${report.acquisition?.kilo_marketplace?.url || "https://github.com/Kilo-Org/kilo-marketplace/pull/194"}; PR or catalog presence is never an impression, install, tool call, purchase, or revenue)
-- ToolHive in-agent catalog: ${report.acquisition?.toolhive?.status || "unavailable"}; PR ${report.acquisition?.toolhive?.pr_status || "unknown"}; exact six-tool remote contract ${report.acquisition?.toolhive?.contract_verified ? "verified in the live catalog" : "pending catalog publication"} (${report.acquisition?.toolhive?.url || "https://github.com/stacklok/toolhive-catalog/pull/1388"}; PR or catalog presence is never an impression, install, tool call, purchase, or revenue)
+- ToolHive in-agent catalog: ${report.acquisition?.toolhive?.status || "unavailable"}; PR ${report.acquisition?.toolhive?.pr_status || "unknown"}; exact seven-tool remote contract ${report.acquisition?.toolhive?.contract_verified ? "verified in the live catalog" : "pending catalog publication"} (${report.acquisition?.toolhive?.url || "https://github.com/stacklok/toolhive-catalog/pull/1388"}; PR or catalog presence is never an impression, install, tool call, purchase, or revenue)
 - Gemini CLI Extensions Gallery: ${report.acquisition?.gemini_cli_gallery?.status || "unavailable"}; exact remote MCP contract ${report.acquisition?.gemini_cli_gallery?.contract_verified ? "verified in the live catalog" : "pending the daily catalog crawl"} (${report.acquisition?.gemini_cli_gallery?.url || "https://geminicli.com/extensions/"}; catalog presence is never an impression, install, tool call, purchase, or revenue)
 - GitHub Agent Finder: ${report.acquisition?.agent_finder_catalog?.status || "unavailable"}; PR #11 ${report.acquisition?.agent_finder_catalog?.pr_status || "unknown"}; exact direct-source PR ${report.acquisition?.agent_finder_catalog?.pr_contract_verified ? "verified" : "drifted or unavailable"}; independent official Registry ${report.acquisition?.agent_finder_catalog?.registry_contract_verified ? `verified at ${report.acquisition.agent_finder_catalog.registry_version}` : "approval pending or unavailable"}; exact catalog ${report.acquisition?.agent_finder_catalog?.catalog_contract_verified ? "verified" : "pending"}; exact owner-run search ${report.acquisition?.agent_finder_catalog?.search_contract_verified ? `listed at rank ${report.acquisition.agent_finder_catalog.search_rank}` : "not indexed"} (${report.acquisition?.agent_finder_catalog?.url || "https://github.com/github/agentfinder-catalog/pull/11"}; PR, catalog, and search presence are distribution only, never an impression, install, tool call, purchase, or revenue)
 - Agent402 open router: ${report.acquisition?.agent402?.listed ? "listed" : "unavailable"}; ${report.acquisition?.agent402?.observed_tool_count ?? "unknown"} indexed operations versus ${report.acquisition?.agent402?.expected_paid_tool_count ?? 7} paid products, scope ${report.acquisition?.agent402?.indexed_scope_status || "unknown"} (${report.acquisition?.agent402?.listing_source || "unknown source"}; passive cached index health only; semantic owner-query monitoring disabled)
@@ -2628,7 +2777,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - Monetize Your Agent suite entry: ${report.acquisition?.monetize_your_agent?.status || "unavailable"} (submission ${report.acquisition?.monetize_your_agent?.submission_id ?? "unavailable"})
 - 402directory endpoints: ${report.acquisition?.directory_402?.listed_endpoints ?? 0} / ${report.acquisition?.directory_402?.expected_endpoints ?? 7} (${report.acquisition?.directory_402?.status || "unavailable"}; seven review submissions are not purchases)
 - 402 Index endpoints: ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} (${report.acquisition?.index_402?.status || "unavailable"}; MCPDrift body-bound preflight is not probe-compatible)
-- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_healthy ? "signed webhook healthy" : "unavailable"}; SkillVerdict excluded during isolated experiment)
+- the402 listings: ${report.marketplaces?.the402?.service_count ?? "unavailable"} / 6 (${report.marketplaces?.the402?.webhook_health_status === "healthy" ? "signed webhook healthy" : report.marketplaces?.the402?.webhook_health_status === "unverified_no_completed_jobs" ? "webhook unverified before first completed job" : "unavailable"}; SkillVerdict excluded during isolated experiment)
 - the402 per-product service attempts: ${Object.entries(report.marketplaces?.the402?.service_outcomes || {}).map(([product, outcome]: [string, any]) => `${product} ${Number(outcome.total_jobs || 0)} total/${Number(outcome.failed_jobs || 0)} failed/${Number(outcome.disputed_jobs || 0)} disputed`).join("; ") || "unavailable"} (attempt telemetry only; settlements remain authoritative)
 - NEAR Agent Market listings: ${report.marketplaces?.near?.service_count ?? "unavailable"} / 6 (automated JSON fulfillment; SkillVerdict excluded)
 - PayanAgent offers: ${report.marketplaces?.payan?.offer_count ?? "unavailable"} / 6 (Base x402 proxy; SkillVerdict excluded); exact-fit request automation ${report.marketplaces?.payan?.demand_capture?.healthy ? "healthy" : "unavailable"}
@@ -2751,6 +2900,12 @@ const persistedAgentQuestionDescriptionExperiment = await readMeasurementExperim
 );
 const previousAgentQuestionDescriptionExperiment = persistedAgentQuestionDescriptionExperiment ||
   previousReport.funnel?.mcp_agent_question_description_experiment || null;
+const persistedFreeSelectionRouterExperiment = await readMeasurementExperimentCheckpoint(
+  freeSelectionRouterExperimentStateFile,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+);
+const previousFreeSelectionRouterExperiment = persistedFreeSelectionRouterExperiment ||
+  previousReport.funnel?.mcp_free_selection_router_experiment || null;
 
 try {
   const [root, sample, portfolioSample, harnessSample, skillSample, runSample, flakeSample, mcpDriftSample, x402Manifest, mcpMetadata, openapi, llms] = await Promise.all([
@@ -3148,6 +3303,7 @@ funnel = await funnelStatus(
   previousRecoveryExperiment,
   previousTaskLeadingDescriptionExperiment,
   previousAgentQuestionDescriptionExperiment,
+  previousFreeSelectionRouterExperiment,
 );
 
 const currentRecoveryExperiment = funnel.mcp_unknown_tool_recovery_experiment;
@@ -3185,6 +3341,18 @@ await writeMeasurementExperimentCheckpoint(
   currentAgentQuestionDescriptionExperiment as Record<string, unknown>,
 );
 
+const currentFreeSelectionRouterExperiment = funnel.mcp_free_selection_router_experiment;
+if (!currentFreeSelectionRouterExperiment || typeof currentFreeSelectionRouterExperiment !== "object" ||
+  Array.isArray(currentFreeSelectionRouterExperiment)) {
+  throw new Error("Free selection router experiment state is missing from the funnel report.");
+}
+await writeMeasurementExperimentCheckpoint(
+  freeSelectionRouterExperimentStateFile,
+  FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+  checkedAt,
+  currentFreeSelectionRouterExperiment as Record<string, unknown>,
+);
+
 const taskmarketCommerce = (
   (acquisition.public_demand_watch as Record<string, any> | undefined)?.taskmarket?.tracked_worker || {}
 ) as Record<string, any>;
@@ -3203,12 +3371,12 @@ const report = {
   marketplaces: { the402, near: nearMarket, payan, agentic_market: agenticMarket, clawlancer },
   commerce: {
     genuine_purchases: Number((revenue.purchases as Record<string, unknown> | undefined)?.total || 0) +
-      Number(the402.completed_jobs || 0) + Number(the402.subscription_purchases || 0) +
+      Number(the402.verified_external_purchases || 0) + Number(the402.subscription_purchases || 0) +
       Number(nearMarket.completed_external_jobs || 0) +
       Number(taskmarketCommerce.settled_submissions || 0) +
       Number(clawlancer.settled_jobs || 0),
     customer_revenue_usdc: (
-      Number(revenue.recognized_usdc || 0) + Number(the402.settled_usd || 0) +
+      Number(revenue.recognized_usdc || 0) + Number(the402.verified_customer_revenue_usdc || 0) +
       Number(nearMarket.earned_usdc_balance || 0) +
       Number(taskmarketCommerce.settled_worker_earnings_usdc || 0) +
       Number(clawlancer.verified_worker_earnings_usdc || 0)

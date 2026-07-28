@@ -1,0 +1,20 @@
+[Unit]
+Description=Verify the BountyVerdict post-boundary release evidence
+After=bountyverdict-acquisition-snapshot.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict-conversion-release/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/verify-post-boundary-release-gate.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictRealtime=yes
+LockPersonality=yes
+UMask=0077

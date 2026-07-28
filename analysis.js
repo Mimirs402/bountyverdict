@@ -35,6 +35,7 @@ const WITHDRAWAL_PATTERNS = [
   /(?:reward|bounty).{0,80}(?:withdrew|withdraws?).{0,30}\bit\b/i,
   /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}(?:(?:cancelled|canceled|removed|withdrew)\s+it|decided to (?:cancel|remove|withdraw)\s+it)/i,
   /(?:reward|bounty)[\s\S]{0,180}\b(?:but|then|later)\b[\s\S]{0,60}\bit\s+(?:is|was|remains?)\s+no longer\s+(?:available|funded|payable)/i,
+  /\b(?:we|maintainers?|the (?:project|team|repository|repo))\s+(?:do not|don['’]?t|never|won['’]?t|will not)\s+pay\b[^.\n]{0,80}\b(?:code|contributions?|pull requests?|patches?|contributors?)\b/i,
 ];
 
 const REWARD_PLATFORM_REJECTION_PATTERNS = [
@@ -62,9 +63,39 @@ const AI_POLICY_BLOCK_PATTERNS = [
   /(?:contributions?|pull requests?|patches?|code).{0,80}(?:generated|written|assisted) by (?:ai|an? llm|chatgpt).{0,60}(?:not accepted|not allowed|prohibited|forbidden|will be (?:closed|rejected))/i
 ];
 
+const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
+  /(?:do not|don['’]?t|must not|may not)\s+use\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+to\s+(?:reply|respond|answer)\s+(?:to\s+)?(?:questions?|comments?|review feedback)\b/i,
+];
+
+const AI_POLICY_ALLOW_PATTERNS = [
+  /\b(?:ai|llm|chatgpt|generative ai)(?:[ -](?:assistance|assisted)|\s+(?:tools?|usage|assistance))?\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
+  /\bcontributions?\s+(?:made\s+)?with\s+(?:the\s+)?assistance\s+of\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+(?:is|are)\s+(?:allowed|permitted|welcome)\b/i,
+];
+
+const AI_POLICY_CONDITIONAL_QUALITY_PATTERNS = [
+  /\b(?:low[ -]effort|unreviewed|unverified|unexplained|undisclosed)\b.{0,80}\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,100}\b(?:closed|rejected|declined|not accepted)\b/i,
+  /\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,80}\b(?:contributions?|pull requests?|patches?|code)\b.{0,40}\b(?:without|unless)\b.{0,100}\b(?:understand|review|verify|test|disclos|explain)\w*\b.{0,80}\b(?:closed|rejected|declined|not accepted)\b/i,
+];
+
+function policyBlocksAiContributions(value) {
+  const clauses = String(value ?? "")
+    .split(/\r?\n+|(?<=[.!?])\s+/u)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  const explicitlyAllowsAi = clauses.some((clause) =>
+    AI_POLICY_ALLOW_PATTERNS.some((pattern) => pattern.test(clause))
+  );
+  return clauses.some((clause) =>
+      !AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS.some((pattern) => pattern.test(clause)) &&
+      !(explicitlyAllowsAi && AI_POLICY_CONDITIONAL_QUALITY_PATTERNS.some((pattern) => pattern.test(clause))) &&
+      AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(clause))
+  );
+}
+
 const AI_POLICY_DISCLOSURE_PATTERNS = [
   /(?:must|required to|please)\s+(?:clearly\s+)?(?:disclose|declare|label).{0,60}(?:ai|llm|chatgpt|generative)/i,
-  /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i
+  /(?:ai|llm|chatgpt|generative ai).{0,70}(?:must|required).{0,40}(?:disclos|declar|label)/i,
+  /(?:if|when)\s+(?:any\s+)?(?:ai|llm|chatgpt|generative ai)(?:\s+tools?)?.{0,40}\b(?:is|are|was|were)?\s*used\b.{0,80}\b(?:mention|disclos|declare|label)\w*\b/i,
 ];
 
 const POLICY_REWARD_DISAVOWAL_PATTERNS = [
@@ -82,6 +113,7 @@ function policyRequestsSensitiveAgentContext(value) {
 
 const SENSITIVE_DISCLOSURE_ACTION = /\b(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)\b/i;
 const SENSITIVE_DISCLOSURE_GUARD = /\b(?:(?:do not|don['’]?t|never|must not)\s+(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)|(?:redact|omit|mask)\b|(?:placeholder|names? only|not (?:the )?values?))[^.\n]{0,120}\b(?:secrets?|credentials?|passwords?|tokens?|keys?|prompts?|instructions?|context|environment variables?)\b/i;
+const SENSITIVE_OUTPUT_DENIAL = /\b(?:cannot|can['’]?t|could not|don['’]?t|do not|no way)\b[^.\n]{0,100}\b(?:return|print|write|show)\b[^.\n]{0,80}\b(?:secrets?|credentials?|passwords?|tokens?|keys?)\b/i;
 const HIDDEN_AGENT_CONTEXT_PATTERNS = [
   /\b(?:verbatim|exact|full|complete|unabridged|unredacted)\s+(?:copy\s+of\s+)?(?:all\s+)?(?:system|developer|hidden|initialization|agent|model|session)?[ -]?(?:instructions?|guidelines?|prompts?|context|messages?)\b/i,
   /\b(?:instructions?|guidelines?|prompts?|context)\b[^.\n]{0,120}\b(?:before|prior to)\b[^.\n]{0,40}\b(?:first|initial)\b[^.\n]{0,24}\b(?:human|user)\s+message\b/i,
@@ -101,6 +133,7 @@ function sensitiveTaskDisclosure(value) {
     .filter(Boolean);
   for (const chunk of chunks) {
     if (SENSITIVE_DISCLOSURE_GUARD.test(chunk)) continue;
+    if (SENSITIVE_OUTPUT_DENIAL.test(chunk)) continue;
     const requestsDisclosure = SENSITIVE_DISCLOSURE_ACTION.test(chunk) || /\b(?:must|required to|required contributor comment)\b/i.test(chunk);
     if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(chunk))) {
       return "hidden agent instructions or context";
@@ -137,10 +170,15 @@ const EXTERNAL_PREREQUISITE_CATEGORIES = [
     category: "specialized hardware",
     pattern: /\b(?:(?:specialized|dedicated|qualifying|physical) hardware|nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device)\b/i,
   },
+  {
+    category: "gated platform validation",
+    pattern: /\b(?:submitt(?:ing|ed)?|submission)\b.{0,80}\b(?:mac app store|app store|mas|platform|store)\b.{0,50}\b(?:review|approval)\b|\b(?:mac app store|app store|mas|platform|store)\b.{0,50}\b(?:review|approval)\b/i,
+  },
 ];
 
 const EXTERNAL_PREREQUISITE_REQUIREMENT = /\b(?:must|required|mandatory|prerequisites?|need(?:ed)? to|needs? (?:an?|the|your)|have to|has to|shall)\b/i;
 const EXTERNAL_PREREQUISITE_DIRECTIVE = /^(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b|:\s*(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b/i;
+const EXTERNAL_PREREQUISITE_EXCLUSIVE_VALIDATION = /\b(?:no|not)\s+(?:other\s+)?(?:reliable\s+)?(?:way|method)\s+(?:of|to)\s+(?:test(?:ing)?|validat(?:e|ing)|verif(?:y|ying))\b.{0,100}\b(?:except|without|other than)\b/i;
 const EXTERNAL_PREREQUISITE_OPT_OUT = /\b(?:optional(?:ly)?|not required|isn['’]?t required|aren['’]?t required|not mandatory|if (?:available|desired|helpful|you (?:want|wish|have))|nice to have|may (?:include|use|provide|record|post|publish|run)|can optionally)\b|\bno\b.{0,60}\b(?:required|mandatory)\b/i;
 const EXTERNAL_PREREQUISITE_SECTION = /\b(?:prerequisites?|requirements?|implementation guidelines?|submission instructions?|steps? to participate)\b/i;
 const EXTERNAL_PREREQUISITE_REFERENCE_ONLY = /^(?:see|read|reference|docs?|documentation|guide|example|learn more)\b/i;
@@ -163,6 +201,7 @@ function mandatoryExternalPrerequisites(value) {
     if (!matched.length) continue;
     const directive = EXTERNAL_PREREQUISITE_REQUIREMENT.test(line) ||
       EXTERNAL_PREREQUISITE_DIRECTIVE.test(line) ||
+      EXTERNAL_PREREQUISITE_EXCLUSIVE_VALIDATION.test(line) ||
       (requiredSection && !EXTERNAL_PREREQUISITE_REFERENCE_ONLY.test(line));
     if (!directive) continue;
     for (const { category } of matched) categories.add(category);
@@ -185,6 +224,7 @@ const CLAIM_INTENT_PATTERNS = [
   /\bi\s+can\s+(?:fix|handle|resolve|implement|take|work\s+on)\s+(?:this|it|the issue)\b/i,
   /\bi\s+(?:really\s+)?(?:want\s+to|wanna)\s+w(?:ork|ord)\s+on\s+(?:this|it|the issue)\b/i,
   /\bcan\s+i\s+be\s+assigned(?:\s+(?:to\s+)?(?:this|it|the issue))?\b/i,
+  /\bi(?:['’]d|\s+would)\s+like\s+to\s+be\s+(?:considered|selected)\s+for\b/i,
   /\bi(?:['’]ll|\s+will)\s+(?:submit|open)\s+(?:a\s+)?(?:pr|pull request)\b/i,
   /\bi(?:['’]ll|\s+will|\s+am\s+going\s+to|\s+plan\s+to|\s+intend\s+to)\s+(?:start\s+)?(?:implement(?:ing)?|fix(?:ing)?|handle|resolve|address|work\s+on|take\s+on)\b/i,
   /\bi(?:['’]m|\s+am)\s+(?:(?:currently|already|now)\s+)?(?:implementing|fixing|handling|resolving|addressing|working\s+on)\b/i,
@@ -192,7 +232,7 @@ const CLAIM_INTENT_PATTERNS = [
   /(?:^|\n)\s*taking\s+(?:this|it|the issue)\b/im,
 ];
 const CLAIM_INTENT_WITHDRAWAL_PATTERNS = [
-  /\bwithdraw(?:ing)?\s+(?:(?:my|this|the)\s+)?(?:claim|interest|attempt)\b/i,
+  /\bwithdraw(?:ing)?\s+(?:(?:my|this|the)\s+)?(?:claim|interest|attempt|application|proposal|candidacy)\b/i,
   /\bno longer\s+(?:working|claiming|interested)\b/i,
   /\b(?:can['’]?t|cannot|won['’]?t|will not)\s+(?:continue\s+)?work(?:ing)?\s+on\s+(?:this|it|the issue)\b/i,
   /\b(?:please\s+)?unassign\s+me\b/i,
@@ -251,9 +291,9 @@ const OPEN_AVAILABILITY_PATTERNS = [
   /\b(?:claim\s+)?slots?\s+remaining\s*:\s*[1-9]\d*\b/i,
 ];
 
-const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接)[^\n\r]{0,80}[\n\r\s:>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
+const EXTERNAL_SOURCE_LABEL_PATTERN = /(?:source\s+(?:url|issue)|original\s+(?:issue|link)|upstream(?:\s+issue)?|mirror(?:ed)?\s+(?:of|from)|原始链接|原\s*(?:url|链接|issue))[^\n\r]{0,80}[\n\r\s:|>*_-]*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/ig;
 
-function externalSourceIssue(issue, repository) {
+export function externalSourceIssue(issue, repository) {
   const body = typeof issue?.body === "string" ? issue.body : "";
   const current = typeof repository?.full_name === "string" ? repository.full_name.toLowerCase() : "";
   for (const match of body.matchAll(EXTERNAL_SOURCE_LABEL_PATTERN)) {
@@ -268,6 +308,73 @@ function externalSourceIssue(issue, repository) {
     };
   }
   return null;
+}
+
+const AMBIGUOUS_NON_CASH_REWARD_PATTERN = /\b(?:payment|reward|bounty)\b[^\r\n]{0,160}(?:\$\s*)?\d[\d,.]*(?:\s*(?:USD|USDC))?[^\r\n]{0,60}\(\s*(?:[A-Za-z0-9][A-Za-z0-9._-]*\s+){0,5}(?:dockets?|points?|credits?|creds?|coins?)\s*\)/i;
+
+function ambiguousNonCashReward(issue, comments) {
+  const sources = [
+    {
+      body: authoredIssueRewardText(issue),
+      evidenceUrl: issue?.html_url ?? null,
+      trusted: MAINTAINER_ASSOCIATIONS.has(issue?.author_association),
+    },
+    ...comments.map((comment) => ({
+      body: String(comment?.body ?? ""),
+      evidenceUrl: comment?.html_url ?? issue?.html_url ?? null,
+      trusted: MAINTAINER_ASSOCIATIONS.has(comment?.author_association),
+    })),
+  ];
+  return sources.find(({ body, trusted }) => trusted && AMBIGUOUS_NON_CASH_REWARD_PATTERN.test(body)) ?? null;
+}
+
+const OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN = /(?:^|\n)\s*(?:[-*]\s+|\d+[.)]\s+)?(?:(?:the\s+)?(?:agent|contributor|worker|solver|claimant|you)\s+(?:(?:must|should|shall|needs?\s+to|is\s+required\s+to)\s+))?(?:send|pay|tip|transfer|purchase)\b[^\r\n]{0,180}(?:\bto\b|wallet|address|merchant|recipient|destination\s+tag|fee|invoice)/im;
+const OUTGOING_PAYMENT_PROOF_PATTERN = /\b(?:comment|post|submit|provide|share)\b[^\r\n]{0,80}\b(?:tx|transaction|payment)\s*(?:hash|id|receipt|proof)\b|\b(?:reward|bounty|eligible|qualif(?:y|ies|ied))\b[\s\S]{0,240}\b(?:tips?|pays?|sends?|transfers?|purchases?)\b/i;
+const PAYMENT_REIMBURSEMENT_PATTERN = /\b(?:cost|fee|expense|payment|amount)s?\b[^\r\n]{0,80}\b(?:will\s+be|are|is)?\s*(?:reimbursed|refunded|covered|repaid)\b|\b(?:reimburse|refund|repay|cover)\b[^\r\n]{0,80}\b(?:the\s+)?(?:contributor|worker|solver|claimant|you)(?:'s)?\b/i;
+
+function markdownSections(value) {
+  const text = String(value ?? "");
+  const headings = [...text.matchAll(/^#{1,6}\s+([^\r\n]+)\s*$/gm)];
+  return headings.map((heading, index) => ({
+    heading: heading[1],
+    body: text.slice((heading.index ?? 0) + heading[0].length, headings[index + 1]?.index ?? text.length),
+  }));
+}
+
+function hasExplicitCashRewardTerms(value) {
+  const text = String(value ?? "");
+  const rewardSections = markdownSections(text)
+    .filter(({ heading }) => /^(?:cash\s+)?(?:bounty|reward|compensation|payout|prize)\b/i.test(heading));
+  const isExplicitPayoutLine = (line, sectionHeading = false) => {
+    if (amountFromText(line).amount === null || OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN.test(line)) return false;
+    if (/\b(?:bounty|reward|compensation|payout|prize)\b/i.test(line) ||
+        /\b(?:will\s+pay|will\s+be\s+paid|receive\s+payment|paid\s+to\s+(?:the\s+)?(?:contributor|worker|solver|claimant))\b/i.test(line)) return true;
+    return sectionHeading && /^\s*(?:USD|USDC|USDT)?\s*[$€£]?\s*\d[\d,.]*(?:\s*(?:USD|USDC|USDT|€|£))?(?:\s+(?:for|after|upon)\b[^\r\n]*)?\s*$/i.test(line);
+  };
+  if (rewardSections.some(({ heading, body }) =>
+    isExplicitPayoutLine(heading) || body.split(/[\r\n]+/).some((line) => isExplicitPayoutLine(line, true)))) return true;
+  return text.split(/[\r\n]+/).some((line) => isExplicitPayoutLine(line));
+}
+
+function contributorPaymentRequirement(issue, comments, rewardVerification) {
+  if (["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API"].includes(rewardVerification)) return null;
+  const sources = [
+    MAINTAINER_ASSOCIATIONS.has(issue?.author_association)
+      ? { body: String(issue?.body ?? ""), rewardText: authoredIssueRewardText(issue), evidenceUrl: issue?.html_url ?? null }
+      : null,
+    ...comments
+      .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment?.author_association))
+      .map((comment) => ({
+        body: String(comment?.body ?? ""),
+        rewardText: String(comment?.body ?? ""),
+        evidenceUrl: comment?.html_url ?? issue?.html_url ?? null,
+      })),
+  ].filter(Boolean);
+  if (sources.some(({ rewardText }) => hasExplicitCashRewardTerms(rewardText)) ||
+      sources.some(({ body }) => PAYMENT_REIMBURSEMENT_PATTERN.test(body))) return null;
+  const paymentSource = sources.find(({ body }) => OUTGOING_CONTRIBUTOR_PAYMENT_PATTERN.test(body));
+  if (!paymentSource || !sources.some(({ body }) => OUTGOING_PAYMENT_PROOF_PATTERN.test(body))) return null;
+  return paymentSource;
 }
 
 function externalBountySource(issue) {
@@ -315,6 +422,21 @@ function canonicalPullRequestUrl(value) {
   return match ? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}` : null;
 }
 
+function relevantPullRequestUrl(value, repository) {
+  const url = canonicalPullRequestUrl(value);
+  const relevantRepository = typeof repository?.full_name === "string"
+    ? repository.full_name.toLowerCase()
+    : null;
+  if (!url || !relevantRepository) return null;
+  const match = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/\d+$/i);
+  if (!match) return null;
+  const referencedRepository = `${match[1]}/${match[2]}`.toLowerCase();
+  const relevantOwner = relevantRepository.split("/")[0];
+  return referencedRepository === relevantRepository || match[1].toLowerCase() === relevantOwner
+    ? url
+    : null;
+}
+
 function bodyPullRequests(issue, comments, repository) {
   const relevantRepository = typeof repository?.full_name === "string"
     ? repository.full_name.toLowerCase()
@@ -356,7 +478,7 @@ function uniquePullRequests(timeline = [], issue = null, comments = [], reposito
   }
   for (const event of timeline) {
     const item = event.event === "cross-referenced" ? event.source?.issue : null;
-    const url = canonicalPullRequestUrl(item?.pull_request?.html_url);
+    const url = relevantPullRequestUrl(item?.pull_request?.html_url, repository);
     if (!url) continue;
     pulls.set(url.toLowerCase(), {
       url,
@@ -472,6 +594,28 @@ function opireRewardState(comments) {
 }
 
 function platformClaimState(comments, openPulls, opire, reward, platformEvidence) {
+  if (platformEvidence?.platform === "Opire" && platformEvidence.claim_count > 0) {
+    return {
+      label: "Bounty platform reports active competition",
+      detail: `Opire reports ${platformEvidence.claim_count} solver${platformEvidence.claim_count === 1 ? "" : "s"} claiming this issue.`,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Lightning Bounties" && platformEvidence.state === "AWARDED") {
+    return {
+      label: "Bounty platform reports reward awarded",
+      detail: "Lightning Bounties reports that this bounty already has a winner and claimed timestamp.",
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Algora" &&
+      (platformEvidence.state === "CLAIMED" || platformEvidence.claim_count > 0)) {
+    return {
+      label: "Bounty platform reports active competition",
+      detail: `Algora reports ${platformEvidence.claim_count} active claim${platformEvidence.claim_count === 1 ? "" : "s"} across the discovered trusted sponsor record${platformEvidence.bounty_ids?.length === 1 ? "" : "s"}.`,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "IssueHunt") {
     if (platformEvidence.state === "REWARDED") {
       return {
@@ -555,7 +699,7 @@ function platformClaimState(comments, openPulls, opire, reward, platformEvidence
 
 function amountFromText(text) {
   const match = String(text ?? "").match(
-    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(USDC|USD))?(?=\s|[.,;:)\]}]|$)/i,
+    /\$\s*([\d][\d,]*(?:\.\d{1,2})?)\s*([kK])?(?:\s*(USDC|USD))?(?=\s|[.,;:)\]}]|(?:\*{1,3}|_{1,3})(?=\s|[.,;:)\]}]|$)|$)/i,
   );
   if (!match) return { amount: null, currency: null };
   const multiplier = match[2] ? 1_000 : 1;
@@ -564,6 +708,13 @@ function amountFromText(text) {
     amount: Number.isFinite(amount) ? amount : null,
     currency: String(match[3] || "USD").toUpperCase(),
   };
+}
+
+function formatRewardAmount(amount, currency) {
+  if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) return "";
+  if (currency === "SATS") return `${Number(amount).toLocaleString("en-US")} sats`;
+  if (currency === "USD" || currency === "USDC") return `$${amount} ${currency}`;
+  return `${amount}${currency ? ` ${currency}` : ""}`;
 }
 
 function amountFromAlgoraListing(text) {
@@ -608,6 +759,14 @@ function isTerminalBountyLabel(value) {
   if (isAffirmativeRewardedLabel(normalized)) return true;
   return /^(?:(?:bounty|reward)\s*[:=/_-]?\s*)?(?:paid|awarded|claimed|settled|fulfilled|delivered|completed)$/i
     .test(normalized);
+}
+
+function isRestrictedContributorLabel(value) {
+  const normalized = normalizedStatusLabel(value)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^(?:core team|maintainers?) only$/i.test(normalized);
 }
 
 function hasMaintainerTerminalStatement(value) {
@@ -655,6 +814,40 @@ function openBountyAvailability(issue, comments) {
 }
 
 function rewardEvidence(issue, comments, opire, platformEvidence) {
+  if (platformEvidence?.platform === "Opire") {
+    return {
+      state: "PROMISED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Lightning Bounties") {
+    return {
+      state: platformEvidence.state === "AWARDED"
+        ? "PAID_OR_AWARDED"
+        : platformEvidence.secured_amount > 0
+          ? "LISTED"
+          : "PROMISED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
+  if (platformEvidence?.platform === "Algora") {
+    return {
+      state: "LISTED",
+      verification: platformEvidence.verification,
+      platform: platformEvidence.platform,
+      amount: platformEvidence.amount,
+      currency: platformEvidence.currency,
+      evidenceUrl: platformEvidence.evidence_url,
+    };
+  }
   if (platformEvidence?.platform === "IssueHunt") {
     return {
       state: platformEvidence.state === "REWARDED" ? "PAID_OR_AWARDED" : "LISTED",
@@ -865,6 +1058,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const referencedPulls = pulls.filter((pull) => pull.state === "referenced");
   const rewardedLabels = issueLabelNames(issue).filter(isAffirmativeRewardedLabel);
   const terminalLabelCandidates = issueLabelNames(issue).filter(isTerminalBountyLabel);
+  const restrictedContributorLabels = issueLabelNames(issue).filter(isRestrictedContributorLabel);
   const opire = opireRewardState(comments);
   const activeClaims = activeSoftLockClaims(issue, comments, now);
   const claimantInterest = activeClaimIntent(issue, comments, now);
@@ -877,6 +1071,8 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const maintainerWarnings = matchingComments([issue, ...comments], NEGATIVE_MAINTAINER_PATTERNS, true);
   const withdrawals = currentMaintainerWithdrawals(issue, comments);
   const reward = rewardEvidence(issue, comments, opire, platformEvidence);
+  const ambiguousReward = ambiguousNonCashReward(issue, comments);
+  const contributorPayment = contributorPaymentRequirement(issue, comments, reward.verification);
   const platformRejection = relevantOpireRejection(issue, opire, reward);
   const platformEmpty = relevantOpireEmpty(issue, opire, reward);
   const externalSource = externalSourceIssue(issue, repository);
@@ -920,10 +1116,26 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     reward.currency = null;
     reward.evidenceUrl = platformEmpty.html_url ?? issue.html_url;
   }
+  const ambiguousRewardHasTrustedVerification = Boolean(ambiguousReward) &&
+    ["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API"].includes(reward.verification);
+  if (ambiguousReward && !ambiguousRewardHasTrustedVerification &&
+      !["WITHDRAWN", "PAID_OR_AWARDED"].includes(reward.state)) {
+    reward.state = "UNVERIFIED";
+    reward.verification = "UNVERIFIED";
+    reward.amount = null;
+    reward.currency = null;
+    reward.evidenceUrl = ambiguousReward.evidenceUrl;
+  }
+  if (contributorPayment && !["WITHDRAWN", "PAID_OR_AWARDED"].includes(reward.state)) {
+    reward.state = "UNVERIFIED";
+    reward.verification = "UNVERIFIED";
+    reward.platform = null;
+    reward.amount = null;
+    reward.currency = null;
+    reward.evidenceUrl = contributorPayment.evidenceUrl;
+  }
   const currentPlatformClaim = platformClaimState(comments, openPulls, opire, reward, platformEvidence);
-  const aiPolicyBlocks = policyDocuments.filter((document) =>
-    AI_POLICY_BLOCK_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
-  );
+  const aiPolicyBlocks = policyDocuments.filter((document) => policyBlocksAiContributions(document.body));
   const aiPolicyRequirements = policyDocuments.filter((document) =>
     AI_POLICY_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );
@@ -942,7 +1154,18 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     const category = sensitiveTaskDisclosure(source.body);
     return category ? [{ ...source, category }] : [];
   });
-  const externalPrerequisites = mandatoryExternalPrerequisites(issue.body);
+  const authoritativePrerequisiteSources = [
+    { body: issue.body, html_url: issue.html_url },
+    ...comments.filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association)),
+  ];
+  const externalPrerequisites = EXTERNAL_PREREQUISITE_CATEGORIES
+    .map(({ category }) => category)
+    .filter((category) => authoritativePrerequisiteSources.some(({ body }) =>
+      mandatoryExternalPrerequisites(body).includes(category)
+    ));
+  const gatedValidationSource = authoritativePrerequisiteSources.find(({ body }) =>
+    mandatoryExternalPrerequisites(body).includes("gated platform validation")
+  );
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
   let score = 50;
@@ -966,6 +1189,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       "Issue is already assigned",
       -70,
       `GitHub currently lists ${assignees.length} assignee${assignees.length === 1 ? "" : "s"}; treat the work as unavailable unless a maintainer explicitly clears parallel work.`,
+      issue.html_url,
+      true,
+    ));
+  }
+
+  if (restrictedContributorLabels.length) {
+    score -= 70;
+    signals.push(signal(
+      "Issue restricted to core team or maintainers",
+      -70,
+      `GitHub currently labels this issue ${JSON.stringify(restrictedContributorLabels[0])}; external contributors are not eligible unless repository maintainers remove the restriction.`,
       issue.html_url,
       true,
     ));
@@ -1048,15 +1282,22 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Trusted platform listing found",
       5,
-      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a $${reward.amount} USD`} reward${platformEvidence?.platform === "BountyHub" ? `; $${platformEvidence.secured_amount} is platform-held/prepaid and $${platformEvidence.promised_amount} remains pay-when-solved` : ""}, but creator approval and payout are still not guaranteed.`,
+      `${reward.platform} currently advertises${reward.amount === null ? "" : ` a ${formatRewardAmount(reward.amount, reward.currency)}`} reward${platformEvidence?.platform === "BountyHub" ? `; $${platformEvidence.secured_amount} is platform-held/prepaid and $${platformEvidence.promised_amount} remains pay-when-solved` : platformEvidence?.platform === "Lightning Bounties" ? `; ${formatRewardAmount(platformEvidence.secured_amount, "SATS")} remains locked and ${formatRewardAmount(platformEvidence.reclaimable_amount, "SATS")} is reclaimable` : ""}, but creator approval and payout are still not guaranteed.`,
       reward.evidenceUrl,
     ));
   } else if (reward.state === "PROMISED") {
     signals.push(signal(
-      platformEvidence?.platform === "BountyHub" ? "Platform pay-when-solved promise found" : "Maintainer reward promise found",
+      platformEvidence?.platform === "BountyHub" || platformEvidence?.platform === "Lightning Bounties" ||
+          platformEvidence?.platform === "Opire"
+        ? "Platform pay-when-solved promise found"
+        : "Maintainer reward promise found",
       0,
       platformEvidence?.platform === "BountyHub"
         ? `BountyHub records a $${platformEvidence.promised_amount} pay-when-solved reward, but no platform-held/prepaid amount; creator approval and payout are not guaranteed.`
+        : platformEvidence?.platform === "Lightning Bounties"
+          ? `Lightning Bounties reports ${formatRewardAmount(platformEvidence.reclaimable_amount, "SATS")} as unlocked/reclaimable and no sats still secured; payout is not guaranteed.`
+        : platformEvidence?.platform === "Opire"
+          ? `Opire advertises a ${formatRewardAmount(platformEvidence.amount, "USD")} pay-when-solved reward; the creator pays only after accepting a claim, so payout is not prepaid or guaranteed.`
         : "A repository maintainer advertises a reward, but no prepaid or escrowed settlement was independently verified.",
       reward.evidenceUrl,
     ));
@@ -1085,6 +1326,36 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
       -25,
       "No trusted platform listing or maintainer-authored reward statement appeared in the bounded GitHub evidence.",
       reward.evidenceUrl,
+    ));
+  }
+
+  if (ambiguousReward && !ambiguousRewardHasTrustedVerification) {
+    score -= 100;
+    signals.push(signal(
+      "Reward denomination is non-cash or ambiguous",
+      -100,
+      "The payment statement qualifies a nominal USD amount with a separate docket, point, credit, or coin denomination. Treat it as non-cash and unverified until an exact settlement asset and redemption contract are public.",
+      ambiguousReward.evidenceUrl,
+      true,
+    ));
+  } else if (ambiguousReward) {
+    score -= 20;
+    signals.push(signal(
+      "Reward wording conflicts with trusted platform settlement",
+      -20,
+      "The issue qualifies a nominal USD amount with a non-cash denomination, but an exact trusted platform record exists. Preserve the platform record and reconcile the conflicting public terms before starting work.",
+      ambiguousReward.evidenceUrl,
+    ));
+  }
+
+  if (contributorPayment) {
+    score -= 100;
+    signals.push(signal(
+      "Contributor payment required",
+      -100,
+      "The task requires the contributor to send, pay, tip, transfer, or purchase and submit transaction proof, while no explicit cash reward, reimbursement, or trusted platform payout was verified. Treat this as an inverted bounty, not paid work.",
+      contributorPayment.evidenceUrl,
+      true,
     ));
   }
 
@@ -1120,6 +1391,9 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   if (issueAge <= 30) {
     score += 8;
     signals.push(signal("Issue is current", 8, `The issue changed ${issueAge} day${issueAge === 1 ? "" : "s"} ago.`, issue.html_url));
+  } else if (issueAge > 730) {
+    score -= 20;
+    signals.push(signal("Issue is very stale", -20, `The issue has not changed for ${issueAge} days, so its scope and acceptance path need fresh maintainer confirmation.`, issue.html_url));
   } else if (issueAge > 180) {
     score -= 12;
     signals.push(signal("Issue is stale", -12, `The issue has not changed for ${issueAge} days.`, issue.html_url));
@@ -1243,13 +1517,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   }
 
   if (externalPrerequisites.length) {
-    const impact = -Math.min(15, externalPrerequisites.length * 3);
+    const impact = -Math.min(20, externalPrerequisites.reduce(
+      (total, category) => total + (category === "gated platform validation" ? 10 : 3),
+      0,
+    ));
     score += impact;
     signals.push(signal(
       "Mandatory external prerequisites",
       impact,
       `The issue explicitly requires external execution prerequisites: ${externalPrerequisites.join(", ")}. Confirm access and willingness to complete them before investing implementation time.`,
-      issue.html_url,
+      gatedValidationSource?.html_url ?? issue.html_url,
     ));
   }
 
@@ -1289,7 +1566,10 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated;
   const verdict = hasHardStop || score < 45
     ? "AVOID"
-    : claimantInterest.length || score < 75 || incompleteCoverage
+    : claimantInterest.length ||
+      externalPrerequisites.includes("gated platform validation") ||
+      score < 75 ||
+      incompleteCoverage
     ? "CAUTION"
     : "VIABLE";
 

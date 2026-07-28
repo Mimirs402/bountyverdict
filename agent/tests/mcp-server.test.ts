@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { x402Client } from "@x402/core/client";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { x402MCPClient } from "@x402/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { privateKeyToAccount } from "viem/accounts";
 import app from "../src/index.ts";
-import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES } from "../src/mcp-server.ts";
+import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME } from "../src/free-selection-router.ts";
+import { classifyMcpClientFamily, MCP_DISTRIBUTED_TOOL_NAMES, MCP_PAID_TOOL_NAMES } from "../src/mcp-server.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import {
   LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
@@ -51,13 +54,14 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   });
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
-  assert.equal(body.result.serverInfo.version, "1.1.9");
+  assert.equal(body.result.serverInfo.version, "1.1.11");
   assert.equal(
     body.result.serverInfo.description,
     "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
   );
   assert.deepEqual(body.result.capabilities, { tools: { listChanged: true } });
   assert.match(body.result.instructions, /one bounty -> check_github_bounty/);
+  assert.match(body.result.instructions, /choose_github_agent_decision.*free/i);
   assert.match(body.result.instructions, /retry once versus fix.*classify_github_actions_flake/);
   assert.match(body.result.instructions, /first unsigned call with real canonical input cannot charge/i);
   assert.match(body.result.instructions, /free payment quote, selection summary, and payment handoff/i);
@@ -65,7 +69,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   assert.match(body.result.instructions, /Payment identifies the fixed-price tool, not its arguments/);
 });
 
-test("MCP tools/list exposes exactly six executable paid tools and excludes SkillVerdict", async () => {
+test("MCP tools/list exposes one free router and exactly six paid decision tools", async () => {
   const body = await rpcBody(2, "tools/list");
   const taskLeadingDescriptions = {
     check_github_bounty: /^Is this public GitHub issue bounty still claimable/,
@@ -76,9 +80,28 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
     check_mcp_tool_drift: /^Will upgrading to this complete MCP tools\/list break my agent/,
   } as const;
   assert.deepEqual(body.result.tools.map((tool: any) => tool.name), MCP_DISTRIBUTED_TOOL_NAMES);
-  assert.equal(body.result.tools.length, 6);
+  assert.equal(body.result.tools.length, 7);
   assert.equal(body.result.tools.some((tool: any) => /skillverdict/i.test(`${tool.name} ${tool.title} ${tool.description}`)), false);
-  for (const tool of body.result.tools) {
+  const router = body.result.tools.find((tool: any) => tool.name === FREE_SELECTION_TOOL_NAME);
+  assert.match(router.description, /^Choose the economical next call/);
+  assert.match(router.description, /Free deterministic router/);
+  assert.deepEqual(router.inputSchema.properties.task.enum, FREE_SELECTION_TASKS);
+  assert.match(router.inputSchema.properties.task.description, /one_bounty = claimability/);
+  assert.equal(router.inputSchema.properties.candidate_count.minimum, 2);
+  assert.equal(router.inputSchema.properties.candidate_count.maximum, 10);
+  assert.match(router.inputSchema.properties.needs_ranked_response.description, /cheaper repeated single checks/);
+  assert.deepEqual(router.inputSchema.required, ["task"]);
+  assert.equal(router.inputSchema.additionalProperties, false);
+  assert.equal(router.outputSchema.additionalProperties, false);
+  assert.deepEqual(router.annotations, {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  });
+  const paidTools = body.result.tools.filter((tool: any) => MCP_PAID_TOOL_NAMES.includes(tool.name));
+  assert.equal(paidTools.length, 6);
+  for (const tool of paidTools) {
     assert.match(tool.description, taskLeadingDescriptions[tool.name as keyof typeof taskLeadingDescriptions]);
     assert.doesNotMatch(tool.description, /\bx402\b|\bUSDC\b|payment quote|authorized signed retry/i);
     assert.doesNotMatch(tool.description, /https?:\/\//i);
@@ -94,7 +117,7 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
     assert.equal(tool.outputSchema.additionalProperties, true);
     assert.ok(Buffer.byteLength(tool.description) <= 1_500, `${tool.name} description exceeds the tools/list context budget`);
   }
-  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_000);
+  assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_500);
   const drift = body.result.tools.find((tool: any) => tool.name === "check_mcp_tool_drift");
   assert.deepEqual(drift.inputSchema.required, ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]);
   assert.equal(drift.inputSchema.additionalProperties, false);
@@ -134,6 +157,186 @@ test("MCP tools/list exposes exactly six executable paid tools and excludes Skil
   assert.ok(drift.outputSchema.required.includes("action"));
 });
 
+test("free router maps every bounded task without payment, network access, or a verdict", async () => {
+  const expected = {
+    one_bounty: ["single", "check_github_bounty", "0.05", "/api/sample", ["issue_url"]],
+    bounty_portfolio: ["portfolio", "rank_github_bounties", "0.40", "/api/portfolio/sample", ["issue_urls"]],
+    repository_agent_instructions: ["harness", "audit_agent_harness", "0.03", "/api/harness/sample", ["repo_url"]],
+    github_actions_root_cause: ["run", "diagnose_github_actions_run", "0.04", "/api/run/sample", ["run_url"]],
+    github_actions_retry_decision: ["flake", "classify_github_actions_flake", "0.07", "/api/flake/sample", ["run_url"]],
+    mcp_tools_change: ["mcpdrift", "check_mcp_tool_drift", "0.02", "/api/mcp-drift/sample", ["contract_version", "subject", "annotation_source_trust", "baseline", "current"]],
+  } as const;
+  const originalFetch = globalThis.fetch;
+  const logs: string[] = [];
+  const originalLog = console.log;
+  globalThis.fetch = async () => { throw new Error("free router attempted network access"); };
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    for (const task of FREE_SELECTION_TASKS) {
+      const args = task === "bounty_portfolio"
+        ? { task, candidate_count: 8, needs_ranked_response: false }
+        : { task };
+      const response = await app.request(`${origin}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: FREE_SELECTION_TOOL_NAME, arguments: args } }),
+      }, {});
+      assert.equal(response.status, 200);
+      const body = await response.json() as any;
+      assert.equal(body.result.isError, undefined);
+      const route = body.result.structuredContent;
+      const [productKey, toolName, price, samplePath, requiredFields] = expected[task];
+      assert.equal(route.task, task);
+      assert.equal(route.product, PRODUCT_SELECTION_PREVIEWS[productKey].product);
+      assert.equal(route.total_price_usdc, price);
+      assert.equal(route.free_sample, `${origin}${samplePath}`);
+      assert.equal(route.selector_call_payment_required, false);
+      assert.equal(route.next_call.tool_name, toolName);
+      assert.equal(route.next_call.call_strategy, "single_call");
+      assert.deepEqual(route.next_call.required_fields, requiredFields);
+      assert.deepEqual(Object.keys(route.next_call.arguments_template), requiredFields);
+      assert.equal(route.next_call.payment_required, true);
+      assert.equal(route.next_call.authorization_required_before_settlement, true);
+      assert.equal(route.next_call.unsigned_call_action, "inspect_quote_then_authorize_or_stop");
+      assert.equal(route.next_call.preserve_arguments_on_retry, true);
+      assert.doesNotMatch(JSON.stringify(body), /"accepts"|x402Version|payment-response/);
+
+      const placeholderResponse = await app.request(`${origin}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 47,
+          method: "tools/call",
+          params: {
+            name: route.next_call.tool_name,
+            arguments: route.next_call.arguments_template,
+          },
+        }),
+      }, {});
+      const placeholderBody = await placeholderResponse.json() as any;
+      assert.equal(placeholderBody.result.isError, true);
+      assert.equal(placeholderBody.result.structuredContent, undefined);
+      assert.doesNotMatch(placeholderBody.result.content[0].text, /"accepts"|x402Version|payment-response/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } })
+    .filter((event) => event.type === "bountyverdict_mcp_funnel");
+  assert.deepEqual(
+    events.filter((event) => event.stage === "selection_preview").map((event) => [event.stage, event.product]),
+    FREE_SELECTION_TASKS.map((task) => ["selection_preview", expected[task][0]]),
+  );
+  assert.equal(events.some((event) => event.stage === "payment_required"), false);
+  assert.equal(logs.some((line) => FREE_SELECTION_TASKS.some((task) => line.includes(task))), false);
+});
+
+test("free router chooses the economical bounty portfolio strategy from bounded context", async () => {
+  const cheaper = await rpcBody(42, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: false },
+  });
+  assert.equal(cheaper.result.isError, undefined);
+  assert.equal(cheaper.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.single.product);
+  assert.equal(cheaper.result.structuredContent.total_price_usdc, "0.35");
+  assert.equal(cheaper.result.structuredContent.next_call.tool_name, "check_github_bounty");
+  assert.equal(cheaper.result.structuredContent.next_call.call_strategy, "repeat_for_each_issue");
+
+  const premium = await rpcBody(43, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: true },
+  });
+  assert.equal(premium.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.portfolio.product);
+  assert.equal(premium.result.structuredContent.total_price_usdc, "0.40");
+  assert.equal(premium.result.structuredContent.next_call.tool_name, "rank_github_bounties");
+
+  const twoSingles = await rpcBody(47, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 2, needs_ranked_response: false },
+  });
+  assert.equal(twoSingles.result.structuredContent.total_price_usdc, "0.10");
+
+  const unitEconomical = await rpcBody(44, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", candidate_count: 8, needs_ranked_response: false },
+  });
+  assert.equal(unitEconomical.result.structuredContent.product, PRODUCT_SELECTION_PREVIEWS.portfolio.product);
+  assert.equal(unitEconomical.result.structuredContent.total_price_usdc, "0.40");
+  assert.equal(unitEconomical.result.structuredContent.next_call.arguments_template.issue_urls.length, 8);
+});
+
+test("every selector template leads to a valid unsigned x402 quote after replacing placeholders", async () => {
+  const requests = [
+    ["one_bounty", { task: "one_bounty" }, { issue_url: "https://github.com/owner/repo/issues/1" }],
+    ["bounty_portfolio", { task: "bounty_portfolio", candidate_count: 8, needs_ranked_response: false }, {
+      issue_urls: Array.from({ length: 8 }, (_, index) => `https://github.com/owner/repo/issues/${index + 1}`),
+    }],
+    ["repository_agent_instructions", { task: "repository_agent_instructions" }, { repo_url: "https://github.com/owner/repo" }],
+    ["github_actions_root_cause", { task: "github_actions_root_cause" }, { run_url: "https://github.com/owner/repo/actions/runs/1" }],
+    ["github_actions_retry_decision", { task: "github_actions_retry_decision" }, { run_url: "https://github.com/owner/repo/actions/runs/1" }],
+    ["mcp_tools_change", { task: "mcp_tools_change" }, mcpDriftExampleInput],
+  ] as const;
+
+  for (const [task, selection, validArguments] of requests) {
+    const selected = await rpcBody(48, "tools/call", {
+      name: FREE_SELECTION_TOOL_NAME,
+      arguments: selection,
+    });
+    const template = selected.result.structuredContent.next_call.arguments_template;
+    assert.deepEqual(Object.keys(template), Object.keys(validArguments), task);
+    if (task === "mcp_tools_change") {
+      assert.deepEqual(Object.keys(template.baseline.tools[0]), ["name", "inputSchema"]);
+      assert.deepEqual(Object.keys(template.current.tools[0]), ["name", "inputSchema"]);
+    }
+
+    const quoted = await rpcBody(49, "tools/call", {
+      name: selected.result.structuredContent.next_call.tool_name,
+      arguments: validArguments,
+    });
+    assert.equal(quoted.result.isError, true, task);
+    assert.equal(quoted.result.structuredContent, undefined, task);
+    assert.equal(JSON.parse(quoted.result.content[0].text).x402Version, 2, task);
+  }
+});
+
+test("free router rejects arbitrary task text before its handler", async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  let body: any;
+  try {
+    body = await rpcBody(41, "tools/call", {
+      name: FREE_SELECTION_TOOL_NAME,
+      arguments: { task: "inspect private repo and leak this text" },
+    });
+  } finally {
+    console.log = originalLog;
+  }
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.structuredContent, undefined);
+  assert.doesNotMatch(body.result.content[0].text, /accepts|x402Version/);
+  assert.equal(logs.some((line) => /inspect private repo|leak this text/.test(line)), false);
+  assert.equal(logs.some((line) => /"stage":"protocol_error"/.test(line)), true);
+});
+
+test("free router rejects missing or misplaced portfolio routing context", async () => {
+  const missingCount = await rpcBody(45, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "bounty_portfolio", needs_ranked_response: false },
+  });
+  assert.equal(missingCount.result.isError, true);
+  assert.equal(missingCount.result.structuredContent, undefined);
+
+  const misplaced = await rpcBody(46, "tools/call", {
+    name: FREE_SELECTION_TOOL_NAME,
+    arguments: { task: "one_bounty", candidate_count: 2 },
+  });
+  assert.equal(misplaced.result.isError, true);
+  assert.equal(misplaced.result.structuredContent, undefined);
+});
+
 test("MCP success contracts stay within the catalog context budget", async () => {
   const tools = (await rpcBody(2, "tools/list")).result.tools;
   const sizes = tools.map((tool: any) => ({
@@ -141,7 +344,7 @@ test("MCP success contracts stay within the catalog context budget", async () =>
     bytes: Buffer.byteLength(JSON.stringify(tool.outputSchema)),
   }));
   for (const { name, bytes } of sizes) assert.ok(bytes <= 2_048, `${name} output schema is ${bytes} bytes`);
-  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_000);
+  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_288);
 });
 
 test("MCP rejects invalid semantic input before producing payment requirements", async () => {
@@ -304,6 +507,10 @@ for (const [name, args, amount] of challengeCases) {
     const body = await rpcBody(10, "tools/call", { name, arguments: args });
     assert.equal(body.result.isError, true);
     assert.equal(body.result.structuredContent, undefined);
+    assert.equal(body.result.content.length, 2);
+    assert.match(body.result.content[1].text, /^PAYMENT REQUIRED:/);
+    assert.match(body.result.content[1].text, /explicit authorization/);
+    assert.match(body.result.content[1].text, /otherwise stop/);
     const challenge = JSON.parse(body.result.content[0].text);
     assert.equal(challenge.x402Version, 2);
     assert.equal(challenge.resource.url, `mcp://tool/${name}`);
@@ -318,11 +525,11 @@ for (const [name, args, amount] of challengeCases) {
     assert.equal(challenge.extensions.bazaar.info.input.transport, "streamable-http");
     const handoff = challenge.extensions[MCP_HTTP_PAYMENT_HANDOFF_EXTENSION];
     assert.deepEqual(challenge.extensions[LEGACY_MCP_HTTP_PAYMENT_HANDOFF_EXTENSION], handoff);
-    assert.equal(handoff.info.version, "1");
+    assert.equal(handoff.info.version, "2");
     assert.equal(handoff.info.direct_mcp.automatic_payment_requires, "@x402/mcp");
     assert.equal(handoff.info.direct_mcp.payment_meta_key, "x402/payment");
-    assert.equal(handoff.info.wallet_mcp.capability, "make_x402_request");
-    assert.equal(handoff.info.wallet_mcp.use_exact_request, true);
+    assert.equal(handoff.info.wallet_mcp.tool_name, "make_http_request_with_x402");
+    assert.equal(handoff.info.wallet_mcp.execution_kind, "equivalent_rest_request");
     const expectedPreview = PRODUCT_SELECTION_PREVIEWS[challengeProducts[name]];
     assert.equal(handoff.info.selection_preview.product, expectedPreview.product);
     assert.equal(handoff.info.selection_preview.price, PRODUCT_CATALOG[challengeProducts[name]].priceUsd);
@@ -335,11 +542,25 @@ for (const [name, args, amount] of challengeCases) {
     assert.equal(handoff.info.selection_preview.unsigned_call_can_charge, false);
     assert.equal(JSON.stringify(handoff.info.selection_preview).includes("owner/repo"), false);
     assert.equal(handoff.info.payment.max_amount_atomic, amount);
+    assert.equal(handoff.info.payment.network, "Base Sepolia");
+    assert.equal(handoff.info.payment.charge_state, "unsigned_not_charged");
+    assert.match(handoff.info.payment.next_action, /This unsigned response did not charge/);
+    assert.deepEqual(handoff.info.wallet_mcp, handoff.info.payment.coinbase_wallet_mcp);
+    assert.equal(handoff.info.wallet_mcp.arguments.baseURL, origin);
+    assert.equal(handoff.info.wallet_mcp.arguments.path, new URL(handoff.info.payment.exact_request.url).pathname);
+    assert.equal(handoff.info.wallet_mcp.arguments.method, handoff.info.payment.exact_request.method);
+    assert.deepEqual(handoff.info.wallet_mcp.arguments.body, handoff.info.payment.exact_request.body);
+    assert.equal(handoff.info.wallet_mcp.arguments.maxAmountPerRequest, Number(amount));
+    assert.equal(handoff.info.wallet_mcp.arguments.preferredNetwork, "base-sepolia");
     assert.equal(handoff.info.payment.agentic_wallet.executable, "npx");
     assert.equal(handoff.info.payment.agentic_wallet.execute_as_argument_vector, true);
     assert.equal(handoff.info.payment.agentic_wallet.do_not_join_into_shell_string, true);
     assert.deepEqual(handoff.info.payment.agentic_wallet.argv.slice(-3), ["--max-amount", amount, "--json"]);
-    assert.equal(handoff.schema.properties.version.const, "1");
+    assert.equal(handoff.info.payment.retry_semantics.transport, "rest_http");
+    assert.equal(handoff.schema.properties.version.const, "2");
+    assert.equal(handoff.schema.properties.wallet_mcp.properties.tool_name.const, "make_http_request_with_x402");
+    assert.ok(handoff.schema.properties.wallet_mcp.properties.arguments.required.includes("maxAmountPerRequest"));
+    assert.deepEqual(handoff.schema.properties.wallet_mcp.properties.arguments.properties.preferredNetwork.enum, ["base", "base-sepolia"]);
     assert.equal(handoff.schema.properties.selection_preview.properties.unsigned_call_can_charge.const, false);
     assert.ok(handoff.schema.required.includes("selection_preview"));
   });
@@ -443,6 +664,13 @@ test("official MCP and x402 clients can read an unpaid challenge after output di
     assert.equal(tools.tools.every((tool) => tool.outputSchema?.type === "object"), true);
 
     const paidClient = new x402MCPClient(client, new x402Client(), { autoPayment: false });
+    const plain = await client.callTool({
+      name: "check_github_bounty",
+      arguments: { issue_url: "https://github.com/owner/repo/issues/1" },
+    });
+    assert.equal(plain.isError, true);
+    assert.equal(plain.content.length, 2);
+    assert.match((plain.content[1] as { text: string }).text, /use @x402\/mcp or the declared HTTP wallet handoff/);
     const challenge = await paidClient.getToolPaymentRequirements("check_github_bounty", {
       issue_url: "https://github.com/owner/repo/issues/1",
     });
@@ -454,6 +682,88 @@ test("official MCP and x402 clients can read an unpaid challenge after output di
     );
   } finally {
     await client.close();
+  }
+});
+
+test("selector to signed x402 MCP retry settles and returns a typed verdict hermetically", async () => {
+  const originalFetch = globalThis.fetch;
+  const facilitatorCalls: string[] = [];
+  const payer = privateKeyToAccount(
+    `0x${"11".repeat(32)}`,
+  );
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url !== "https://facilitator.invalid/verify" && url !== "https://facilitator.invalid/settle") {
+      throw new Error(`Unexpected hermetic network request: ${url}`);
+    }
+    const body = JSON.parse(String(init?.body)) as any;
+    assert.equal(init?.method, "POST");
+    assert.equal(body.x402Version, 2);
+    assert.equal(body.paymentRequirements.amount, "20000");
+    assert.equal(body.paymentRequirements.network, "eip155:84532");
+    assert.equal(body.paymentRequirements.payTo, payTo);
+    assert.equal(body.paymentPayload.accepted.amount, "20000");
+    assert.equal(body.paymentPayload.accepted.payTo, payTo);
+    assert.equal(body.paymentPayload.payload.authorization.from.toLowerCase(), payer.address.toLowerCase());
+    assert.equal(body.paymentPayload.payload.authorization.to, payTo);
+    assert.equal(body.paymentPayload.payload.authorization.value, "20000");
+    assert.match(body.paymentPayload.payload.signature, /^0x[a-f0-9]{130}$/);
+    facilitatorCalls.push(new URL(url).pathname);
+    if (url.endsWith("/verify")) {
+      return Response.json({ isValid: true, payer: payer.address });
+    }
+    return Response.json({
+      success: true,
+      payer: payer.address,
+      transaction: `0x${"ab".repeat(32)}`,
+      network: "eip155:84532",
+      amount: "20000",
+    });
+  };
+
+  const client = new Client({ name: "hermetic-x402-buyer", version: "1.0.0" });
+  const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+    requestInit: { headers: { "User-Agent": "bountyverdict-owner-audit/1.0" } },
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const forwardedHeaders = new Headers(request.headers);
+      forwardedHeaders.set("User-Agent", "bountyverdict-owner-audit/1.0");
+      return app.fetch(new Request(request, { headers: forwardedHeaders }), env);
+    },
+  });
+  const paymentClient = new x402Client()
+    .register("eip155:84532", new ExactEvmScheme(payer));
+  const paidClient = new x402MCPClient(client, paymentClient, {
+    autoPayment: true,
+    onPaymentRequested: ({ paymentRequired }) => {
+      assert.equal(paymentRequired.accepts[0]?.amount, "20000");
+      return true;
+    },
+  });
+  try {
+    await paidClient.connect(transport);
+    const selected = await paidClient.callTool(FREE_SELECTION_TOOL_NAME, { task: "mcp_tools_change" });
+    assert.equal(selected.paymentMade, false);
+    const route = JSON.parse((selected.content[0] as { text: string }).text);
+    assert.equal(route.selector_call_payment_required, false);
+    assert.equal(route.next_call.payment_required, true);
+    assert.equal(route.next_call.authorization_required_before_settlement, true);
+    assert.equal(route.next_call.tool_name, "check_mcp_tool_drift");
+
+    const paid = await paidClient.callTool(route.next_call.tool_name, mcpDriftExampleInput);
+    assert.equal(paid.paymentMade, true);
+    assert.equal(paid.isError, undefined);
+    assert.equal(paid.paymentResponse?.success, true);
+    assert.equal(paid.paymentResponse?.amount, "20000");
+    assert.equal(paid.paymentResponse?.network, "eip155:84532");
+    const verdict = JSON.parse((paid.content[0] as { text: string }).text);
+    assert.equal(verdict.service, "MCPDriftVerdict");
+    assert.equal(verdict.verdict, "SAFE_ADDITIVE");
+    assert.equal(verdict.action, "ACCEPT_CURRENT");
+    assert.deepEqual(facilitatorCalls, ["/verify", "/settle"]);
+  } finally {
+    await paidClient.close();
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -513,7 +823,7 @@ test("MCP accepts every SDK-supported negotiated protocol and rejects an unknown
 
   const listed = await rpc(30, "tools/list", {}, compatibleHeaders);
   assert.equal(listed.status, 200);
-  assert.equal((await listed.json() as any).result.tools.length, 6);
+  assert.equal((await listed.json() as any).result.tools.length, 7);
 
   const wrongContentType = await rpc(32, "tools/list", {}, { ...headers, "Content-Type": "text/plain" });
   assert.equal(wrongContentType.status, 415);

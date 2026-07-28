@@ -12,6 +12,7 @@ const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.u
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
+const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
 const taskmarketPitchServiceUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.service", import.meta.url);
 const taskmarketPitchTimerUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.timer", import.meta.url);
 const geminiExtensionUrl = new URL("../gemini-extension.json", import.meta.url);
@@ -337,6 +338,25 @@ test("question-shaped MCP selection copy gets an isolated v7 checkpoint after th
   assert.match(distribution, /the completed v2 baseline and prior excluded question-description windows remain frozen/);
   assert.match(distribution, /v7 starts from zero only when the exact current quality release, production activation, Agent Finder drain, and fresh epoch 55 match/);
   assert.equal(activationTemplate.experiment_id, "mcp-agent-question-descriptions-v7");
+  assert.equal(activationTemplate.measurement_epoch_id, 0);
+  assert.equal(activationTemplate.target_tools_list, 25);
+});
+
+test("free selection router gets a dedicated zero-prefix post-release experiment", async () => {
+  const distribution = await readFile(distributionUrl, "utf8");
+  const activationTemplate = JSON.parse(await readFile(new URL(
+    "../agent/config/free-selection-router-experiment.activation.template.json",
+    import.meta.url,
+  ), "utf8"));
+  assert.match(distribution, /FREE_SELECTION_ROUTER_EXPERIMENT_ID/);
+  assert.match(distribution, /FREE_SELECTION_ROUTER_EXPERIMENT_ACTIVATION_FILE/);
+  assert.match(distribution, /experiments\/mcp-free-selection-router-v1\.json/);
+  assert.match(distribution, /persistedFreeSelectionRouterExperiment \|\|\s+previousReport\.funnel\?\.mcp_free_selection_router_experiment \|\| null/);
+  assert.match(distribution, /writeMeasurementExperimentCheckpoint\(\s+freeSelectionRouterExperimentStateFile/s);
+  assert.match(distribution, /mcp_free_selection_router_experiment: mcpFreeSelectionRouterExperiment/);
+  assert.match(distribution, /first report at or above N=25 is immutable/);
+  assert.match(distribution, /a free selection is not payment intent, a purchase, or revenue/);
+  assert.equal(activationTemplate.experiment_id, "mcp-free-selection-router-v1");
   assert.equal(activationTemplate.measurement_epoch_id, 0);
   assert.equal(activationTemplate.target_tools_list, 25);
 });
@@ -679,9 +699,9 @@ test("directory monitoring tracks ToolHive review and exact in-agent remote cont
   assert.match(directory, /submission_and_toolhive_in_agent_catalog_presence_not_impressions_installs_tool_calls_purchases_or_revenue/);
   assert.match(distribution, /toolhive: state\.toolhive/);
   assert.match(distribution, /ToolHive in-agent catalog/);
-  assert.match(distribution, /exact six-tool remote contract/);
+  assert.match(distribution, /exact seven-tool remote contract/);
   assert.match(parser, /io\.github\.stacklok\/bountyverdict/);
-  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.9"/);
+  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.11"/);
 });
 
 test("directory monitoring tracks Gemini CLI gallery propagation without claiming demand", async () => {
@@ -770,6 +790,7 @@ test("declared MCP source attribution remains allowlisted, aggregate, and separa
   assert.match(funnel, /declaredSource === "vscode-deeplink"/);
   assert.match(funnel, /declaredSource === "openhands-integrations"/);
   assert.match(funnel, /declaredSource === "goose-extensions"/);
+  assert.match(funnel, /declaredSource === "mcpize"/);
   assert.match(funnel, /\? "agent_skills_marketplace"/);
   assert.match(funnel, /event\.source === "owner_automation"[\s\S]*\? "owner_automation"/);
   assert.match(distribution, /Kiro Power package/);
@@ -828,7 +849,7 @@ test("Gemini CLI extension exposes only the hosted paid MCP without secrets", as
   const manifest = JSON.parse(await readFile(geminiExtensionUrl, "utf8"));
   assert.deepEqual(manifest, {
     name: "bountyverdict",
-    version: "1.1.9",
+    version: "1.1.11",
     description: "Paid GitHub bounty selection, CI diagnosis, flaky-run triage, agent-instruction audits, and MCP compatibility checks for autonomous coding agents.",
     mcpServers: {
       bountyverdict: {
@@ -907,10 +928,15 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(distribution, /reuse the same receipt transfer evidence/);
   assert.match(distribution, /reported worker earnings do not equal the sum of uniquely verified settlement records/);
   assert.match(distribution, /pending opportunity totals do not equal the pending submission records/);
+  assert.match(distribution, /pending opportunity buckets do not reconcile with their records or legacy totals/);
+  assert.match(distribution, /pending submission phase disagrees with its window and expiry/);
   assert.match(distribution, /Pending Taskmarket opportunity estimate \(not revenue\)/);
+  assert.match(distribution, /Live submission windows/);
+  assert.match(distribution, /Expired awaiting requester finalization/);
+  assert.match(distribution, /expiry closes new submissions but does not itself revoke requester award actions/i);
   assert.match(distribution, /explicitly operator-estimated from submitted record types/);
   assert.match(distribution, /settled_worker_earnings_usdc/);
-  assert.match(distribution, /API award rows alone remain zero purchases and zero revenue/);
+  assert.match(distribution, /API award rows, or expiry alone remain zero purchases and zero revenue/);
   assert.match(distribution, /Public funded-demand watcher/);
   assert.doesNotMatch(service, /EnvironmentFile/);
 });
@@ -970,6 +996,94 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.doesNotMatch(snapshotService, /submit-agentskill|FORCE_SUBMIT|DIRECTORY_MUTATION/i);
 });
 
+test("post-boundary release readiness is a one-shot read-only evidence gate", async () => {
+  const [service, timer, packageJson] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-release-readiness.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-release-readiness.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-acquisition-snapshot\.service/);
+  assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-conversion-release\/agent/);
+  assert.doesNotMatch(service, /bountyverdict-router-release/);
+  assert.match(service, /scripts\/verify-post-boundary-release-gate\.ts/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX/);
+  assert.doesNotMatch(service, /MemoryDenyWriteExecute=yes/);
+  assert.doesNotMatch(service, /(?:curl|wrangler|gh |deploy|publish|rollback)/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:37:16 Europe\/Bucharest/);
+  assert.match(timer, /Persistent=true/);
+  assert.match(packageJson, /"release:verify-boundary": "node --experimental-strip-types scripts\/verify-post-boundary-release-gate\.ts"/);
+});
+
+test("post-boundary release execution stays review-bound, exact-head, and retry-safe", async () => {
+  const [service, timer, script, source, packageJson] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-post-boundary-release.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-post-boundary-release.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/run-post-boundary-release.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/src/post-boundary-release.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-release-readiness\.service network-online\.target/);
+  assert.match(service, /Environment=EXECUTE_POST_BOUNDARY_RELEASE=YES/);
+  assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-conversion-release\/agent/);
+  assert.match(service, /TimeoutStartSec=45min/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /ReadWritePaths=%h\/Projects\/sandbox\/bountyverdict/);
+  assert.match(service, /ReadWritePaths=%h\/\.config\/systemd\/user\/bountyverdict-distribution-monitor\.service\.d/);
+  assert.match(service, /CapabilityBoundingSet=\n/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:42:00 Europe\/Bucharest/);
+  assert.match(timer, /OnCalendar=2026-07-27 20:42:00 Europe\/Bucharest/);
+  assert.match(timer, /Persistent=true/);
+  assert.match(script, /scripts\/verify-post-boundary-release-gate\.ts/);
+  assert.ok(script.indexOf("verify-post-boundary-release-gate.ts") < script.indexOf('"pr", "merge"'));
+  assert.match(script, /"--match-head-commit", releaseCommit/);
+  assert.doesNotMatch(script, /"--admin"|--admin/);
+  assert.match(script, /selectExactWorkflowRun/);
+  assert.match(script, /acquireExclusiveRun\(lockPath/);
+  assert.match(script, /scripts\/activate-free-selection-router\.ts/);
+  assert.match(script, /FREE_SELECTION_ROUTER_DRAIN_ROTATION_ID: POST_BOUNDARY_DRAIN_ID/);
+  assert.match(script, /activationResult\.measurement_epoch_id !== 57/);
+  assert.match(script, /"merge", "--ff-only", "refs\/remotes\/origin\/main"/);
+  assert.match(script, /writeDistributionMonitorDropIn/);
+  assert.match(script, /\["--user", "daemon-reload"\]/);
+  assert.match(script, /\["--user", "start", distributionMonitorService\]/);
+  assert.match(script, /validateDistributionMonitorHandoff/);
+  assert.ok(script.lastIndexOf("Canonical main did not fast-forward") <
+    script.lastIndexOf("handoffDistributionMonitor("));
+  assert.match(source, /POST_BOUNDARY_PULL_REQUEST = 11/);
+  assert.match(source, /bountyverdict\/agent/);
+  assert.match(source, /mcp_free_selection_router_experiment/);
+  assert.match(source, /More than one \$\{expected\.workflowName\} run exists/);
+  assert.match(source, /github-actions\[bot\]/);
+  assert.match(source, /agent-manifest\.json/);
+  assert.match(packageJson, /"release:post-boundary": "EXECUTE_POST_BOUNDARY_RELEASE=YES node --experimental-strip-types scripts\/run-post-boundary-release\.ts"/);
+});
+
+test("acquisition snapshot retries are bounded and cannot overwrite a successful freeze", async () => {
+  const [service, timer, script] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot-retry.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot-retry.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/retry-acquisition-snapshot.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /After=bountyverdict-acquisition-snapshot\.service network-online\.target/);
+  assert.match(service, /Environment=RETRY_ACQUISITION_SNAPSHOT=YES/);
+  assert.match(service, /scripts\/retry-acquisition-snapshot\.ts/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(service, /RestrictAddressFamilies=AF_UNIX/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:38:15 Europe\/Bucharest/);
+  assert.match(timer, /OnCalendar=2026-07-27 19:41:15 Europe\/Bucharest/);
+  assert.equal((timer.match(/OnCalendar=/g) || []).length, 4);
+  assert.match(timer, /Persistent=true/);
+  assert.ok(script.indexOf("before.terminal_result") < script.indexOf('"systemctl"'));
+  assert.match(script, /\["--user", "start", snapshotService\]/);
+  assert.doesNotMatch(script, /run-audited-monitor|directory-monitor|distribution-monitor/);
+  assert.match(script, /Date\.now\(\) < Date\.parse\(EARNED_PLACEMENT_ENDS_AT\)/);
+});
+
 test("broad retrieval audits share a bounded six-hour measurement window", async () => {
   const [directoryTimer, marketplaceTimer] = await Promise.all([
     readFile(directoryTimerUrl, "utf8"),
@@ -988,6 +1102,14 @@ test("the normal distribution timer is report-only and retains explicit accounti
   assert.match(service, /Environment=START_BLOCK=48876000/);
   assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.012/);
   assert.doesNotMatch(service, /run-audited-monitor/);
+});
+
+test("the functional canary schedules a fresh run after every timer activation", async () => {
+  const timer = await readFile(functionalCanaryTimerUrl, "utf8");
+  assert.match(timer, /OnActiveSec=1min/);
+  assert.match(timer, /OnUnitActiveSec=6h/);
+  assert.match(timer, /Persistent=true/);
+  assert.doesNotMatch(timer, /OnBootSec=/);
 });
 
 test("the exact AgentWork pitch is polled read-only with private state", async () => {

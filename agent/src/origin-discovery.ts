@@ -1,6 +1,7 @@
 import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { mcpDriftExampleInput } from "./mcp-drift-discovery.ts";
 import { MCP_HTTP_PAYMENT_HANDOFF_EXTENSION } from "./payment-handoff.ts";
+import { FREE_SELECTION_TOOL_NAME } from "./free-selection-router.ts";
 
 const REPOSITORY = "https://github.com/Mimirs402/bountyverdict";
 const SITE = "https://mimirs402.github.io/bountyverdict";
@@ -19,7 +20,7 @@ const MCP_TOOL_BY_PRODUCT = Object.freeze({
   flake: "classify_github_actions_flake",
   mcpdrift: "check_mcp_tool_drift",
 } as const satisfies Record<typeof DISTRIBUTED_PRODUCTS[number], string>);
-const AI_CATALOG_UPDATED_AT = "2026-07-22T18:33:54Z";
+const AI_CATALOG_UPDATED_AT = "2026-07-26T16:45:00Z";
 const AI_CATALOG_QUERIES = Object.freeze([
   "is this github issue bounty still claimable or already being worked on",
   "which github bounty should i work on next",
@@ -155,16 +156,28 @@ export function createOriginAgentManifest(originInput: string, network: string, 
       payment: "x402 v2 exact USDC on Base",
       direct_automatic_payment_requires: "@x402/mcp",
       http_payment_handoff_extension: MCP_HTTP_PAYMENT_HANDOFF_EXTENSION,
-      tools: DISTRIBUTED_PRODUCTS.map((product) => ({
-        name: MCP_TOOL_BY_PRODUCT[product],
-        product,
-        price_usdc: PRODUCT_CATALOG[product].priceUsd.slice(1),
-        amount_atomic_usdc: String(PRODUCT_CATALOG[product].amountAtomic),
-      })),
+      tools: [
+        {
+          name: FREE_SELECTION_TOOL_NAME,
+          product: "selection_router",
+          price_usdc: "0.00",
+          amount_atomic_usdc: "0",
+          payment_required: false,
+          verdict_produced: false,
+        },
+        ...DISTRIBUTED_PRODUCTS.map((product) => ({
+          name: MCP_TOOL_BY_PRODUCT[product],
+          product,
+          price_usdc: PRODUCT_CATALOG[product].priceUsd.slice(1),
+          amount_atomic_usdc: String(PRODUCT_CATALOG[product].amountAtomic),
+          payment_required: true,
+          verdict_produced: true,
+        })),
+      ],
     },
     distribution_scope: {
       excluded_products: ["SkillVerdict"],
-      reason: "This surface is intentionally limited to the six independently distributed contracts. The canonical OpenAPI and x402 inventory remain the complete seven-product sources.",
+      reason: "This MCP surface exposes one free selector plus the six independently distributed paid contracts. The canonical OpenAPI and x402 inventory remain the complete seven-product sources.",
     },
     reliability: {
       prepayment_input_validation: true,
@@ -219,7 +232,7 @@ export function createMcpServerCard(originInput: string, network: string) {
     serverInfo: {
       name: "io.github.Mimirs402/bountyverdict",
       title: "BountyVerdict Agent Decision APIs",
-      version: "1.1.9",
+      version: "1.1.11",
     },
     description: AGENT_DECISION_DESCRIPTION,
     iconUrl: `${SITE}/favicon.svg`,
@@ -236,7 +249,7 @@ export function createMcpServerCard(originInput: string, network: string) {
       required: false,
       schemes: [],
     },
-    instructions: "Choose the tool whose opening question matches the task, then inspect its schema and price before calling. Validate complete input before authorizing any Base USDC payment.",
+    instructions: `If the task is clear but the product is not, call ${FREE_SELECTION_TOOL_NAME} for a free deterministic route. Otherwise choose the paid tool whose opening question matches the task, then inspect its schema and price before calling. Validate complete input before authorizing any Base USDC payment.`,
     tools: ["dynamic"],
     _meta: {
       payment: {
@@ -349,9 +362,12 @@ export function createAiCatalog(originInput: string) {
       url: `${origin}/.well-known/mcp.json`,
       description: AGENT_DECISION_DESCRIPTION,
       tags: ["github", "coding-agents", "ci", "mcp", "x402", "read-only"],
-      capabilities: DISTRIBUTED_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
+      capabilities: [
+        FREE_SELECTION_TOOL_NAME,
+        ...DISTRIBUTED_PRODUCTS.map((product) => MCP_TOOL_BY_PRODUCT[product]),
+      ],
       representativeQueries: [...AI_CATALOG_QUERIES],
-      version: "1.1.9",
+      version: "1.1.11",
       updatedAt: AI_CATALOG_UPDATED_AT,
       metadata: {
         authentication: "none",
@@ -391,7 +407,7 @@ Use the narrowest contract below before an autonomous agent spends coding time, 
 
 This discovery skill never signs, pays, executes repository code, mutates GitHub, fetches MCP catalog URLs, or invokes MCP tools.
 
-Agents with MCP 2025-11-25 Streamable HTTP and x402 support may connect directly to \`${origin}/mcp\`. It exposes the same six products as paid tools, validates semantic input before requesting payment, and excludes SkillVerdict. Use \`tools/list\` to inspect exact schemas and prices.
+Agents with MCP 2025-11-25 Streamable HTTP and x402 support may connect directly to \`${origin}/mcp\`. It exposes a free deterministic selector plus the same six products as paid tools, validates semantic input before requesting payment, and excludes SkillVerdict. Use \`choose_github_agent_decision\` when the task is known but the product name is not, or inspect \`tools/list\` for exact schemas and prices.
 
 ## Safe calling sequence
 

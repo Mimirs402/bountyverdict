@@ -4,6 +4,7 @@ export const RECOVERY_EXPERIMENT_COUNTER_KEYS = Object.freeze([
   "protocol_error",
   "tool_not_found",
   "validation_error",
+  "selection_preview",
   "capacity_rejected",
   "payment_required",
   "payment_present",
@@ -37,7 +38,7 @@ function counters(value: unknown, label: string): RecoveryExperimentCounters {
   }
   const record = value as Record<string, unknown>;
   return Object.fromEntries(RECOVERY_EXPERIMENT_COUNTER_KEYS.map((key) => {
-    const count = Number(record[key]);
+    const count = key === "selection_preview" && record[key] === undefined ? 0 : Number(record[key]);
     if (!Number.isSafeInteger(count) || count < 0) {
       throw new Error(`${label} ${key} is invalid.`);
     }
@@ -60,7 +61,7 @@ function validPrevious(
 ): Record<string, any> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
-  if (record.id !== id || record.accounting_schema_version !== 3) return null;
+  if (record.id !== id || (record.accounting_schema_version !== 3 && record.accounting_schema_version !== 4)) return null;
   if (record.measurement_epoch_id !== measurementEpochId || record.target_tools_list !== targetToolsList) {
     throw new Error("Recovery experiment configuration changed after measurement state was created.");
   }
@@ -105,6 +106,13 @@ function decisionFor(delta: RecoveryExperimentCounters): {
       decision: "known_valid_tool_interest_observed",
       task_first_release_recommendation: "may_proceed_known_tool_interest_observed_without_recovery_claim",
       interpretation: "A known structurally valid tool call reached its payment challenge, but aggregate telemetry cannot attribute it to an earlier recovery response.",
+    };
+  }
+  if (delta.selection_preview > 0) {
+    return {
+      decision: "free_selection_preview_observed",
+      task_first_release_recommendation: "may_proceed_free_router_selection_observed_without_payment_claim",
+      interpretation: "The free router was selected, proving a bounded downstream call but not paid-tool interest or payment intent.",
     };
   }
   if (delta.validation_error > 0) {
@@ -211,7 +219,7 @@ export function updateUnknownToolRecoveryExperiment(input: RecoveryExperimentInp
     Math.max(0, eligible.capacity_rejected - eligible.payment_present);
 
   return {
-    accounting_schema_version: 3,
+    accounting_schema_version: 4,
     status,
     decision: currentDecision,
     measurement_epoch_id: input.measurementEpochId,
@@ -223,6 +231,9 @@ export function updateUnknownToolRecoveryExperiment(input: RecoveryExperimentInp
     event_ratios: {
       valid_call_per_tools_list_percent: eligible.tools_list > 0
         ? Math.round(validCallEvents / eligible.tools_list * 1_000) / 10
+        : null,
+      free_selection_preview_per_tools_list_percent: eligible.tools_list > 0
+        ? Math.round(eligible.selection_preview / eligible.tools_list * 1_000) / 10
         : null,
       payment_present_per_valid_call_percent: validCallEvents > 0
         ? Math.round(eligible.payment_present / validCallEvents * 1_000) / 10

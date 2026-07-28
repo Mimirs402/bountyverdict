@@ -22,6 +22,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Require exact main release head
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+          EXPECTED_RELEASE_REF: ${{ github.ref }}
+        run: |
+          [[ "$EXPECTED_RELEASE_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_MAIN_SHA" ]]
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.23.1
@@ -29,6 +39,19 @@ jobs:
           cache-dependency-path: agent/package-lock.json
 
       - run: npm ci --ignore-scripts
+
+      - name: Read expected Worker release
+        run: |
+          registry_version=$(jq -er '.version' ../server.json)
+          worker_version=$(jq -er '.version' package.json)
+          manifest_version=$(jq -er '.release_version' ../agent-manifest.json)
+          manifest_status=$(jq -er '.status' ../agent-manifest.json)
+          [[ "$registry_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$worker_version" == "$registry_version" ]]
+          [[ "$manifest_version" == "$worker_version" ]]
+          [[ "$manifest_status" == "awaiting_production" ]]
+          jq -e '.production_api == null' ../agent-manifest.json >/dev/null
+          echo "WORKER_RELEASE_VERSION=$worker_version" >> "$GITHUB_ENV"
 
       - name: Verify required deployment secrets
         env:
@@ -48,7 +71,60 @@ jobs:
             if (!/^0x[a-fA-F0-9]{40}$/.test(process.env.PAY_TO_ADDRESS)) throw new Error("PAY_TO_ADDRESS is invalid.");
           '
 
+      - name: Capture current production Worker version
+        id: previous
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_API_URL: https://bountyverdict-agent-production.mimirslab.workers.dev
+        run: |
+          deployments=$(npx wrangler deployments list --env production --json)
+          previous_version=$(jq -er '
+            max_by(.created_on)
+            | .versions
+            | if length == 1 and .[0].percentage == 100
+              then .[0].version_id
+              else error("current production deployment is not one version at 100 percent")
+              end
+          ' <<<"$deployments")
+          [[ "$previous_version" =~ ^[0-9a-f-]{36}$ ]]
+          previous_semantic_version=$(
+            node <<'NODE'
+          const response = await fetch(`${process.env.PRODUCTION_API_URL}/mcp`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "User-Agent": "bountyverdict-owner-audit/1.0",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-11-25",
+                capabilities: {},
+                clientInfo: {
+                  name: "bountyverdict-release-rollback-capture",
+                  version: "1.0.0",
+                },
+              },
+            }),
+          });
+          if (!response.ok) throw new Error(`MCP initialize returned ${response.status}`);
+          const initialized = await response.json();
+          const version = initialized.result?.serverInfo?.version;
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version || "")) {
+            throw new Error("Production MCP did not return a valid semantic version");
+          }
+          process.stdout.write(version);
+          NODE
+          )
+          echo "version_id=$previous_version" >> "$GITHUB_OUTPUT"
+          echo "semantic_version=$previous_semantic_version" >> "$GITHUB_OUTPUT"
+
       - name: Deploy production Worker with secrets
+        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
@@ -215,7 +291,7 @@ jobs:
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
               const value = JSON.parse(body);
               const entry = value.entries?.[0];
-              const tools = ["check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+              const tools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
               if (value.specVersion !== "1.0" || value.entries?.length !== 1) process.exit(1);
               if (entry?.identifier !== "urn:air:bountyverdict-agent-production.mimirslab.workers.dev:server:bountyverdict") process.exit(1);
               if (entry?.type !== "application/mcp-server-card+json" || entry?.url !== `${process.env.PRODUCTION_API_URL}/.well-known/mcp.json`) process.exit(1);
@@ -231,6 +307,10 @@ jobs:
               if (value.spec !== "bountyverdict-agent-manifest/1" || value.version !== 1) process.exit(1);
               if (value.origin !== process.env.PRODUCTION_API_URL || JSON.stringify(value.products?.map(({ id }) => id)) !== JSON.stringify(expected)) process.exit(1);
               if (value.products?.some(({ id }) => id === "skill") || JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
+              const mcpTools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+              if (JSON.stringify(value.mcp?.tools?.map(({ name }) => name)) !== JSON.stringify(mcpTools)) process.exit(1);
+              if (value.mcp.tools[0]?.payment_required !== false || value.mcp.tools[0]?.verdict_produced !== false || value.mcp.tools[0]?.amount_atomic_usdc !== "0") process.exit(1);
+              if (value.mcp.tools.slice(1).some(({ payment_required }) => payment_required !== true)) process.exit(1);
               if (value.payment?.network !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.pay_to || "")) process.exit(1);
             });
           '
@@ -262,13 +342,19 @@ jobs:
             capabilities: {},
             clientInfo: { name: "bountyverdict-release-check", version: "1.0.0" },
           });
-          if (initialized.result?.protocolVersion !== "2025-11-25" || initialized.result?.serverInfo?.name !== "BountyVerdict") process.exit(1);
+          if (
+            initialized.result?.protocolVersion !== "2025-11-25" ||
+            initialized.result?.serverInfo?.name !== "BountyVerdict" ||
+            initialized.result?.serverInfo?.version !== process.env.WORKER_RELEASE_VERSION
+          ) process.exit(1);
           const listed = await rpc(2, "tools/list");
-          const expectedNames = ["check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+          const expectedNames = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
           if (JSON.stringify(listed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
           const outputSchemaSizes = listed.result.tools.map(({ outputSchema }) => Buffer.byteLength(JSON.stringify(outputSchema)));
+          const descriptionSizes = listed.result.tools.map(({ description }) => Buffer.byteLength(description));
           if (listed.result.tools.some(({ outputSchema }) => outputSchema?.type !== "object" || !Array.isArray(outputSchema.required))) process.exit(1);
           if (outputSchemaSizes.some((bytes) => bytes > 2048) || outputSchemaSizes.reduce((total, bytes) => total + bytes, 0) > 12000) process.exit(1);
+          if (descriptionSizes.some((bytes) => bytes > 1500) || descriptionSizes.reduce((total, bytes) => total + bytes, 0) > 4500) process.exit(1);
           const compatibilityHeaders = { ...headers, "MCP-Protocol-Version": "2025-06-18" };
           async function compatibilityRpc(id, method, params = {}) {
             const response = await fetch(`${api}/mcp`, {
@@ -287,6 +373,43 @@ jobs:
           if (compatibilityInitialized.result?.protocolVersion !== "2025-06-18") process.exit(1);
           const compatibilityListed = await compatibilityRpc(21, "tools/list");
           if (JSON.stringify(compatibilityListed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
+          const freeResponse = await fetch(`${api}/mcp`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 22,
+              method: "tools/call",
+              params: {
+                name: "choose_github_agent_decision",
+                arguments: { task: "github_actions_root_cause" },
+              },
+            }),
+          });
+          if (!freeResponse.ok || freeResponse.headers.has("PAYMENT-REQUIRED")) process.exit(1);
+          const freeCalled = await freeResponse.json();
+          const freeRoute = freeCalled.result?.structuredContent;
+          if (freeCalled.result?.isError || freeRoute?.next_call?.tool_name !== "diagnose_github_actions_run") process.exit(1);
+          if (freeRoute?.selector_call_payment_required !== false || "verdict" in freeRoute) process.exit(1);
+          if (freeRoute?.total_price_usdc !== "0.04" || JSON.stringify(freeRoute?.next_call?.required_fields) !== JSON.stringify(["run_url"])) process.exit(1);
+          if (freeRoute?.next_call?.payment_required !== true || freeRoute?.next_call?.authorization_required_before_settlement !== true) process.exit(1);
+          if (freeRoute?.next_call?.unsigned_call_action !== "inspect_quote_then_authorize_or_stop" || freeRoute?.next_call?.preserve_arguments_on_retry !== true) process.exit(1);
+          const freeText = JSON.parse(freeCalled.result?.content?.[0]?.text || "null");
+          if (JSON.stringify(freeText) !== JSON.stringify(freeRoute) || freeText?.accepts !== undefined) process.exit(1);
+          const economicalPortfolio = await rpc(23, "tools/call", {
+            name: "choose_github_agent_decision",
+            arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: false },
+          });
+          const economicalRoute = economicalPortfolio.result?.structuredContent;
+          if (economicalPortfolio.result?.isError || economicalRoute?.next_call?.tool_name !== "check_github_bounty") process.exit(1);
+          if (economicalRoute?.next_call?.call_strategy !== "repeat_for_each_issue" || economicalRoute?.total_price_usdc !== "0.35") process.exit(1);
+          const rankedPortfolio = await rpc(24, "tools/call", {
+            name: "choose_github_agent_decision",
+            arguments: { task: "bounty_portfolio", candidate_count: 7, needs_ranked_response: true },
+          });
+          const rankedRoute = rankedPortfolio.result?.structuredContent;
+          if (rankedPortfolio.result?.isError || rankedRoute?.next_call?.tool_name !== "rank_github_bounties") process.exit(1);
+          if (rankedRoute?.next_call?.call_strategy !== "single_call" || rankedRoute?.total_price_usdc !== "0.40") process.exit(1);
           const calls = [
             ["check_github_bounty", { issue_url: "https://github.com/owner/repo/issues/1" }, "50000", "/api/bounty-preflight", "POST"],
             ["rank_github_bounties", { issue_urls: ["https://github.com/owner/repo/issues/1", "https://github.com/owner/repo/issues/2"] }, "400000", "/api/portfolio", "POST"],
@@ -300,14 +423,21 @@ jobs:
             const called = await rpc(3, "tools/call", { name, arguments: args });
             const challenge = JSON.parse(called.result?.content?.[0]?.text || "null");
             if (!called.result?.isError || called.result?.structuredContent !== undefined) process.exit(1);
+            if (called.result?.content?.length !== 2 || !/^PAYMENT REQUIRED:/.test(called.result?.content?.[1]?.text || "")) process.exit(1);
+            if (!/explicit authorization/.test(called.result.content[1].text) || !/otherwise stop/.test(called.result.content[1].text)) process.exit(1);
             if (challenge?.accepts?.[0]?.amount !== amount || challenge?.accepts?.[0]?.network !== "eip155:8453") process.exit(1);
             if (challenge?.resource?.url !== `mcp://tool/${name}` || challenge?.extensions?.bazaar?.info?.input?.toolName !== name) process.exit(1);
             const handoff = challenge?.extensions?.[handoffKey]?.info;
             const payment = handoff?.payment;
-            if (handoff?.version !== "1" || handoff?.direct_mcp?.automatic_payment_requires !== "@x402/mcp") process.exit(1);
-            if (handoff?.wallet_mcp?.capability !== "make_x402_request" || handoff?.wallet_mcp?.use_exact_request !== true) process.exit(1);
+            const walletMcp = handoff?.wallet_mcp;
+            if (handoff?.version !== "2" || handoff?.direct_mcp?.automatic_payment_requires !== "@x402/mcp") process.exit(1);
+            if (walletMcp?.tool_name !== "make_http_request_with_x402" || walletMcp?.execution_kind !== "equivalent_rest_request") process.exit(1);
+            if (JSON.stringify(walletMcp) !== JSON.stringify(payment?.coinbase_wallet_mcp)) process.exit(1);
             if (payment?.max_amount_atomic !== amount || payment?.exact_request?.method !== method) process.exit(1);
-            if (new URL(payment?.exact_request?.url || "invalid").pathname !== path) process.exit(1);
+            const exactUrl = new URL(payment?.exact_request?.url || "invalid");
+            if (exactUrl.pathname !== path || walletMcp?.arguments?.baseURL !== exactUrl.origin || walletMcp?.arguments?.path !== path) process.exit(1);
+            if (walletMcp?.arguments?.method !== method || walletMcp?.arguments?.maxAmountPerRequest !== Number(amount) || walletMcp?.arguments?.preferredNetwork !== "base") process.exit(1);
+            if (method === "POST" && JSON.stringify(walletMcp?.arguments?.body) !== JSON.stringify(args)) process.exit(1);
             if (payment?.agentic_wallet?.executable !== "npx" || payment?.agentic_wallet?.execute_as_argument_vector !== true || payment?.agentic_wallet?.do_not_join_into_shell_string !== true) process.exit(1);
             const argv = payment?.agentic_wallet?.argv;
             if (!Array.isArray(argv) || JSON.stringify(argv.slice(0, 3)) !== JSON.stringify(["awal@2.12.0", "x402", "pay"])) process.exit(1);
@@ -339,6 +469,7 @@ jobs:
               EXPECTED_ASSET="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" \
               npm run payment:inspect
           done
+          GLAMA_EXPECT_FREE_SELECTOR=YES npm run glama:verify
 
       - name: Verify real production handlers
         env:
@@ -355,6 +486,74 @@ jobs:
             if (!state.checks?.some(({ product, ok }) => product === "flake" && ok === true)) process.exit(1);
             if (!state.checks?.some(({ product, ok }) => product === "mcpdrift" && ok === true)) process.exit(1);
           ' "$canary_state"
+
+      - name: Reconfirm exact main release head
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
+
+      - name: Roll back failed production deployment
+        if: ${{ failure() && steps.deploy.outcome != 'skipped' && steps.previous.outputs.version_id != '' && steps.previous.outputs.semantic_version != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PREVIOUS_SEMANTIC_VERSION: ${{ steps.previous.outputs.semantic_version }}
+          PREVIOUS_WORKER_VERSION: ${{ steps.previous.outputs.version_id }}
+          PRODUCTION_API_URL: https://bountyverdict-agent-production.mimirslab.workers.dev
+        run: |
+          npx wrangler rollback "$PREVIOUS_WORKER_VERSION" \
+            --env production \
+            --yes \
+            --message "Automatic rollback after failed BountyVerdict release verification"
+          rollback_ready=false
+          for attempt in {1..30}; do
+            current_version=$(npx wrangler deployments list --env production --json | jq -er '
+              max_by(.created_on)
+              | .versions
+              | if length == 1 and .[0].percentage == 100 then .[0].version_id else empty end
+            ') || current_version=""
+            current_semantic_version=$(
+              node <<'NODE'
+          const response = await fetch(`${process.env.PRODUCTION_API_URL}/mcp`, {
+            method: "POST",
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "User-Agent": "bountyverdict-owner-audit/1.0",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: {
+                protocolVersion: "2025-11-25",
+                capabilities: {},
+                clientInfo: {
+                  name: "bountyverdict-release-rollback-check",
+                  version: "1.0.0",
+                },
+              },
+            }),
+          });
+          if (!response.ok) process.exit(1);
+          const initialized = await response.json();
+          const version = initialized.result?.serverInfo?.version;
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version || "")) process.exit(1);
+          process.stdout.write(version);
+          NODE
+            ) || current_semantic_version=""
+            if [[ "$current_version" == "$PREVIOUS_WORKER_VERSION" && "$current_semantic_version" == "$PREVIOUS_SEMANTIC_VERSION" ]]; then
+              rollback_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$rollback_ready" != "true" ]]; then
+            echo "Production did not converge to the captured Worker deployment and MCP semantic version" >&2
+            exit 1
+          fi
 
       - name: Activate public agent manifest
         run: npm run manifest:activate
@@ -385,7 +584,11 @@ jobs:
       - name: Publish activation record
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
         run: |
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$(git rev-parse refs/remotes/origin/main)" == "$EXPECTED_MAIN_SHA" ]]
           cp /tmp/bountyverdict-activation/agent-manifest.json agent-manifest.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

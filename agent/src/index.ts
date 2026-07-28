@@ -18,7 +18,11 @@ import { checkBountyPortfolio, validatePortfolioUrls } from "./portfolio.ts";
 import { checkGithubHarness, HarnessError, parseRepositoryUrl } from "./harness.ts";
 import { harnessDiscoveryExtension, harnessExample } from "./harness-discovery.ts";
 import { checkGithubSkill, normalizeSkillPath } from "./skill.ts";
-import { skillDiscoveryExtension, skillExample } from "./skill-discovery.ts";
+import {
+  SKILL_DISCOVERY_DESCRIPTION,
+  skillDiscoveryExtension,
+  skillExample,
+} from "./skill-discovery.ts";
 import { diagnoseGithubRun, parseRunUrl } from "./run.ts";
 import { runDiscoveryExtension, runExample } from "./run-discovery.ts";
 import { diagnoseGithubFlake, FlakeError, parseFlakeAttempt } from "./flake.ts";
@@ -282,7 +286,11 @@ type UnpaidDecisionPreview = {
   legacyTransport?: boolean;
 };
 
-async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPRequestContext) {
+async function unpaidDecisionBody(
+  preview: UnpaidDecisionPreview,
+  context: HTTPRequestContext,
+  x402Network: string,
+) {
   const requestUrl = context.adapter.getUrl();
   const selection = PRODUCT_SELECTION_PREVIEWS[preview.productKey];
   const requestBody = preview.method === "POST" && context.adapter.getBody
@@ -303,7 +311,7 @@ async function unpaidDecisionBody(preview: UnpaidDecisionPreview, context: HTTPR
     method: preview.method,
     url: requestUrl,
     ...(requestBody === undefined ? {} : { body: requestBody }),
-  }, catalog.amountAtomic.toString());
+  }, catalog.amountAtomic.toString(), x402Network);
   return {
     contentType: "application/json",
     body: {
@@ -346,7 +354,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "single",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const portfolioRouteConfig: RouteConfig = {
     accepts: {
@@ -363,7 +371,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "portfolio",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacySingleRouteConfig: RouteConfig = {
     ...routeConfig,
@@ -371,7 +379,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "single",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const harnessRouteConfig: RouteConfig = {
     accepts: {
@@ -388,7 +396,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "harness",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyHarnessRouteConfig: RouteConfig = {
     ...harnessRouteConfig,
@@ -396,7 +404,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "harness",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const skillRouteConfig: RouteConfig = {
     accepts: {
@@ -405,7 +413,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       network: network as `${string}:${string}`,
       payTo,
     },
-    description: requireCdpResourceDescription("Pre-install security audit for a public agent SKILL.md bundle. Pins the repository to a commit, scans the whole skill directory without executing it, uses repository context to reduce false positives, and flags credential exfiltration, remote or encoded execution, destructive commands, persistence, privilege escalation, instruction evasion, hidden scripts, symlinks, submodules, hardcoded secrets, and undeclared capabilities."),
+    description: requireCdpResourceDescription(SKILL_DISCOVERY_DESCRIPTION),
     mimeType: "application/json",
     serviceName: "SkillVerdict",
     tags: ["agent-skills", "skill-md", "security", "supply-chain", "prompt-injection", "pre-install"],
@@ -413,7 +421,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "skill",
       method: "GET",
-    }, context),
+    }, context, network),
   };
   const runRouteConfig: RouteConfig = {
     accepts: {
@@ -430,7 +438,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "run",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyRunRouteConfig: RouteConfig = {
     ...runRouteConfig,
@@ -438,7 +446,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "run",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const flakeRouteConfig: RouteConfig = {
     accepts: {
@@ -455,7 +463,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "flake",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const legacyFlakeRouteConfig: RouteConfig = {
     ...flakeRouteConfig,
@@ -463,7 +471,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       productKey: "flake",
       method: "GET",
       legacyTransport: true,
-    }, context),
+    }, context, network),
   };
   const mcpDriftRouteConfig: RouteConfig = {
     accepts: {
@@ -480,7 +488,7 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "mcpdrift",
       method: "POST",
-    }, context),
+    }, context, network),
   };
   const middleware = paymentMiddleware(
     {

@@ -721,8 +721,13 @@ export function reconcileTaskmarketTracked(input: {
   payloads: TaskmarketTrackedPayload[];
   agent_stats: unknown;
   owner_addresses?: readonly string[];
+  now_ms?: number;
 }): Record<string, unknown> {
   const worker = exactPattern(input.worker_address, "Taskmarket tracked worker", addressPattern, 42);
+  const nowMs = input.now_ms ?? Date.now();
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+    throw new Error("Taskmarket reconciliation time is invalid.");
+  }
   const ownerAddresses = (input.owner_addresses || TASKMARKET_OWNER_IDENTITIES).map((address) =>
     exactPattern(address, "Taskmarket owner identity", addressPattern, 42).toLowerCase()
   );
@@ -740,6 +745,15 @@ export function reconcileTaskmarketTracked(input: {
   let rejectedSubmissions = 0;
   let pendingGrossAtomic = 0n;
   let pendingNetAtomic = 0n;
+  let submissionWindowOpenPendingSubmissions = 0;
+  let submissionWindowOpenGrossAtomic = 0n;
+  let submissionWindowOpenNetAtomic = 0n;
+  let expiredAwaitingFinalizationPendingSubmissions = 0;
+  let expiredAwaitingFinalizationGrossAtomic = 0n;
+  let expiredAwaitingFinalizationNetAtomic = 0n;
+  let preExpiryWindowClosedPendingSubmissions = 0;
+  let preExpiryWindowClosedGrossAtomic = 0n;
+  let preExpiryWindowClosedNetAtomic = 0n;
   const consumedReceiptEvidence = new Set<string>();
   const consumedCanonicalEvents = new Set<string>();
   const records = input.tracked.map((expected) => {
@@ -855,9 +869,33 @@ export function reconcileTaskmarketTracked(input: {
     const terminalWithoutAward = ["completed", "expired", "cancelled"].includes(task.status);
     const submissionState = settled ? "settled_award" : award ? "award_unverified" :
       submission.rejectedAt ? "rejected" : terminalWithoutAward ? "not_awarded" : "pending_award";
+    const expiryMs = Date.parse(task.expiryTime);
+    if (!Number.isSafeInteger(expiryMs)) {
+      throw new Error("Taskmarket tracked task expiry is invalid.");
+    }
+    const pendingPhase = submissionState !== "pending_award"
+      ? null
+      : task.submissionWindowOpen && expiryMs > nowMs
+        ? "submission_window_open"
+        : expiryMs <= nowMs
+          ? "expired_awaiting_finalization"
+          : "pre_expiry_window_closed_awaiting_finalization";
     if (submissionState === "pending_award") {
       pendingGrossAtomic += potentialGross;
       pendingNetAtomic += potentialNet;
+      if (pendingPhase === "submission_window_open") {
+        submissionWindowOpenPendingSubmissions += 1;
+        submissionWindowOpenGrossAtomic += potentialGross;
+        submissionWindowOpenNetAtomic += potentialNet;
+      } else if (pendingPhase === "expired_awaiting_finalization") {
+        expiredAwaitingFinalizationPendingSubmissions += 1;
+        expiredAwaitingFinalizationGrossAtomic += potentialGross;
+        expiredAwaitingFinalizationNetAtomic += potentialNet;
+      } else {
+        preExpiryWindowClosedPendingSubmissions += 1;
+        preExpiryWindowClosedGrossAtomic += potentialGross;
+        preExpiryWindowClosedNetAtomic += potentialNet;
+      }
     }
     return {
       task_id: expectedTaskId,
@@ -865,7 +903,10 @@ export function reconcileTaskmarketTracked(input: {
       submit_tx_hash: expectedSubmitTx,
       submitted_at: submission.submittedAt,
       task_status: task.status,
+      task_expiry_at: task.expiryTime,
+      submission_window_open: task.submissionWindowOpen,
       submission_state: submissionState,
+      pending_phase: pendingPhase,
       rejected_at: submission.rejectedAt,
       escrow_reward_usdc: atomicToDecimal(expectedReward),
       current_task_reward_usdc: atomicToDecimal(liveReward),
@@ -915,6 +956,15 @@ export function reconcileTaskmarketTracked(input: {
     tracked_submissions: records.length,
     pending_submissions: records.length - settledSubmissions - unverifiedAwardSubmissions - rejectedSubmissions -
       records.filter(({ submission_state }) => submission_state === "not_awarded").length,
+    submission_window_open_pending_submissions: submissionWindowOpenPendingSubmissions,
+    submission_window_open_gross_potential_usdc: atomicToDecimal(submissionWindowOpenGrossAtomic),
+    submission_window_open_net_potential_usdc: atomicToDecimal(submissionWindowOpenNetAtomic),
+    expired_awaiting_finalization_pending_submissions: expiredAwaitingFinalizationPendingSubmissions,
+    expired_awaiting_finalization_gross_potential_usdc: atomicToDecimal(expiredAwaitingFinalizationGrossAtomic),
+    expired_awaiting_finalization_net_potential_usdc: atomicToDecimal(expiredAwaitingFinalizationNetAtomic),
+    pre_expiry_window_closed_pending_submissions: preExpiryWindowClosedPendingSubmissions,
+    pre_expiry_window_closed_gross_potential_usdc: atomicToDecimal(preExpiryWindowClosedGrossAtomic),
+    pre_expiry_window_closed_net_potential_usdc: atomicToDecimal(preExpiryWindowClosedNetAtomic),
     rejected_submissions: rejectedSubmissions,
     not_awarded_submissions: records.filter(({ submission_state }) => submission_state === "not_awarded").length,
     unverified_award_submissions: unverifiedAwardSubmissions,

@@ -40,7 +40,7 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
   assert.match(power, /^---\nname: "bountyverdict"\ndisplayName: "GitHub Agent Decision Gates"\ndescription: ".+"\nkeywords: \[.+\]\nauthor: "Mimir's Lab"\n---\n/);
   assert.match(power, /No BountyVerdict account or API key is required/);
-  assert.match(power, /six tools are read-only/i);
+  assert.match(power, /free selector and six paid tools are read-only/i);
   assert.match(power, /structurally invalid input is rejected before any payment requirement/);
   assert.match(power, /valid x402 payment/);
   assert.match(power, /caller has authorized that exact spend/);
@@ -70,8 +70,8 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
-  assert.equal(manifest.release_version, "1.1.9");
-  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.9$/);
+  assert.equal(manifest.release_version, "1.1.11");
+  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.11$/);
   assert.ok(["awaiting_production", "active"].includes(manifest.status));
   if (manifest.status === "awaiting_production") assert.equal(manifest.production_api, null);
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
@@ -82,7 +82,10 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
-  assert.equal(manifest.mcp.server_version, "1.1.9");
+  assert.equal(manifest.mcp.server_version, "1.1.11");
+  assert.equal(manifest.mcp.total_tools, 7);
+  assert.deepEqual(manifest.mcp.free_tools, ["choose_github_agent_decision"]);
+  assert.equal(manifest.mcp.paid_tools, 6);
   assert.equal(manifest.mcp.machine_readable_output_contracts, true);
   assert.equal(manifest.ard_catalog, "https://bountyverdict-agent-production.mimirslab.workers.dev/.well-known/ai-catalog.json");
   assert.match(manifest.skill, /route-github-agent-checks\/SKILL\.md$/);
@@ -167,10 +170,14 @@ test("public samples remain valid JSON with the declared product contracts", asy
   const mcpDrift = await readJson("../samples/mcp-drift.json");
   assert.equal(verdict.product, "BountyVerdict");
   assert.ok(["AVOID", "CAUTION", "VIABLE"].includes(verdict.verdict));
+  assert.equal(verdict.linked_source.state, "NOT_APPLICABLE");
   assertReusable(verdict.service_reuse);
   assert.equal(portfolio.product, "BountyVerdict Portfolio");
   assertReusable(portfolio.service_reuse);
-  portfolio.ranked.forEach((result) => assertReusable(result.service_reuse));
+  portfolio.ranked.forEach((result) => {
+    assertReusable(result.service_reuse);
+    assert.equal(result.linked_source.state, "NOT_APPLICABLE");
+  });
   assert.equal(portfolio.counts.checked, portfolio.ranked.length);
   assert.equal(portfolio.counts.failed, portfolio.failures.length);
   assert.equal(harness.product, "HarnessVerdict");
@@ -265,11 +272,12 @@ test("agent landing page exposes all seven self-serve products", async () => {
   assert.match(page, /bountyverdict-agent-production\.mimirslab\.workers\.dev\/mcp/);
   assert.match(page, /rel="ai-catalog" href="https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/\.well-known\/ai-catalog\.json"/);
   assert.match(page, /call <code>tools\/list<\/code>/);
-  assert.match(page, /six paid, read-only tools/);
+  assert.match(page, /one free selector plus six paid, read-only tools/);
+  assert.match(page, /choose_github_agent_decision/);
   assert.match(page, /SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP/);
   assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
-  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.9/);
-  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.9/);
+  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.11/);
+  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.11/);
   assert.match(page, /copilot plugin install Mimirs402\/bountyverdict/);
   assert.match(page, /npx awal@2\.12\.0 x402 details/);
   assert.match(page, /npx awal@2\.12\.0 x402 pay/);
@@ -319,7 +327,7 @@ test("human landing page links directly to the measurable router funnel", async 
   assert.match(page, /rel="ai-catalog" href="https:\/\/bountyverdict-agent-production\.mimirslab\.workers\.dev\/\.well-known\/ai-catalog\.json"/);
 });
 
-test("canonical README exposes the direct six-tool marketplace adapter before raw MCP setup", async () => {
+test("canonical README exposes the direct seven-tool marketplace adapter before raw MCP setup", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
   const adapter = "npx skills add Mimirs402/bountyverdict-mcp-skill --skill route-github-agent-decisions";
   const rawEndpoint = "MCP-compatible agents can instead connect to the production Streamable HTTP server";

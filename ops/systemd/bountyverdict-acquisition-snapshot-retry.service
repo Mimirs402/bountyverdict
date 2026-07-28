@@ -1,0 +1,31 @@
+[Unit]
+Description=Retry the reviewed BountyVerdict acquisition snapshot only while unfrozen
+After=bountyverdict-acquisition-snapshot.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict-conversion-release/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=RETRY_ACQUISITION_SNAPSHOT=YES
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/retry-acquisition-snapshot.ts
+TimeoutStartSec=5min
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+UMask=0077

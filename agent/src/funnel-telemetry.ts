@@ -46,6 +46,7 @@ export const FUNNEL_CHANNELS = Object.freeze([
   "openhands_integrations",
   "goose_extensions",
   "smithery",
+  "mcpize",
   "agentmrr",
   "x402arena",
   "glama",
@@ -72,6 +73,7 @@ const DISCOVERY_NON_BUYER_CHANNELS = new Set<FunnelChannel>([
 ]);
 const MCP_AMBIGUOUS_MARKETPLACE_INSPECTION_CHANNELS = new Set<FunnelChannel>([
   "smithery",
+  "mcpize",
 ]);
 const MCP_MARKETPLACE_INSPECTION_STAGES = new Set<McpFunnelStage>([
   "initialize",
@@ -130,6 +132,7 @@ export const MCP_FUNNEL_STAGES = Object.freeze([
   "protocol_error",
   "tool_not_found",
   "validation_error",
+  "selection_preview",
   "capacity_rejected",
   "payment_required",
   "payment_present",
@@ -344,19 +347,7 @@ function emptyCounters(): FunnelCounters {
 }
 
 function emptyMcpCounters(): McpFunnelCounters {
-  return {
-    events: 0,
-    initialize: 0,
-    tools_list: 0,
-    protocol_error: 0,
-    tool_not_found: 0,
-    validation_error: 0,
-    capacity_rejected: 0,
-    payment_required: 0,
-    payment_present: 0,
-    paid_success: 0,
-    paid_error: 0,
-  };
+  return Object.fromEntries(["events", ...MCP_FUNNEL_STAGES].map((key) => [key, 0])) as McpFunnelCounters;
 }
 
 export function mcpBuyerCandidateTotals(snapshot: FunnelSnapshot): McpFunnelCounters {
@@ -368,13 +359,13 @@ export function mcpBuyerCandidateTotals(snapshot: FunnelSnapshot): McpFunnelCoun
     if (MCP_AMBIGUOUS_MARKETPLACE_INSPECTION_CHANNELS.has(channel)) {
       for (const stage of MCP_FUNNEL_STAGES) {
         if (MCP_MARKETPLACE_INSPECTION_STAGES.has(stage)) continue;
-        const count = snapshot.mcp_by_channel[channel][stage];
+        const count = snapshot.mcp_by_channel[channel][stage] ?? 0;
         totals[stage] += count;
         totals.events += count;
       }
       continue;
     }
-    for (const key of keys) totals[key] += snapshot.mcp_by_channel[channel][key];
+    for (const key of keys) totals[key] += snapshot.mcp_by_channel[channel][key] ?? 0;
   }
   return totals;
 }
@@ -760,6 +751,8 @@ export function classifyMcpTailEvents(value: unknown): McpFunnelObservation[] {
                   ? "goose_extensions"
                   : declaredSource === "smithery"
                     ? client === "registry_crawler" ? "registry_or_directory" : "smithery"
+                  : declaredSource === "mcpize"
+                    ? "mcpize"
                   : declaredSource === "glama-release"
                     ? "glama"
                   : declaredSource === "mcp-registry"
@@ -973,8 +966,9 @@ function keyedCountersValid<K extends string>(value: unknown, keys: readonly K[]
 function mcpCountersValid(counters: unknown): counters is McpFunnelCounters {
   if (!counters || typeof counters !== "object" || Array.isArray(counters)) return false;
   const record = counters as Record<string, unknown>;
-  return ["events", ...MCP_FUNNEL_STAGES].every((key) => Number.isSafeInteger(record[key]) && Number(record[key]) >= 0) &&
-    Number(record.events) === MCP_FUNNEL_STAGES.reduce((sum, stage) => sum + Number(record[stage]), 0);
+  return ["events", ...MCP_FUNNEL_STAGES].every((key) =>
+    key === "selection_preview" && record[key] === undefined || Number.isSafeInteger(record[key]) && Number(record[key]) >= 0
+  ) && Number(record.events) === MCP_FUNNEL_STAGES.reduce((sum, stage) => sum + Number(record[stage] ?? 0), 0);
 }
 
 function migrateMcpCounters(value: unknown): McpFunnelCounters {

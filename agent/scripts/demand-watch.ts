@@ -183,7 +183,8 @@ async function fetchTaskmarketTracked(): Promise<{ payloads: TaskmarketTrackedPa
   return { payloads, stats };
 }
 
-const checkedAt = new Date().toISOString();
+const checkedAtMs = Date.now();
+const checkedAt = new Date(checkedAtMs).toISOString();
 const [moltOpen, moltFunded, openJobsPayload, taskmarketOpen, taskmarketTracked] = await Promise.all([
   fetchMoltJobs(false),
   fetchMoltJobs(true),
@@ -205,12 +206,13 @@ const state = {
     moltjobs: analyzeMoltJobs({ open_jobs: moltOpen, funded_jobs: moltFunded }),
     openjobs: analyzeOpenJobs(openJobs),
     taskmarket: {
-      ...analyzeTaskmarket(taskmarketOpen),
+      ...analyzeTaskmarket(taskmarketOpen, checkedAtMs),
       tracked_worker: reconcileTaskmarketTracked({
         worker_address: TASKMARKET_WORKER_ADDRESS,
         tracked: TASKMARKET_TRACKED_SUBMISSIONS,
         payloads: taskmarketTracked.payloads,
         agent_stats: taskmarketTracked.stats,
+        now_ms: checkedAtMs,
       }),
     },
     excluded: {

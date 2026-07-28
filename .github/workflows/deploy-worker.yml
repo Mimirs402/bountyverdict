@@ -369,20 +369,31 @@ jobs:
             exit 1
           fi
           verify_stage agent-manifest
-          owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
-            let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
-              const value = JSON.parse(body);
-              const expected = ["single", "portfolio", "harness", "run", "flake", "mcpdrift"];
-              if (value.spec !== "bountyverdict-agent-manifest/1" || value.version !== 1) process.exit(1);
-              if (value.origin !== process.env.PRODUCTION_API_URL || JSON.stringify(value.products?.map(({ id }) => id)) !== JSON.stringify(expected)) process.exit(1);
-              if (value.products?.some(({ id }) => id === "skill") || JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
-              const mcpTools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
-              if (JSON.stringify(value.mcp?.tools?.map(({ name }) => name)) !== JSON.stringify(mcpTools)) process.exit(1);
-              if (value.mcp.tools[0]?.payment_required !== false || value.mcp.tools[0]?.verdict_produced !== false || value.mcp.tools[0]?.amount_atomic_usdc !== "0") process.exit(1);
-              if (value.mcp.tools.slice(1).some(({ payment_required }) => payment_required !== true)) process.exit(1);
-              if (value.payment?.network !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.pay_to || "")) process.exit(1);
-            });
-          '
+          agent_manifest_ready=false
+          for attempt in {1..30}; do
+            if owner_curl --fail --silent --show-error "$PRODUCTION_API_URL/agent-manifest.json" | node -e '
+              let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
+                const value = JSON.parse(body);
+                const expected = ["single", "portfolio", "harness", "run", "flake", "mcpdrift"];
+                if (value.spec !== "bountyverdict-agent-manifest/1" || value.version !== 1) process.exit(1);
+                if (value.origin !== process.env.PRODUCTION_API_URL || JSON.stringify(value.products?.map(({ id }) => id)) !== JSON.stringify(expected)) process.exit(1);
+                if (value.products?.some(({ id }) => id === "skill") || JSON.stringify(value.distribution_scope?.excluded_products) !== JSON.stringify(["SkillVerdict"])) process.exit(1);
+                const mcpTools = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
+                if (JSON.stringify(value.mcp?.tools?.map(({ name }) => name)) !== JSON.stringify(mcpTools)) process.exit(1);
+                if (value.mcp.tools[0]?.payment_required !== false || value.mcp.tools[0]?.verdict_produced !== false || value.mcp.tools[0]?.amount_atomic_usdc !== "0") process.exit(1);
+                if (value.mcp.tools.slice(1).some(({ payment_required }) => payment_required !== true)) process.exit(1);
+                if (value.payment?.network !== "eip155:8453" || !/^0x[a-fA-F0-9]{40}$/.test(value.payment?.pay_to || "")) process.exit(1);
+              });
+            '; then
+              agent_manifest_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$agent_manifest_ready" != "true" ]]; then
+            echo "Production agent manifest did not converge to the deployed contract" >&2
+            exit 1
+          fi
           verify_stage agent-skill
           owner_curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-all-errors "$PRODUCTION_API_URL/SKILL.md" | node -e '
             let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {

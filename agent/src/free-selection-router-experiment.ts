@@ -1,4 +1,5 @@
 import {
+  type DescriptionExperimentId,
   FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
   TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST,
@@ -22,6 +23,7 @@ function record(value: unknown, label: string): Record<string, any> {
 export function activationFromVerifiedFreeSelectionEpoch(
   value: unknown,
   coordinates: FreeSelectionRouterReleaseCoordinates,
+  experimentId: DescriptionExperimentId = FREE_SELECTION_ROUTER_EXPERIMENT_ID,
 ): TaskLeadingDescriptionActivation | null {
   const ledger = record(value, "Trusted funnel epoch ledger");
   if (ledger.schema_version !== 2 || !Number.isSafeInteger(ledger.active_epoch_id) || !Array.isArray(ledger.epochs)) {
@@ -50,7 +52,7 @@ export function activationFromVerifiedFreeSelectionEpoch(
 
   return parseTaskLeadingDescriptionActivation({
     schema_version: 1,
-    experiment_id: FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+    experiment_id: experimentId,
     release_commit: coordinates.releaseCommit,
     production_activation_commit: coordinates.productionActivationCommit,
     production_activated_at: coordinates.productionActivatedAt,
@@ -58,5 +60,5 @@ export function activationFromVerifiedFreeSelectionEpoch(
     measurement_epoch_id: rotation.target_epoch_id,
     epoch_activated_at: rotation.activated_at,
     target_tools_list: TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST,
-  }, FREE_SELECTION_ROUTER_EXPERIMENT_ID);
+  }, experimentId);
 }

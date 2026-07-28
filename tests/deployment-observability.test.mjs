@@ -43,6 +43,9 @@ test("production deployment is version-pinned, rollback-capable, and activation 
   assert.match(workflow, /\[\[ "\$manifest_status" == "awaiting_production" \]\]/);
   assert.match(workflow, /jq -e '\.production_api == null' \.\.\/agent-manifest\.json/);
   assert.match(workflow, /serverInfo\?\.version !== process\.env\.WORKER_RELEASE_VERSION/);
+  assert.match(workflow, /ai_catalog_ready=false/);
+  assert.match(workflow, /if \[\[ "\$ai_catalog_ready" != "true" \]\]/);
+  assert.match(workflow, /Production AI catalog did not converge to the deployed contract/);
   assert.match(workflow, /npx wrangler deployments list --env production --json/);
   assert.match(workflow, /current production deployment is not one version at 100 percent/);
   assert.match(workflow, /semantic_version=\$previous_semantic_version/);

@@ -41,6 +41,20 @@ const expectedPaidProof = Object.freeze({
   check_mcp_tool_drift: ["/api/mcp-drift/sample", "0.02"],
 } as const);
 const expectPaidProof = process.env.GLAMA_EXPECT_PAID_PROOF === "YES";
+const versionOverride = process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE?.trim();
+if (versionOverride) {
+  assert.match(versionOverride, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+}
+const remoteHeaders = Object.freeze([
+  "--header",
+  "User-Agent:bountyverdict-owner-audit/1.0",
+  ...(versionOverride
+    ? [
+        "--header",
+        `Cloudflare-Workers-Version-Overrides:bountyverdict-agent-production="${versionOverride}"`,
+      ]
+    : []),
+]);
 
 await execFileAsync("docker", ["build", "--pull", "--tag", image, ".."], {
   timeout: 180_000,
@@ -72,7 +86,7 @@ const transport = new StdioClientTransport({
     "run", "--rm", "-i", "--entrypoint", entrypoint, image,
     endpoint,
     "--transport", "http-only", "--silent",
-    "--header", "User-Agent:bountyverdict-owner-audit/1.0",
+    ...remoteHeaders,
   ],
   stderr: "pipe",
 });

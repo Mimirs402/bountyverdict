@@ -110,6 +110,8 @@ test("Glama release packaging bridges only the existing hosted MCP without secre
     assert.match(dockerignore, new RegExp(`^!${allowed.replace(".", "\\.")}$`, "m"));
   }
   assert.match(smoke, /User-Agent:bountyverdict-owner-audit\/1\.0/);
+  assert.match(smoke, /Cloudflare-Workers-Version-Overrides:bountyverdict-agent-production=/);
+  assert.match(smoke, /const remoteHeaders = Object\.freeze/);
   assert.match(smoke, /client\.listTools\(\)/);
   assert.match(smoke, /GLAMA_EXPECT_FREE_SELECTOR === "NO"/);
   assert.match(smoke, /for \(let attempt = 1; attempt <= 30; attempt \+= 1\)/);

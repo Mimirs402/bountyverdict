@@ -573,8 +573,6 @@ async function inspectChallenge(
 ): Promise<Record<string, unknown>> {
   const url = product === "single"
         ? `${api}${PRODUCT_CATALOG.single.path}?issue_url=${encodeURIComponent("https://github.com/typeorm/typeorm/issues/3357")}`
-        : product === "skill"
-        ? `${api}/api/skill?repo_url=${encodeURIComponent("https://github.com/coinbase/agentic-wallet-skills")}&skill_path=${encodeURIComponent("skills/agentic-wallet")}`
         : `${api}${PRODUCT_CATALOG[product].path}`;
   const response = await monitoredFetch(url, product === "portfolio"
     ? {
@@ -592,6 +590,15 @@ async function inspectChallenge(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo_url: "https://github.com/openai/codex" }),
+        }
+    : product === "skill"
+      ? {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            repo_url: "https://github.com/coinbase/agentic-wallet-skills",
+            skill_path: "skills/agentic-wallet",
+          }),
         }
     : product === "run"
       ? {

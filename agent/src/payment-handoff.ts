@@ -275,8 +275,10 @@ export function exactRestRequestForProduct(
       body = { repo_url: requiredString(normalizedArgs, "repo_url") };
       break;
     case "skill":
-      url.searchParams.set("repo_url", requiredString(normalizedArgs, "repo_url"));
-      url.searchParams.set("skill_path", requiredString(normalizedArgs, "skill_path"));
+      body = {
+        repo_url: requiredString(normalizedArgs, "repo_url"),
+        skill_path: requiredString(normalizedArgs, "skill_path"),
+      };
       break;
     case "run":
       body = { run_url: requiredString(normalizedArgs, "run_url") };

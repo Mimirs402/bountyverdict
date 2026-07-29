@@ -129,11 +129,13 @@ export const skillOutputSchema = {
 };
 
 export const skillDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({
+  bodyType: "json",
   input: {
     repo_url: "https://github.com/coinbase/agentic-wallet-skills",
     skill_path: "skills/agentic-wallet",
   },
   inputSchema: {
+    type: "object",
     properties: {
       repo_url: {
         type: "string",
@@ -150,4 +152,4 @@ export const skillDiscoveryExtension = addHttpMethod(declareDiscoveryExtension({
     additionalProperties: false,
   },
   output: { example: skillExample, schema: skillOutputSchema },
-}), "GET");
+}), "POST");

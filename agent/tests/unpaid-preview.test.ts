@@ -39,8 +39,9 @@ const cases = [
   },
   {
     product: "SkillVerdict",
-    url: "/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo&skill_path=skills%2Fexample",
-    method: "GET",
+    url: "/api/skill",
+    method: "POST",
+    body: { repo_url: "https://github.com/owner/repo", skill_path: "skills/example" },
     decisions: ["LOW_RISK", "REVIEW", "BLOCK"],
     skill: "preflight-agent-skills",
   },
@@ -160,8 +161,15 @@ test("BountyVerdict challenge leads with exact eligibility and claimability inte
 
 test("SkillVerdict challenge leads with the broad pre-install safety question", async () => {
   const response = await app.request(
-    "/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo&skill_path=skills%2Fexample",
-    {},
+    "/api/skill",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_url: "https://github.com/owner/repo",
+        skill_path: "skills/example",
+      }),
+    },
     env,
   );
   assert.equal(response.status, 402);
@@ -203,6 +211,7 @@ test("Agentic Wallet can use the canonical Bazaar URL as a validated GET transpo
 test("migrated legacy GET routes remain payable compatibility transports", async () => {
   const legacyCases = [
     ["/api/harness?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo", "HarnessVerdict"],
+    ["/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo&skill_path=skills%2Fexample", "SkillVerdict"],
     ["/api/run?run_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo%2Factions%2Fruns%2F1", "RunVerdict"],
     ["/api/flake?run_url=https%3A%2F%2Fgithub.com%2Fowner%2Frepo%2Factions%2Fruns%2F1&attempt=1", "FlakeVerdict"],
   ] as const;
@@ -295,6 +304,8 @@ test("canonical BountyVerdict POST rejects malformed bodies before payment", asy
 test("migrated canonical POST routes reject malformed bodies before payment", async () => {
   const invalidCases = [
     ["/api/repository-agent-instructions-audit", { repo_url: "https://github.com/owner/repo", extra: true }],
+    ["/api/skill", { repo_url: "https://github.com/owner/repo" }],
+    ["/api/skill", { repo_url: "https://github.com/owner/repo", skill_path: "skills/example", extra: true }],
     ["/api/github-actions-run-diagnosis", { run_url: "https://github.com/owner/repo/actions/runs/1", extra: true }],
     ["/api/github-actions-flake-retry-gate", { run_url: "https://github.com/owner/repo/actions/runs/1", attempt: "1" }],
     ["/api/github-actions-flake-retry-gate", { run_url: "https://github.com/owner/repo/actions/runs/1", attempt: 0 }],

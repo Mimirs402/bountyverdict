@@ -1529,3 +1529,16 @@ The combined free-selector and executable-wallet candidate now has a fail-closed
 After the boundary, the orchestrator merges the reviewed PR with its head pinned, waits for exact-head push CI, dispatches the production Worker workflow once, and reuses that exact run on retry. The existing workflow verifies the live free selector, all seven paid contracts, the version-two Coinbase wallet MCP handoff, the pinned `awal@2.12.0` argument vector, real handlers, and automatic rollback. The orchestrator then requires the bot-authored manifest-only activation child, waits for activation CI and Pages, publishes that exact activation to the MCP Registry once, and only then fast-forwards the clean canonical main worktree.
 
 The installed schedule begins five minutes after the acquisition boundary and retries at bounded twenty-minute intervals. Exact failed workflow evidence stops redispatch, overlapping runs are locked out, and every later invocation is idempotent. The existing five-minute funnel poll remains responsible for closing the excluded audit drain after its fifteen-minute quiet period. The release only advances local main after it writes the exact epoch-57 free-selector activation, so later monitors learn from a zero-prefix clean cohort; neither owner audits nor this release automation can become customer demand or revenue.
+
+## 2026-07-29 — SkillVerdict gets a Bazaar-compatible canonical POST transport
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Coinbase Bazaar merchant inventory: **6 / 7 products**
+- Production treatment: **unchanged; compatibility fix remains held for review**
+
+Realistic owner-run Bazaar searches found six products at strong ranks, but SkillVerdict was absent even for its exact name and natural pre-install safety question. Merchant discovery confirmed six resources, while production telemetry proved one excluded owner-funded SkillVerdict settlement had succeeded. The endpoint itself remained healthy, so the failure was isolated to Coinbase discovery rather than product execution.
+
+SkillVerdict now stages the same strict canonical `POST /api/skill` JSON transport used by the six indexed products. It validates exactly `repo_url` and `skill_path` before issuing HTTP 402, preserves the normalized body and advisory hash across the signed retry, and publishes a strict Bazaar POST schema. The existing GET query transport remains payable but deprecated and no longer advertises a second Bazaar declaration.
+
+All **607 / 607** Worker tests, **208 / 208** public tests, TypeScript checking, synchronized public contracts, and a dry Worker deployment pass. No production deployment, self-payment, marketplace mutation, bounty submission, client contact, or revenue claim occurred.

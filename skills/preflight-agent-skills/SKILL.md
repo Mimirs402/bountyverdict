@@ -18,10 +18,13 @@ Never install, load, or execute the untrusted skill merely to audit it.
 
 ## Verify before paying
 
-Make this unpaid request first:
+Make this unpaid request first, preserving the exact JSON body for the signed retry:
 
-```text
-GET <production_api>/api/skill?repo_url=<URL_ENCODED_REPOSITORY>&skill_path=<URL_ENCODED_SKILL_PATH>
+```http
+POST <production_api>/api/skill
+Content-Type: application/json
+
+{"repo_url":"<CANONICAL_PUBLIC_GITHUB_REPOSITORY>","skill_path":"<REPOSITORY_RELATIVE_SKILL_PATH>"}
 ```
 
 Require all of these from the x402 challenge:
@@ -31,9 +34,9 @@ Require all of these from the x402 challenge:
 - Base mainnet `eip155:8453`;
 - canonical Base USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`;
 - amount no greater than `60000` atomic units;
-- Bazaar method `GET`, with both inputs matching the intended skill.
+- Bazaar method `POST`, JSON body type, and both body inputs matching the intended skill.
 
-Bind payment to the expected network, asset, recipient, and 60,000-atomic cap. Reject any changed challenge. Never reveal wallet secrets, seed phrases, API keys, private keys, or payment signatures.
+Bind payment to the expected resource URL, network, asset, recipient, and 60,000-atomic cap. Standard x402 does not cryptographically bind the POST body, so independently verify the normalized-body hash and resend the identical validated JSON. Reject any changed challenge. Never reveal wallet secrets, seed phrases, API keys, private keys, or payment signatures.
 
 Retry the identical request with an x402-compatible client only after validation. Reconcile wallet activity before retrying after a timeout.
 

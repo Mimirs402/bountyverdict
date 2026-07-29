@@ -104,8 +104,14 @@
     },
     {
       "name": "SkillVerdict",
-      "method": "GET",
+      "method": "POST",
       "path": "/api/skill",
+      "body": {
+        "repo_url": "required canonical public GitHub repository URL",
+        "skill_path": "required repository-relative skill directory or exact SKILL.md path"
+      },
+      "legacy_endpoint": "/api/skill",
+      "legacy_method": "GET",
       "price_usdc": "0.06",
       "reusable": true,
       "use_when": "Audit a public SKILL.md bundle before loading, installing, or executing it.",

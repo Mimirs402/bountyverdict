@@ -23,6 +23,17 @@ test("canonical migrated products use exact POST bodies without query leakage", 
     url: `${origin}/api/github-actions-run-diagnosis`,
     body: { run_url: "https://github.com/openai/codex/actions/runs/29728148711" },
   });
+  assert.deepEqual(exactRestRequestForProduct(origin, "skill", {
+    repo_url: "https://github.com/openai/codex",
+    skill_path: "skills/review",
+  }), {
+    method: "POST",
+    url: `${origin}/api/skill`,
+    body: {
+      repo_url: "https://github.com/openai/codex",
+      skill_path: "skills/review",
+    },
+  });
   assert.deepEqual(exactRestRequestForProduct(origin, "flake", {
     run_url: "https://github.com/actions/runner/actions/runs/29423388605",
     attempt: 1,
@@ -39,6 +50,13 @@ test("canonical migrated products use exact POST bodies without query leakage", 
 test("canonical POST handoffs disclose advisory body hashes and pinned awal argv", async () => {
   for (const [product, args, expectedBody] of [
     ["harness", { repo_url: "https://github.com/openai/codex" }, { repo_url: "https://github.com/openai/codex" }],
+    ["skill", {
+      repo_url: "https://github.com/openai/codex",
+      skill_path: "skills/review",
+    }, {
+      repo_url: "https://github.com/openai/codex",
+      skill_path: "skills/review",
+    }],
     ["run", { run_url: "https://github.com/openai/codex/actions/runs/29728148711" }, { run_url: "https://github.com/openai/codex/actions/runs/29728148711" }],
     ["flake", { run_url: "https://github.com/actions/runner/actions/runs/29423388605", attempt: 1 }, {
       run_url: "https://github.com/actions/runner/actions/runs/29423388605",
@@ -82,11 +100,11 @@ test("canonical POST handoffs disclose advisory body hashes and pinned awal argv
   }
 });
 
-test("GET handoffs split the exact URL into Coinbase wallet MCP query arguments", async () => {
-  const request = exactRestRequestForProduct(origin, "skill", {
-    repo_url: "https://github.com/openai/codex",
-    skill_path: "skills/review",
-  });
+test("legacy GET handoffs split the exact URL into Coinbase wallet MCP query arguments", async () => {
+  const request = {
+    method: "GET" as const,
+    url: `${origin}/api/skill?repo_url=${encodeURIComponent("https://github.com/openai/codex")}&skill_path=skills%2Freview`,
+  };
   const handoff = await buildPaymentHandoff(request, "60000", "eip155:8453");
   assert.deepEqual(handoff.coinbase_wallet_mcp, {
     tool_name: "make_http_request_with_x402",

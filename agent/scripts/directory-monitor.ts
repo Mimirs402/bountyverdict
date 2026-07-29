@@ -331,7 +331,7 @@ const x402ScanResources = Object.freeze([
   { product: "single", url: `${productionOrigin}/api/bounty-preflight`, method: "POST" },
   { product: "portfolio", url: `${productionOrigin}/api/portfolio`, method: "POST" },
   { product: "harness", url: `${productionOrigin}/api/repository-agent-instructions-audit`, method: "POST" },
-  { product: "skill", url: `${productionOrigin}/api/skill`, method: "GET" },
+  { product: "skill", url: `${productionOrigin}/api/skill`, method: "POST" },
   { product: "run", url: `${productionOrigin}/api/github-actions-run-diagnosis`, method: "POST" },
   { product: "flake", url: `${productionOrigin}/api/github-actions-flake-retry-gate`, method: "POST" },
   { product: "mcpdrift", url: `${productionOrigin}/api/mcp-drift`, method: "POST" },

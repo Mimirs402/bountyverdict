@@ -36,6 +36,10 @@ test("canonical POST and GET compatibility transports remain one accounting prod
     assert.equal(productForTransport(legacyPath, "POST"), null);
     assert.equal(productForTransport(canonicalPath, "PUT"), null);
   }
+  assert.equal(PRODUCT_CATALOG.skill.path, "/api/skill");
+  assert.equal(PRODUCT_CATALOG.skill.method, "POST");
+  assert.equal(productForTransport("/api/skill", "POST"), "skill");
+  assert.equal(productForTransport("/api/skill", "GET"), "skill");
 });
 
 test("product catalog preserves all public payment contracts", () => {

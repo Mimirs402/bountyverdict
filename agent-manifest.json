@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
   "product": "BountyVerdict",
-  "release_version": "1.1.16",
-  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.16",
-  "status": "active",
-  "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
+  "release_version": "1.1.17",
+  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.17",
+  "status": "awaiting_production",
+  "production_api": null,
   "test_api": "https://bountyverdict-agent.mimirslab.workers.dev",
   "test_network": "eip155:84532",
   "test_verification": {
@@ -29,7 +29,7 @@
   },
   "mcp": {
     "registry_name": "io.github.Mimirs402/bountyverdict",
-    "server_version": "1.1.16",
+    "server_version": "1.1.17",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
     "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp",
@@ -211,7 +211,7 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-07-29T09:40:07.424Z",
+  "updated_at": "2026-07-29T10:47:26.185Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",

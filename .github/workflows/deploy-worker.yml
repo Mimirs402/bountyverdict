@@ -600,7 +600,7 @@ jobs:
               npm run payment:inspect
           done
           verify_stage external-glama-bridge
-          GLAMA_EXPECT_FREE_SELECTOR=YES npm run glama:verify
+          GLAMA_EXPECT_FREE_SELECTOR=YES GLAMA_EXPECT_PAID_PROOF=YES npm run glama:verify
 
       - name: Verify real production handlers
         env:

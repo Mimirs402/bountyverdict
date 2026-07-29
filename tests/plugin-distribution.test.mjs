@@ -115,5 +115,19 @@ test("Glama release packaging bridges only the existing hosted MCP without secre
   assert.match(smoke, /for \(let attempt = 1; attempt <= 30; attempt \+= 1\)/);
   assert.match(smoke, /setTimeout\(resolve, 1_000\)/);
   assert.match(smoke, /assert\.deepEqual\(names, \[\.\.\.expectedTools\]\.sort\(\)\)/);
+  assert.match(smoke, /const expectedPaidProof = Object\.freeze\(\{/);
+  assert.match(smoke, /const expectPaidProof = process\.env\.GLAMA_EXPECT_PAID_PROOF === "YES"/);
+  for (const [samplePath, price] of [
+    ["/api/sample", "0.05"],
+    ["/api/portfolio/sample", "0.40"],
+    ["/api/harness/sample", "0.03"],
+    ["/api/run/sample", "0.04"],
+    ["/api/flake/sample", "0.07"],
+    ["/api/mcp-drift/sample", "0.02"],
+  ]) {
+    assert.match(smoke, new RegExp(`${samplePath.replaceAll("/", "\\/")}.*"${price}"`));
+  }
+  assert.match(smoke, /assert\.match\(description, \/Inspect a representative result before paying:\/\)/);
+  assert.match(smoke, /Exact authorization cap:/);
   assert.match(workflow, /npm run glama:verify/);
 });

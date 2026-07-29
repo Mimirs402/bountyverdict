@@ -111,6 +111,7 @@ const [
   taskmarket,
   payan,
   clawlancer,
+  catalogExperiment,
   previousValue,
 ] = await Promise.all([
   readJson("distribution-status.json"),
@@ -122,6 +123,7 @@ const [
   readJson("taskmarket-agentwork-pitch.json"),
   readJson("payan-demand.json"),
   readJson("clawlancer-work.json"),
+  readJson("experiments/mcp-free-selection-catalog-v2.json"),
   readJson("cadence/daily-review-scorecard-baseline.json"),
 ]);
 const previous = validPrevious(previousValue) ? previousValue : null;
@@ -135,6 +137,7 @@ const scorecard = buildDailyReviewScorecard({
   taskmarket,
   payan,
   clawlancer,
+  catalogExperiment,
 });
 const gate = buildDailyReviewGate(scorecard, previous);
 const executionGate = applyDailyReviewModelBudget(gate, modelReviewEnabled);

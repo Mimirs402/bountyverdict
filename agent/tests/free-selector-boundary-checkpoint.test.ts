@@ -4,6 +4,7 @@ import { captureTrustedFunnelBaseline } from "../src/funnel-epoch.ts";
 import { checkpointFreeSelectorBoundary } from "../src/free-selector-boundary-checkpoint.ts";
 import { createFunnelSnapshot } from "../src/funnel-telemetry.ts";
 import {
+  FREE_SELECTION_CATALOG_EXPERIMENT_ID,
   FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   zeroTaskLeadingDescriptionCounters,
 } from "../src/task-leading-description-experiment.ts";
@@ -101,4 +102,20 @@ test("local free-selector checkpoint never audits after the clean epoch closes",
   const result = checkpointFreeSelectorBoundary(input);
   assert.equal(result.audit_ready, false);
   assert.equal(result.experiment.status, "paused_audited_drain");
+});
+
+test("local catalog checkpoint uses the fresh catalog identity without network activity", () => {
+  const input = fixture(12) as ReturnType<typeof fixture> & { experimentId?: typeof FREE_SELECTION_CATALOG_EXPERIMENT_ID };
+  input.experimentId = FREE_SELECTION_CATALOG_EXPERIMENT_ID;
+  input.activation = {
+    ...input.activation,
+    experiment_id: FREE_SELECTION_CATALOG_EXPERIMENT_ID,
+    drain_rotation_id: "free-selection-catalog-v2-clean-20260729",
+  } as typeof input.activation;
+  input.trustedLedger.rotation.id = input.activation.drain_rotation_id;
+  const result = checkpointFreeSelectorBoundary(input);
+  assert.equal(result.audit_ready, false);
+  assert.equal(result.tools_list, 12);
+  assert.equal(result.experiment.id, FREE_SELECTION_CATALOG_EXPERIMENT_ID);
+  assert.equal(result.experiment.status, "running_clean_epoch");
 });

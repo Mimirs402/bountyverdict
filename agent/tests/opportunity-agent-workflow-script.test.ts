@@ -101,6 +101,7 @@ process.stdout.write("fake workflow complete\\n");
     workflowScript.pathname,
   ], { env, encoding: "utf8" });
   assert.match(first.stdout, /"status":"completed"/);
+  await assert.rejects(readFile(triggerFile, "utf8"), { code: "ENOENT" });
   const state = JSON.parse(await readFile(stateFile, "utf8")) as Record<string, any>;
   assert.equal(state.completed.length, 1);
   assert.equal(state.completed[0].trigger_id, trigger.trigger_id);
@@ -127,10 +128,45 @@ process.stdout.write("fake workflow complete\\n");
     assert.ok(!invocation.env_keys.includes("SHOULD_NOT_LEAK_TO_CODEX"));
   }
 
+  await writeFile(triggerFile, `${JSON.stringify(trigger)}\n`, { mode: 0o600 });
   const second = await execFileAsync(process.execPath, [
     "--experimental-strip-types",
     workflowScript.pathname,
   ], { env, encoding: "utf8" });
   assert.match(second.stdout, /"reason":"trigger_already_completed"/);
+  await assert.rejects(readFile(triggerFile, "utf8"), { code: "ENOENT" });
   assert.equal((await readFile(invocationFile, "utf8")).trim().split("\n").length, 2);
+});
+
+test("opportunity workflow leaves a failed trigger durable for retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "bountyverdict-opportunity-retry-"));
+  const triggerFile = join(root, "opportunity-trigger.json");
+  const fakeCodex = join(root, "codex");
+  const { trigger } = buildOpportunityTrigger([candidate], [], "2026-07-21T12:00:00.000Z");
+  assert.ok(trigger);
+  await writeFile(triggerFile, `${JSON.stringify(trigger)}\n`, { mode: 0o600 });
+  await writeFile(fakeCodex, "#!/bin/sh\nexit 17\n", { mode: 0o700 });
+  await chmod(fakeCodex, 0o700);
+  const env = {
+    ...process.env,
+    PATH: `${root}:${process.env.PATH || ""}`,
+    BOUNTY_OPPORTUNITY_STATE_ROOT: root,
+    BOUNTY_OPPORTUNITY_TRIGGER_FILE: triggerFile,
+    BOUNTY_OPPORTUNITY_WORKFLOW_STATE_FILE: join(root, "opportunity-workflow.json"),
+    BOUNTY_OPPORTUNITY_LOCK_FILE: join(root, "workflow.lock"),
+    BOUNTY_OPPORTUNITY_WORKSPACE_ROOT: root,
+    BOUNTY_OPPORTUNITY_OUTPUT_ROOT: join(root, "outputs"),
+  };
+
+  await assert.rejects(
+    execFileAsync(process.execPath, ["--experimental-strip-types", workflowScript.pathname], {
+      env,
+      encoding: "utf8",
+    }),
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(triggerFile, "utf8")),
+    trigger,
+  );
+  await assert.rejects(readFile(join(root, "opportunity-workflow.json"), "utf8"), { code: "ENOENT" });
 });

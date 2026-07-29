@@ -1,0 +1,11 @@
+[Unit]
+Description=Retry a preserved bounty opportunity marker at a bounded cadence
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=10min
+AccuracySec=1min
+Unit=bountyverdict-opportunity-agent.service
+
+[Install]
+WantedBy=timers.target

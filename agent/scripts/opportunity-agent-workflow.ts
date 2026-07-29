@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { acquireExclusiveRun } from "../src/exclusive-run.ts";
+import { validateOpportunityArtifacts } from "../src/opportunity-artifact-safety.ts";
 import {
   buildOpportunityAgentPrompt,
   buildOpportunityPreparationPrompt,
@@ -108,6 +109,14 @@ async function boundedJson(path: string, label: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf8")) as unknown;
 }
 
+async function consumeTrigger(triggerId: string): Promise<void> {
+  const current = parseOpportunityTrigger(JSON.parse(await readFile(triggerFile, "utf8")) as unknown);
+  if (current.trigger_id !== triggerId) {
+    throw new Error("Opportunity trigger changed before durable acknowledgement.");
+  }
+  await unlink(triggerFile);
+}
+
 async function runCodex(
   sandbox: "read-only" | "workspace-write",
   cwd: string,
@@ -154,6 +163,7 @@ try {
   const trigger = parseOpportunityTrigger(JSON.parse(await readFile(triggerFile, "utf8")) as unknown);
   const state = await readWorkflowState();
   if (state.completed.some(({ trigger_id }) => trigger_id === trigger.trigger_id)) {
+    await consumeTrigger(trigger.trigger_id);
     console.log(JSON.stringify({ status: "skipped", reason: "trigger_already_completed", trigger_id: trigger.trigger_id }));
   } else {
     await mkdir(outputRoot, { recursive: true, mode: 0o700 });
@@ -200,21 +210,7 @@ try {
         trigger,
         ready.task_id,
       );
-      const canonicalPreparationRoot = await realpath(preparationRoot);
-      for (const artifactPath of preparation.artifact_paths) {
-        if (!isAbsolute(artifactPath)) throw new Error("Opportunity artifact path is not absolute.");
-        const requestedMetadata = await lstat(artifactPath);
-        if (requestedMetadata.isSymbolicLink()) throw new Error("Opportunity artifact is a symbolic link.");
-        const canonicalArtifact = await realpath(artifactPath);
-        const pathFromRoot = relative(canonicalPreparationRoot, canonicalArtifact);
-        if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) {
-          throw new Error("Opportunity artifact escapes the preparation workspace.");
-        }
-        const metadata = await lstat(canonicalArtifact);
-        if (!metadata.isFile() && !metadata.isDirectory()) {
-          throw new Error("Opportunity artifact is not a regular file or directory.");
-        }
-      }
+      await validateOpportunityArtifacts(preparationRoot, preparation.artifact_paths);
       outcome = preparation.status;
     }
     await atomicWrite(receiptFile, `${JSON.stringify({
@@ -236,6 +232,7 @@ try {
       },
     ].slice(-maximumCompletedTriggers);
     await atomicWrite(workflowStateFile, `${JSON.stringify({ schema_version: 1, completed }, null, 2)}\n`);
+    await consumeTrigger(trigger.trigger_id);
     console.log(JSON.stringify({
       status: "completed",
       trigger_id: trigger.trigger_id,

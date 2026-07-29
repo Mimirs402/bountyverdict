@@ -14,6 +14,7 @@ const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.serv
 const demandTimerUrl = new URL("../ops/systemd/bountyverdict-demand-watch.timer", import.meta.url);
 const opportunityAgentServiceUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.service", import.meta.url);
 const opportunityAgentPathUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.path", import.meta.url);
+const opportunityAgentRetryTimerUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent-retry.timer", import.meta.url);
 const opportunityAgentScriptUrl = new URL("../agent/scripts/opportunity-agent-workflow.ts", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
@@ -1026,17 +1027,20 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
 });
 
 test("fresh Taskmarket markers launch one deduplicated guarded agent workflow", async () => {
-  const [watcher, service, path, workflow] = await Promise.all([
+  const [watcher, service, path, retryTimer, workflow] = await Promise.all([
     readFile(demandWatchUrl, "utf8"),
     readFile(opportunityAgentServiceUrl, "utf8"),
     readFile(opportunityAgentPathUrl, "utf8"),
+    readFile(opportunityAgentRetryTimerUrl, "utf8"),
     readFile(opportunityAgentScriptUrl, "utf8"),
   ]);
-  assert.match(watcher, /buildOpportunityTrigger/);
+  assert.match(watcher, /coordinateOpportunityTrigger/);
   assert.match(watcher, /fresh_low_competition_candidates/);
   assert.match(watcher, /external_actions_enabled: false/);
   assert.match(path, /PathChanged=%h\/\.local\/state\/bountyverdict\/opportunity-trigger\.json/);
   assert.match(path, /Unit=bountyverdict-opportunity-agent\.service/);
+  assert.match(retryTimer, /^OnUnitInactiveSec=10min$/m);
+  assert.match(retryTimer, /^Unit=bountyverdict-opportunity-agent\.service$/m);
   assert.match(service, /Type=oneshot/);
   assert.match(service, /NoNewPrivileges=yes/);
   assert.match(service, /ProtectSystem=strict/);
@@ -1057,6 +1061,10 @@ test("fresh Taskmarket markers launch one deduplicated guarded agent workflow", 
   assert.match(workflow, /"--output-schema"/);
   assert.match(workflow, /"--output-last-message"/);
   assert.match(workflow, /parseOpportunityAssessment/);
+  assert.match(workflow, /validateOpportunityArtifacts/);
+  assert.match(workflow, /consumeTrigger/);
+  assert.match(watcher, /pendingOpportunityTriggerId/);
+  assert.match(watcher, /pending_opportunity_workflow/);
   assert.doesNotMatch(workflow, /env:\s*process\.env/);
   assert.doesNotMatch(workflow, /\bexec\(|shell:\s*true/);
   assert.doesNotMatch(workflow, /taskmarket.*(?:submit|claim|pitch)|method:\s*["']POST["']/i);

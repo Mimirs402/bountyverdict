@@ -2,8 +2,9 @@ const ALGORA_ORIGIN = "https://algora.io";
 const ALGORA_MAX_RESPONSE_BYTES = 1_000_000;
 const ALGORA_MAX_ROWS = 100;
 const ALGORA_MAX_SPONSORS = 4;
+const LEGACY_ALGORA_BOT_ID = 121443259;
 const LEGACY_ALGORA_USER_ID = 136125894;
-const BOUNTY_ID_PATTERN = /^cli[a-z0-9]{20,40}$/;
+const BOUNTY_ID_PATTERN = /^cl[a-z0-9]{21,40}$/;
 const SPONSOR_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 
 type FetchLike = typeof fetch;
@@ -71,11 +72,14 @@ function sponsorReferences(comments: unknown[]): SponsorReference[] {
       : null;
     const trustedApp = appSlug === "algora-pbc";
     const user = isRecord(value.user) ? value.user : null;
+    const trustedLegacyBot = user?.id === LEGACY_ALGORA_BOT_ID &&
+      user.login === "algora-pbc[bot]" && user.type === "Bot" &&
+      value.performed_via_github_app === null;
     const trustedLegacyActor = user?.id === LEGACY_ALGORA_USER_ID &&
       user.login === "algora-pbc" && user.type === "User" &&
       value.performed_via_github_app === null;
 
-    if (trustedApp) {
+    if (trustedApp || trustedLegacyBot) {
       const matches = [...body.matchAll(/https:\/\/algora\.io\/([A-Za-z0-9][A-Za-z0-9-]{0,38})(?:\b|\/)/g)];
       for (const match of matches) {
         const sponsor = match[1];
@@ -93,7 +97,7 @@ function sponsorReferences(comments: unknown[]): SponsorReference[] {
       continue;
     }
     const sponsors = [...body.matchAll(/bounty created by @([A-Za-z0-9][A-Za-z0-9-]{0,38})\b/gi)];
-    const bountyIds = [...body.matchAll(/https:\/\/console\.algora\.io\/bounties\/(cli[a-z0-9]{20,40})(?:\b|\/)/gi)];
+    const bountyIds = [...body.matchAll(/https:\/\/console\.algora\.io\/bounties\/(cl[a-z0-9]{21,40})(?:\b|\/)/gi)];
     const repositories = [...body.matchAll(/Thank you for contributing to ([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})!/gi)];
     if (sponsors.length !== 1 || bountyIds.length !== 1 || repositories.length !== 1 ||
         !BOUNTY_ID_PATTERN.test(bountyIds[0][1])) continue;

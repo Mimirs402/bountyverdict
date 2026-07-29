@@ -85,6 +85,7 @@ export interface AgentVerdict {
     timeline_truncated: boolean;
     linked_pull_requests_found: number;
     policy_documents_scanned: number;
+    policy_issues_truncated: boolean;
     github_rate_limit_remaining: number | null;
   };
   checked_at: string;
@@ -164,6 +165,14 @@ const POLICY_PATHS = [
   "docs/CONTRIBUTING.md",
   ".github/pull_request_template.md",
 ];
+const REPOSITORY_POLICY_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const BOUNTY_POLICY_TITLE_PATTERN =
+  /\b(?:bount(?:y|ies)|rewards?)\b.{0,80}\b(?:guidelines?|polic(?:y|ies)|rules?|read\s+(?:first|before|and\s+obey))\b|\b(?:guidelines?|polic(?:y|ies)|rules?|read\s+(?:first|before|and\s+obey))\b.{0,80}\b(?:bount(?:y|ies)|rewards?)\b/i;
+const BOUNTY_POLICY_REPOSITORY_SCOPE_PATTERN =
+  /\b(?:guidelines?|polic(?:y|ies)|rules?)\b[^.\n]{0,120}\b(?:bount(?:y|ies)|rewards?|payments?)\b[^.\n]{0,100}\b(?:for|in|across)\s+(?:this|the|our)\s+(?:repository|repo)\b|\b(?:bount(?:y|ies)|rewards?|payments?)\b[^.\n]{0,100}\b(?:for|in|across)\s+(?:this|the|our)\s+(?:repository|repo)\b|\brepository[ -]wide\b[^.\n]{0,80}\b(?:bount(?:y|ies)|rewards?|payments?)\b|\b(?:this|the|our)\s+(?:repository|repo)\b[^.\n]{0,100}\b(?:does not|doesn['’]?t|never|will not|won['’]?t)\b[^.\n]{0,80}\b(?:pay|fund|offer|honou?r)\b[^.\n]{0,80}\b(?:bount(?:y|ies)|rewards?|contributions?)\b/i;
+const maximumRepositoryPolicyPages = 5;
+const maximumGithubJsonBytes = 2_000_000;
+const githubRequestTimeoutMs = 10_000;
 
 function githubHeaders(env: CheckEnvironment): HeadersInit {
   const headers: Record<string, string> = {
@@ -175,43 +184,97 @@ function githubHeaders(env: CheckEnvironment): HeadersInit {
   return headers;
 }
 
+async function boundedGithubJson(response: Response): Promise<unknown> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    const bytes = Number(declaredLength);
+    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+      throw new CheckError("GitHub returned an invalid content length.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    if (bytes > maximumGithubJsonBytes) {
+      throw new CheckError("GitHub returned an oversized JSON response.", 502, "GITHUB_RESPONSE_TOO_LARGE");
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new CheckError("GitHub returned an empty JSON response.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumGithubJsonBytes) {
+        await reader.cancel();
+        throw new CheckError("GitHub returned an oversized JSON response.", 502, "GITHUB_RESPONSE_TOO_LARGE");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new CheckError("GitHub returned invalid JSON.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+}
+
 async function githubJson(
   path: string,
   env: CheckEnvironment,
   fetchImpl: FetchLike,
   allowNotFound = false,
 ): Promise<GithubResponse> {
-  const response = await fetchImpl(`https://api.github.com${path}`, {
-    headers: githubHeaders(env),
-  });
-  const remainingValue = Number(response.headers.get("x-ratelimit-remaining"));
-  const remaining = Number.isFinite(remainingValue) ? remainingValue : null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), githubRequestTimeoutMs);
+  try {
+    const response = await fetchImpl(`https://api.github.com${path}`, {
+      headers: githubHeaders(env),
+      signal: controller.signal,
+    });
+    const remainingValue = Number(response.headers.get("x-ratelimit-remaining"));
+    const remaining = Number.isFinite(remainingValue) ? remainingValue : null;
 
-  if (!response.ok) {
-    if (response.status === 404 && allowNotFound) {
-      return { data: null, remaining, link: response.headers.get("link") };
+    if (!response.ok) {
+      if (response.status === 404 && allowNotFound) {
+        return { data: null, remaining, link: response.headers.get("link") };
+      }
+      if (response.status === 404) {
+        throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
+      }
+      if (response.status === 410) {
+        throw new CheckError(
+          "GitHub reports that this issue was deleted; any marketplace listing for it is stale.",
+          410,
+          "ISSUE_DELETED",
+        );
+      }
+      if (response.status === 403 && remaining === 0) {
+        throw new CheckError("GitHub API capacity is temporarily exhausted.", 503, "GITHUB_RATE_LIMITED");
+      }
+      throw new CheckError(`GitHub returned HTTP ${response.status}.`, 502, "GITHUB_UPSTREAM_ERROR");
     }
-    if (response.status === 404) {
-      throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
+
+    return {
+      data: await boundedGithubJson(response),
+      remaining,
+      link: response.headers.get("link"),
+    };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new CheckError("GitHub did not respond within the bounded request window.", 504, "GITHUB_UPSTREAM_TIMEOUT");
     }
-    if (response.status === 410) {
-      throw new CheckError(
-        "GitHub reports that this issue was deleted; any marketplace listing for it is stale.",
-        410,
-        "ISSUE_DELETED",
-      );
-    }
-    if (response.status === 403 && remaining === 0) {
-      throw new CheckError("GitHub API capacity is temporarily exhausted.", 503, "GITHUB_RATE_LIMITED");
-    }
-    throw new CheckError(`GitHub returned HTTP ${response.status}.`, 502, "GITHUB_UPSTREAM_ERROR");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return {
-    data: await response.json(),
-    remaining,
-    link: response.headers.get("link"),
-  };
 }
 
 function decodeBase64Utf8(value: string): string {
@@ -249,6 +312,80 @@ async function githubPolicyDocument(
       html_url: file.html_url,
     },
     response,
+  };
+}
+
+function repositoryBountyPolicyDocuments(
+  value: unknown,
+  currentIssueNumber: number,
+  canonical: { owner: string; repo: string },
+): PolicyDocument[] {
+  if (value === null) return [];
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new CheckError("GitHub returned an invalid repository issue policy page.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  return value.flatMap((item): PolicyDocument[] => {
+    if (!isRecord(item)) {
+      throw new CheckError("GitHub returned an invalid repository issue policy page.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    if ("pull_request" in item || item.number === currentIssueNumber ||
+        typeof item.title !== "string" || !BOUNTY_POLICY_TITLE_PATTERN.test(item.title) ||
+        typeof item.body !== "string" || !BOUNTY_POLICY_REPOSITORY_SCOPE_PATTERN.test(item.body) ||
+        !REPOSITORY_POLICY_ASSOCIATIONS.has(String(item.author_association))) {
+      return [];
+    }
+    if (!Number.isSafeInteger(item.number) || Number(item.number) < 1 ||
+        typeof item.html_url !== "string") {
+      throw new CheckError("GitHub returned an invalid repository bounty policy issue.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    let coordinates;
+    try {
+      coordinates = parseIssueUrl(item.html_url);
+    } catch {
+      throw new CheckError("GitHub returned an invalid repository bounty policy issue.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    if (coordinates.owner.toLowerCase() !== canonical.owner.toLowerCase() ||
+        coordinates.repo.toLowerCase() !== canonical.repo.toLowerCase() ||
+        coordinates.number !== item.number) {
+      throw new CheckError("GitHub returned an invalid repository bounty policy issue.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    return [{
+      path: `repository-bounty-policy-issue-${item.number}`,
+      body: item.body,
+      html_url: item.html_url,
+    }];
+  });
+}
+
+function repositoryPolicyPagePlan(response: GithubResponse): {
+  pages: number[];
+  total_pages: number | null;
+  truncated: boolean;
+} {
+  if (response.data === null) {
+    return { pages: [], total_pages: null, truncated: true };
+  }
+  if (!Array.isArray(response.data) || response.data.length > 100) {
+    throw new CheckError("GitHub returned an invalid repository issue policy page.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  if (response.link === null) {
+    return {
+      pages: [1],
+      total_pages: response.data.length === 100 ? null : 1,
+      truncated: response.data.length === 100,
+    };
+  }
+  const last = response.link.split(",").find((part) => /rel="last"/.test(part));
+  const match = last?.match(/[?&]page=(\d+)/);
+  const totalPages = match ? Number(match[1]) : Number.NaN;
+  if (!Number.isSafeInteger(totalPages) || totalPages < 1 || totalPages > 10_000) {
+    throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+  }
+  const pages = boundedEvidencePages(totalPages, maximumRepositoryPolicyPages);
+  return {
+    pages,
+    total_pages: totalPages,
+    truncated: totalPages > pages.length,
   };
 }
 
@@ -461,7 +598,7 @@ async function checkGithubIssueInternal(
   }
   const commentPageCount = Math.max(1, Math.ceil(commentsTotal / 100));
   const commentPages = boundedEvidencePages(commentPageCount, 3);
-  const [commentResponses, firstTimeline, policyResponses] = await Promise.all([
+  const [commentResponses, firstTimeline, policyResponses, firstRepositoryIssuePolicyResponse] = await Promise.all([
     Promise.all(
       commentPages.map((page) =>
         githubJson(`${base}/issues/${number}/comments?per_page=100&page=${page}`, env, fetchImpl),
@@ -470,6 +607,12 @@ async function checkGithubIssueInternal(
     githubJson(`${base}/issues/${number}/timeline?per_page=100&page=1`, env, fetchImpl),
     Promise.all(
       POLICY_PATHS.map((path) => githubPolicyDocument(base, path, env, fetchImpl)),
+    ),
+    githubJson(
+      `${base}/issues?state=all&sort=created&direction=asc&per_page=100&page=1`,
+      env,
+      fetchImpl,
+      true,
     ),
   ]);
 
@@ -481,6 +624,20 @@ async function checkGithubIssueInternal(
     ),
   );
   const timelineResponses = [firstTimeline, ...additionalTimelineResponses];
+  const repositoryPolicyPlan = repositoryPolicyPagePlan(firstRepositoryIssuePolicyResponse);
+  const additionalRepositoryIssuePolicyResponses = await Promise.all(
+    repositoryPolicyPlan.pages.filter((page) => page !== 1).map((page) =>
+      githubJson(
+        `${base}/issues?state=all&sort=created&direction=asc&per_page=100&page=${page}`,
+        env,
+        fetchImpl,
+      )
+    ),
+  );
+  const repositoryIssuePolicyResponses = [
+    firstRepositoryIssuePolicyResponse,
+    ...additionalRepositoryIssuePolicyResponses,
+  ];
   if (commentResponses.some((response) => !isCommentEvidencePage(response.data)) ||
       timelineResponses.some((response) => !isTimelineEvidencePage(response.data))) {
     throw new CheckError("GitHub returned invalid issue evidence pages.", 502, "GITHUB_RESPONSE_INVALID");
@@ -542,13 +699,17 @@ async function checkGithubIssueInternal(
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = policyResponses
     .map((result) => result.document)
-    .filter((document): document is PolicyDocument => document !== null);
+    .filter((document): document is PolicyDocument => document !== null)
+    .concat(repositoryIssuePolicyResponses.flatMap((response) =>
+      repositoryBountyPolicyDocuments(response.data, canonical.number, canonical)
+    ));
   const responses = [
     issueResponse,
     repoResponse,
     ...commentResponses,
     ...timelineResponses,
     ...policyResponses.map((result) => result.response),
+    ...repositoryIssuePolicyResponses,
   ].filter((value): value is GithubResponse => value !== null);
   const remainingValues = responses
     .map((response) => response.remaining)
@@ -564,6 +725,7 @@ async function checkGithubIssueInternal(
     coverage: {
       commentsTruncated,
       timelineTruncated: timelineLastPage > timelinePages.length,
+      policyTruncated: repositoryPolicyPlan.truncated,
     },
     now,
   });
@@ -700,6 +862,7 @@ async function checkGithubIssueInternal(
       timeline_truncated: timelineLastPage > timelinePages.length,
       linked_pull_requests_found: analysis.pullRequests.length,
       policy_documents_scanned: policyDocuments.length,
+      policy_issues_truncated: repositoryPolicyPlan.truncated,
       github_rate_limit_remaining: remainingValues.length
         ? Math.min(...remainingValues)
         : null,
@@ -712,7 +875,7 @@ async function checkGithubIssueInternal(
       "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
-      "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
+      "Checks four contribution paths and up to five bounded issue pages for repository-wide bounty policies; truncated policy coverage prevents VIABLE.",
       "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions; absence of a blocker is not proof that autonomous completion is possible.",
     ],
   };

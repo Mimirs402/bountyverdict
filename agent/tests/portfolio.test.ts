@@ -25,6 +25,7 @@ function verdict(url: string, decision: AgentVerdict["verdict"], score: number):
       timeline_events_scanned: 0,
       linked_pull_requests_found: 0,
       policy_documents_scanned: 0,
+      policy_issues_truncated: false,
       github_rate_limit_remaining: 100,
     },
     checked_at: "2026-07-20T12:00:00.000Z",

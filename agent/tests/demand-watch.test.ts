@@ -117,6 +117,26 @@ test("OpenJobs accepts live arrays and its documented wrapper without treating W
   assert.equal(result.exact_candidate_count, 0);
 });
 
+test("OpenJobs accepts zero only for non-paid WAGE negotiation", () => {
+  const negotiable = parseOpenJobs([rawOpen({
+    currency: "WAGE",
+    jobType: "negotiable",
+    reward: 0,
+  })]);
+  const result = analyzeOpenJobs(negotiable, now);
+  assert.equal(result.open_jobs, 1);
+  assert.equal(result.excluded_non_usdc, 1);
+  assert.equal(result.usdc_open_jobs, 0);
+  assert.throws(
+    () => parseOpenJobs([rawOpen({ currency: "USDC", jobType: "paid", reward: 0 })]),
+    /exact six-decimal/,
+  );
+  assert.throws(
+    () => parseOpenJobs([rawOpen({ currency: "WAGE", jobType: "paid", reward: 0 })]),
+    /exact six-decimal/,
+  );
+});
+
 test("OpenJobs rejects implementation work even when the text contains an exact product input", () => {
   const jobs = parseOpenJobs([rawOpen({
     currency: "USDC",

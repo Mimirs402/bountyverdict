@@ -290,9 +290,10 @@ export function analyzeMoltJobs(input: {
   };
 }
 
-function openJobsDecimal(value: unknown, label: string): string {
+function openJobsDecimal(value: unknown, label: string, allowZero = false): string {
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || value <= 0 || !Number.isSafeInteger(value * 1_000_000)) {
+    if (!Number.isFinite(value) || value < 0 || (!allowZero && value === 0) ||
+        !Number.isSafeInteger(value * 1_000_000)) {
       throw new Error(`${label} is not an exact six-decimal amount.`);
     }
     return atomicToDecimal(BigInt(value * 1_000_000));
@@ -311,7 +312,11 @@ function parseOpenJob(value: unknown): OpenJob {
     id: uuid(value.id, "OpenJobs job ID"),
     title: requiredString(value.title, "OpenJobs title", 500),
     description: requiredString(value.description, "OpenJobs description", maximumTextBytes),
-    reward: openJobsDecimal(value.reward, "OpenJobs reward"),
+    reward: openJobsDecimal(
+      value.reward,
+      "OpenJobs reward",
+      currency === "WAGE" && jobType !== "paid",
+    ),
     currency,
     status: "open",
     jobType: jobType as OpenJob["jobType"],

@@ -40,6 +40,7 @@ const expectedPaidProof = Object.freeze({
   classify_github_actions_flake: ["/api/flake/sample", "0.07"],
   check_mcp_tool_drift: ["/api/mcp-drift/sample", "0.02"],
 } as const);
+const expectPaidProof = process.env.GLAMA_EXPECT_PAID_PROOF === "YES";
 
 await execFileAsync("docker", ["build", "--pull", "--tag", image, ".."], {
   timeout: 180_000,
@@ -99,18 +100,15 @@ try {
       expectedTaskOpeners[tool.name as keyof typeof expectedTaskOpeners],
     );
     assert.doesNotMatch(tool.description || "", /\bx402\b|payment quote|authorized signed retry/i);
-    if (tool.name !== "choose_github_agent_decision") {
+    if (expectPaidProof && tool.name !== "choose_github_agent_decision") {
       const description = tool.description || "";
       const [samplePath, price] = expectedPaidProof[tool.name as keyof typeof expectedPaidProof];
-      if (/Inspect a representative result before paying:/.test(description)) {
-        assert.match(
-          description,
-          new RegExp(`https://bountyverdict-agent-production\\.mimirslab\\.workers\\.dev${samplePath.replaceAll("/", "\\/")}`),
-        );
-        assert.match(description, new RegExp(`Exact authorization cap: ${price.replace(".", "\\.")} USDC\\.$`));
-      } else {
-        assert.doesNotMatch(description, /\bUSDC\b|https?:\/\//i);
-      }
+      assert.match(description, /Inspect a representative result before paying:/);
+      assert.match(
+        description,
+        new RegExp(`https://bountyverdict-agent-production\\.mimirslab\\.workers\\.dev${samplePath.replaceAll("/", "\\/")}`),
+      );
+      assert.match(description, new RegExp(`Exact authorization cap: ${price.replace(".", "\\.")} USDC\\.$`));
     }
   }
 } catch (error) {

@@ -332,7 +332,10 @@ test("a new completed opportunity produces one bounded product-learning review",
       completed: [{
         trigger_id: triggerId,
         completed_at: "2026-07-28T11:45:00.000Z",
-        task_ids: [`0x${"b".repeat(64)}`],
+        task_ids: [
+          `0x${"b".repeat(64)}`,
+          "11111111-1111-4111-8111-111111111111",
+        ],
         result_file: "/private/path/is-not-projected.md",
       }],
     },
@@ -346,7 +349,10 @@ test("a new completed opportunity produces one bounded product-learning review",
     completed_count: 1,
     latest_trigger_id: triggerId,
     completed_at: "2026-07-28T11:45:00.000Z",
-    task_ids: [`0x${"b".repeat(64)}`],
+    task_ids: [
+      `0x${"b".repeat(64)}`,
+      "11111111-1111-4111-8111-111111111111",
+    ],
     result_sha256: `sha256:${"c".repeat(64)}`,
     result_excerpt: "NO_GO: competition increased to five submissions. Product learning: recheck competition at evaluation time.",
   });

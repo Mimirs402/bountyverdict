@@ -509,6 +509,7 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
       const netReward = BigInt(task.netRewardAtomic);
       const scoreAtomic = netReward / BigInt(task.submissionCount + 1);
       return {
+        market: "taskmarket",
         task_id: task.id,
         title: taskTitle(task.description),
         mode: task.mode,

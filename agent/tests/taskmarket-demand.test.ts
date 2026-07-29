@@ -626,6 +626,7 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
   assert.equal(result.saturated_submission_open_tasks, 1);
   assert.equal(result.expired_pitch_entry_tasks, 1);
   assert.deepEqual(result.fresh_low_competition_candidates, [{
+    market: "taskmarket",
     task_id: taskId,
     title: "Implement a bounded parser for our public API.",
     mode: "bounty",

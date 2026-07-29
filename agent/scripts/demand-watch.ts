@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import {
   analyzeMoltJobs,
   analyzeOpenJobs,
+  moltJobsOpportunityDetailIds,
+  parseMoltJobPublicSummary,
   parseMoltJobsPage,
   parseOpenJobs,
   type MoltJob,
@@ -45,6 +47,7 @@ const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
 const timeoutMs = 20_000;
 const maximumResponseBytes = 2_000_000;
 const maximumOpportunityTriggerBytes = 256 * 1024;
+const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
 type JsonRecord = Record<string, any>;
 
@@ -217,6 +220,21 @@ async function fetchMoltJobs(funded: boolean): Promise<MoltJob[]> {
   throw new Error("MoltJobs pagination exceeded the bounded five-page audit.");
 }
 
+function moltJobsOwnerPosterIds(): string[] | null {
+  const raw = process.env.BOUNTY_MOLTJOBS_OWNER_POSTER_IDS;
+  if (raw === undefined) return null;
+  if (raw === "none") return [];
+  const ids = raw.split(",");
+  if (ids.length === 0 || ids.length > 20 || ids.some((id) => !uuidPattern.test(id))) {
+    throw new Error("MoltJobs owner poster identity scope is invalid.");
+  }
+  const normalized = ids.map((id) => id.toLowerCase());
+  if (new Set(normalized).size !== normalized.length) {
+    throw new Error("MoltJobs owner poster identity scope is duplicated.");
+  }
+  return normalized;
+}
+
 async function fetchTaskmarketOpen(): Promise<TaskmarketTask[]> {
   const tasks: TaskmarketTask[] = [];
   const taskIds = new Set<string>();
@@ -277,13 +295,37 @@ const checkedAtMs = Date.now();
 const checkedAt = new Date(checkedAtMs).toISOString();
 const previous = await readPreviousState();
 const trackedDecision = shouldRefreshTaskmarketTracked(previous, checkedAtMs);
+const moltOwnerPosterIds = moltJobsOwnerPosterIds();
 const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
   Promise.all([fetchMoltJobs(false), fetchMoltJobs(true)])
-    .then(([openJobs, fundedJobs]) => analyzeMoltJobs({
-      open_jobs: openJobs,
-      funded_jobs: fundedJobs,
-      now_ms: checkedAtMs,
-    })),
+    .then(async ([openJobs, fundedJobs]) => {
+      const detailIds = moltOwnerPosterIds === null
+        ? []
+        : moltJobsOpportunityDetailIds(fundedJobs, checkedAtMs);
+      const preliminaryJobs = detailIds.map((id) => {
+        const job = fundedJobs.find((candidate) => candidate.id === id);
+        if (!job?.escrowTxHash) throw new Error("MoltJobs preliminary opportunity lost its escrow transaction.");
+        return job;
+      });
+      const [publicOpportunitySummaries, fundingReceipts] = await Promise.all([
+        Promise.all(detailIds.map(async (id) =>
+          parseMoltJobPublicSummary(await publicJson(
+            new URL(`/v1/public/jobs/${encodeURIComponent(id)}`, "https://api.moltjobs.io"),
+            "MoltJobs public opportunity summary",
+          ))
+        )),
+        Promise.all(preliminaryJobs.map((job) => baseSettlementReceipt(job.escrowTxHash!))),
+      ]);
+      return analyzeMoltJobs({
+        open_jobs: openJobs,
+        funded_jobs: fundedJobs,
+        public_opportunity_summaries: publicOpportunitySummaries,
+        funding_receipts: fundingReceipts,
+        excluded_owner_poster_ids: moltOwnerPosterIds || [],
+        opportunity_triggers_enabled: moltOwnerPosterIds !== null,
+        now_ms: checkedAtMs,
+      });
+    }),
   publicJson(new URL(`${OPENJOBS_API}?status=open&limit=100`), "OpenJobs")
     .then((payload) => {
       const openJobs = parseOpenJobs(payload);
@@ -359,11 +401,26 @@ const previousRememberedOpportunityFingerprints = previous?.opportunity_event_lo
   : undefined;
 const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
   statuses.taskmarket_inventory.last_good_at === checkedAt;
+const moltJobsInventoryFresh = statuses.moltjobs.error === null &&
+  statuses.moltjobs.last_good_at === checkedAt;
 const pendingTriggerId = await pendingOpportunityTriggerId();
-const opportunityEvent = await coordinateOpportunityTrigger({
-  candidates: taskmarketInventoryFresh
+const eligibleOpportunityCandidates = [
+  ...(taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
-    : [],
+    : []),
+  ...(moltJobsInventoryFresh
+    ? (moltjobs as JsonRecord).fresh_low_competition_candidates
+    : []),
+].sort((left, right) => {
+  const scoreDifference = Number(right.opportunity_score_usdc_per_current_entry) -
+    Number(left.opportunity_score_usdc_per_current_entry);
+  if (scoreDifference !== 0) return scoreDifference;
+  const rewardDifference = Number(right.net_reward_usdc) - Number(left.net_reward_usdc);
+  if (rewardDifference !== 0) return rewardDifference;
+  return String(left.created_at).localeCompare(String(right.created_at));
+});
+const opportunityEvent = await coordinateOpportunityTrigger({
+  candidates: eligibleOpportunityCandidates,
   rememberedOpportunityFingerprints: previousRememberedOpportunityFingerprints,
   checkedAt,
   pendingTriggerId,
@@ -381,16 +438,23 @@ const state = {
   source_status: statuses,
   opportunity_event_loop: {
     marker_version: OPPORTUNITY_MARKER_VERSION,
-    inventory_fresh: taskmarketInventoryFresh,
-    observed_candidates: (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count,
-    eligible_candidates: taskmarketInventoryFresh
-      ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count
-      : 0,
+    inventory_fresh: taskmarketInventoryFresh && moltJobsInventoryFresh,
+    inventory_fresh_by_market: {
+      taskmarket: taskmarketInventoryFresh,
+      moltjobs: moltJobsInventoryFresh,
+      openjobs: statuses.openjobs.error === null && statuses.openjobs.last_good_at === checkedAt,
+    },
+    observed_candidates: {
+      taskmarket: (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count,
+      moltjobs: (moltjobs as JsonRecord).fresh_low_competition_candidate_count,
+      openjobs: 0,
+    },
+    eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
     pending_trigger_id: pendingTriggerId,
-    suppressed_reason: !taskmarketInventoryFresh
-      ? "taskmarket_inventory_not_fresh"
+    suppressed_reason: !taskmarketInventoryFresh && !moltJobsInventoryFresh
+      ? "eligible_market_inventories_not_fresh"
       : pendingTriggerId
         ? "pending_opportunity_workflow"
         : null,
@@ -434,11 +498,12 @@ console.log(JSON.stringify({
     openjobs: (openjobs as JsonRecord).exact_candidate_count,
     taskmarket: (taskmarketInventory as JsonRecord).exact_candidate_count,
   },
-  taskmarket_opportunity_event_loop: {
-    inventory_fresh: taskmarketInventoryFresh,
-    eligible_candidates: taskmarketInventoryFresh
-      ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count
-      : 0,
+  opportunity_event_loop: {
+    inventory_fresh_by_market: {
+      taskmarket: taskmarketInventoryFresh,
+      moltjobs: moltJobsInventoryFresh,
+    },
+    eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
   },

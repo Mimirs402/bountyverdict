@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
 Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+# No project-owned MoltJobs poster exists. Replace "none" with its UUID before
+# creating one so opportunity triggering continues to exclude owner inventory.
+Environment=BOUNTY_MOLTJOBS_OWNER_POSTER_IDS=none
 ExecStart=/usr/bin/env node --experimental-strip-types scripts/demand-watch.ts
 NoNewPrivileges=yes
 PrivateTmp=yes

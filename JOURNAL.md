@@ -1572,3 +1572,41 @@ presentations, genuine settlements, and revenue remain separately classified.
 Aggregate telemetry cannot prove a same-agent causal journey. No self-install,
 self-payment, synthetic traffic, marketplace mutation, bounty submission, or
 revenue claim occurred.
+
+## 2026-07-29 — Guarded opportunity assessment expands to MoltJobs
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Fresh high-confidence opportunities: **0**
+- Production treatment: **unchanged; cross-market loop remains held for review**
+
+The live public-work refresh found one nominal MoltJobs listing for 100 USDC,
+but its deadline had passed and both escrow identifiers were absent. OpenJobs
+had 29 open records, all denominated in WAGE rather than USDC. Taskmarket had
+18 open records and no fresh low-competition candidate. None justified an
+agent workflow.
+
+MoltJobs exposes enough public evidence to make a future read-only trigger
+safer than a title-and-budget scan. The held loop now requires its open and
+`funded=true` feeds to agree, paired escrow identifiers, an agreeing public
+summary with `escrowFunded=true`, no assignment and at most three bids, a
+non-owner poster, conservative net value of at least 5 USDC, age no greater
+than 12 hours, and at least two hours remaining. A successful Base receipt
+must additionally bind the exact API transaction and 32-byte `escrowJobId` to
+the pinned escrow contract, canonical Base USDC, exact posted budget, funding
+event, and payer. Missing owner-identity configuration, public detail, or
+chain evidence fails closed.
+
+Five historical public funding receipts independently exhibited the same
+contract, token, event, and API-ID binding; the verifier accepted an exact live
+historical receipt. OpenJobs remains monitor-only because its public contract
+locks escrow only after acceptance, so an open listing cannot yet supply
+pre-action funding proof.
+
+The generic marker remains private, durable, deduplicated by market, task, and
+escrow transaction, and restricted to assessment and local preparation.
+Claims, bids, applications, submissions, messages, accounts, payments, legal
+acceptance, and personal identities remain disabled. Daily learning now
+accepts MoltJobs UUIDs. All **633 / 633** agent tests and **218 / 218** public
+tests pass, along with TypeScript checking, synchronized public contracts,
+zero-vulnerability dependency audit, and live read-only dry-run verification.

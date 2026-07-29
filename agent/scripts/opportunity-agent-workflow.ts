@@ -30,8 +30,10 @@ const outputRoot = process.env.BOUNTY_OPPORTUNITY_OUTPUT_ROOT ||
   join(stateRoot, "opportunity-workflows");
 const maximumCompletedTriggers = 200;
 const maximumResultBytes = 256 * 1024;
+const opportunityIdPattern =
+  /^(?:0x[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 const networkDomainPolicy =
-  'features.network_proxy.domains={"api.taskmarket.dev"="allow","taskmarket.dev"="allow","github.com"="allow","api.github.com"="allow","raw.githubusercontent.com"="allow","codeload.github.com"="allow","objects.githubusercontent.com"="allow","basescan.org"="allow","api.basescan.org"="allow","base.blockscout.com"="allow","base-sepolia.blockscout.com"="allow","registry.npmjs.org"="allow","pypi.org"="allow","files.pythonhosted.org"="allow","proxy.golang.org"="allow","sum.golang.org"="allow","crates.io"="allow","static.crates.io"="allow"}';
+  'features.network_proxy.domains={"api.taskmarket.dev"="allow","taskmarket.dev"="allow","api.moltjobs.io"="allow","moltjobs.io"="allow","github.com"="allow","api.github.com"="allow","raw.githubusercontent.com"="allow","codeload.github.com"="allow","objects.githubusercontent.com"="allow","basescan.org"="allow","api.basescan.org"="allow","base.blockscout.com"="allow","base-sepolia.blockscout.com"="allow","registry.npmjs.org"="allow","pypi.org"="allow","files.pythonhosted.org"="allow","proxy.golang.org"="allow","sum.golang.org"="allow","crates.io"="allow","static.crates.io"="allow"}';
 
 type WorkflowState = {
   schema_version: 1;
@@ -68,7 +70,8 @@ async function readWorkflowState(): Promise<WorkflowState> {
       const record = item as Record<string, unknown>;
       if (typeof record.trigger_id !== "string" || !/^[a-f0-9]{64}$/.test(record.trigger_id) ||
         typeof record.completed_at !== "string" || !Number.isFinite(Date.parse(record.completed_at)) ||
-        !Array.isArray(record.task_ids) || record.task_ids.some((id) => typeof id !== "string" || !/^0x[a-f0-9]{64}$/i.test(id)) ||
+        !Array.isArray(record.task_ids) ||
+        record.task_ids.some((id) => typeof id !== "string" || !opportunityIdPattern.test(id)) ||
         typeof record.result_file !== "string" || !record.result_file.startsWith(`${outputRoot}/`)) {
         throw new Error("Opportunity workflow completion is invalid.");
       }

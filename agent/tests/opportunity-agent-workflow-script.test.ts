@@ -14,6 +14,7 @@ const execFileAsync = promisify(execFile);
 const workflowScript = new URL("../scripts/opportunity-agent-workflow.ts", import.meta.url);
 
 const candidate: OpportunityCandidate = {
+  market: "taskmarket",
   task_id: `0x${"a".repeat(64)}`,
   title: "Implement a bounded parser.",
   mode: "bounty",
@@ -123,6 +124,7 @@ process.stdout.write("fake workflow complete\\n");
     assert.ok(invocation.args.some((argument: string) =>
       argument.startsWith("features.network_proxy.domains=") &&
       argument.includes('"api.taskmarket.dev"="allow"') &&
+      argument.includes('"api.moltjobs.io"="allow"') &&
       argument.includes('"github.com"="allow"')
     ));
     assert.ok(!invocation.env_keys.includes("SHOULD_NOT_LEAK_TO_CODEX"));

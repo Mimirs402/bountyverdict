@@ -10,6 +10,8 @@ import {
 
 export const DAILY_REVIEW_SCORECARD_MAX_BYTES = 10_240;
 export const DAILY_REVIEW_SCORECARD_SCHEMA_VERSION = 2 as const;
+const opportunityIdPattern =
+  /^(?:0x[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 
 export type DailyReviewState = {
   distribution?: unknown;
@@ -277,7 +279,7 @@ function compactOpportunityOutcome(
     typeof latest.completed_at !== "string" || !Number.isFinite(Date.parse(latest.completed_at)) ||
     !Array.isArray(latest.task_ids) || taskIds.length !== latest.task_ids.length ||
     taskIds.length === 0 || taskIds.length > 3 ||
-    taskIds.some((taskId) => !/^0x[a-f0-9]{64}$/i.test(taskId)) ||
+    taskIds.some((taskId) => !opportunityIdPattern.test(taskId)) ||
     new Set(taskIds.map((taskId) => taskId.toLowerCase())).size !== taskIds.length ||
     result.trigger_id !== latest.trigger_id ||
     typeof result.result_sha256 !== "string" || !/^sha256:[a-f0-9]{64}$/.test(result.result_sha256) ||

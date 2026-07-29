@@ -2066,6 +2066,164 @@ Specialized hardware is not required.`,
   assert.ok(!output.signals.some((item) => item.label === "Mandatory external prerequisites"));
 });
 
+test("qtop-style human eligibility and live review requirements block autonomous execution", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+Use of AI is not disallowed, but it would be pointless if you can't explain your PR in live (telco) meeting mode - avoid entering if so.
+You need to be a student/researcher of an EEA/OECD country.
+PoH will be required. Be ready for live PoH review at any time.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+  const blocker = output.signals.find((item) => item.label === "Task blocks autonomous agent execution");
+
+  assert.equal(output.verdict, "AVOID");
+  assert.deepEqual(output.taskAutonomyBlockers, [
+    {
+      category: "HUMAN_ELIGIBILITY_OR_IDENTITY",
+      source: "issue_body",
+      evidenceUrl: issue.html_url,
+    },
+    {
+      category: "SYNCHRONOUS_HUMAN_PARTICIPATION",
+      source: "issue_body",
+      evidenceUrl: issue.html_url,
+    },
+  ]);
+  assert.equal(blocker?.impact, -100);
+  assert.equal(blocker?.hardStop, true);
+});
+
+test("TinyGo-style maintainer AI-agent exclusion blocks autonomous execution", () => {
+  const comment = {
+    body: `For all future AI prompt engineers:
+1. You of course have to test your program. We will not test it for you. AI is not yet good enough to solve these problems by itself without hardware integration, much like humans would have a hard time developing without the hardware. This is to not waste our time in a cycle of us giving your AI feedback so it can make changes pretty much blindly.
+2. Don't waste your compute here. It is too easy to tell if you've prompted your way to a PR that is guaranteed to not work.
+3. Go away.`,
+    author_association: "COLLABORATOR",
+    html_url: "https://github.com/acme/widget/issues/4#issuecomment-ai-agent-excluded",
+  };
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [comment],
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.deepEqual(output.taskAutonomyBlockers, [{
+    category: "AI_AGENT_EXCLUDED",
+    source: "maintainer_comment",
+    evidenceUrl: comment.html_url,
+  }]);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Task blocks autonomous agent execution" && item.hardStop
+  ));
+});
+
+test("optional human participation and untrusted AI hostility cannot fabricate an autonomy blocker", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+Students and researchers are welcome, but eligibility is open to everyone.
+A live demo is optional and identity verification is not required.
+AI-assisted contributions are allowed when tested.`,
+  };
+  const output = analyzeBounty({
+    issue,
+    repository: healthyRepo,
+    comments: [{
+      body: "AI agents must go away and never submit here.",
+      author_association: "NONE",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-untrusted-ai-hostility",
+    }],
+    now,
+  });
+
+  assert.deepEqual(output.taskAutonomyBlockers, []);
+  assert.ok(!output.signals.some((item) => item.label === "Task blocks autonomous agent execution"));
+});
+
+test("parenthesized telco exclusion is independently recognized as synchronous human participation", () => {
+  const issue = {
+    ...healthyIssue,
+    body: "Avoid entering if you cannot explain your PR in live (telco) meeting mode.",
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.deepEqual(output.taskAutonomyBlockers, [{
+    category: "SYNCHRONOUS_HUMAN_PARTICIPATION",
+    source: "issue_body",
+    evidenceUrl: issue.html_url,
+  }]);
+});
+
+test("consensus PoH, conditional AI quality rules, and quoted exclusions are not autonomy blockers", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `PoH will be required for consensus validation.
+AI prompt engineers: do not submit untested changes; tested AI-assisted contributions are welcome.
+
+> AI prompt engineers: Go away.
+
+The quotation above is not our policy; AI-assisted contributions are allowed.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.deepEqual(output.taskAutonomyBlockers, []);
+});
+
+test("TinyGo-style working video and device flashing are capability requirements", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `If you are solving this we're going to need a video of it working.
+Please include running \`tinygo flash\` in the video.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.equal(output.verdict, "CAUTION");
+  assert.deepEqual(output.externalPrerequisites, ["demo video", "specialized hardware"]);
+});
+
+test("product support requirements are not mistaken for contributor participation or hardware access", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+### Requirements
+- The implementation must support video calls and screen-share.
+- The library must support NVIDIA GPU and CUDA acceleration.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.deepEqual(output.taskAutonomyBlockers, []);
+  assert.deepEqual(output.externalPrerequisites, []);
+});
+
+test("explicit AI-agent exclusion, payout PoH, and finalist interviews block autonomous execution", () => {
+  const issue = {
+    ...healthyIssue,
+    body: `${healthyIssue.body}
+
+AI agents are prohibited from participating.
+PoH is required before payout.
+Finalists must attend a Zoom interview.`,
+  };
+  const output = analyzeBounty({ issue, repository: healthyRepo, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.deepEqual(
+    output.taskAutonomyBlockers.map(({ category }) => category),
+    [
+      "HUMAN_ELIGIBILITY_OR_IDENTITY",
+      "SYNCHRONOUS_HUMAN_PARTICIPATION",
+      "AI_AGENT_EXCLUDED",
+    ],
+  );
+});
+
 test("maintainer-only gated platform review downgrades an otherwise viable bounty", () => {
   const comment = {
     body: "There is no reliable way of testing it except submitting it to Mac App Store review.",

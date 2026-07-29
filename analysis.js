@@ -69,11 +69,13 @@ const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
 
 const AI_POLICY_ALLOW_PATTERNS = [
   /\b(?:ai|llm|chatgpt|generative ai)(?:[ -](?:assistance|assisted)|\s+(?:tools?|usage|assistance))?\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
+  /\b(?:ai|llm|chatgpt|generative ai)[ -](?:generated|assisted)\s+(?:contributions?|pull requests?|patches?|code)\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
   /\bcontributions?\s+(?:made\s+)?with\s+(?:the\s+)?assistance\s+of\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+(?:is|are)\s+(?:allowed|permitted|welcome)\b/i,
 ];
 
 const AI_POLICY_CONDITIONAL_QUALITY_PATTERNS = [
-  /\b(?:low[ -]effort|unreviewed|unverified|unexplained|undisclosed)\b.{0,80}\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,100}\b(?:closed|rejected|declined|not accepted)\b/i,
+  /\b(?:low[ -]effort|unreviewed|untested|unverified|unexplained|undisclosed)\b.{0,80}\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,100}\b(?:closed|rejected|declined|not accepted)\b/i,
+  /\b(?:ai|llm|chatgpt|generative ai).{0,80}\b(?:do not|don['’]?t|must not|may not)\s+submit\b.{0,60}\b(?:untested|unreviewed|unverified|unexplained|undisclosed)\b/i,
   /\b(?:ai|llm|chatgpt|generative ai)(?:[ -]generated|[ -]assisted)?\b.{0,80}\b(?:contributions?|pull requests?|patches?|code)\b.{0,40}\b(?:without|unless)\b.{0,100}\b(?:understand|review|verify|test|disclos|explain)\w*\b.{0,80}\b(?:closed|rejected|declined|not accepted)\b/i,
 ];
 
@@ -160,7 +162,7 @@ const EXTERNAL_PREREQUISITE_CATEGORIES = [
   },
   {
     category: "demo video",
-    pattern: /\b(?:demo(?:nstration)? video|video (?:demo|walkthrough|showcase|showing|proof)|screen(?:cast| recording)|record(?:ed|ing)? (?:a |the )?(?:demo|video))\b/i,
+    pattern: /\b(?:demo(?:nstration)? video|video (?:demo|walkthrough|showcase|showing|proof)|video\s+of\s+(?:(?:it|this|your\s+\w+|the\s+\w+)\s+)?(?:working|running|operating)|screen(?:cast| recording)|record(?:ed|ing)? (?:a |the )?(?:demo|video))\b/i,
   },
   {
     category: "public social posting or engagement",
@@ -168,7 +170,7 @@ const EXTERNAL_PREREQUISITE_CATEGORIES = [
   },
   {
     category: "specialized hardware",
-    pattern: /\b(?:(?:specialized|dedicated|qualifying|physical) hardware|nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device)\b/i,
+    pattern: /\b(?:(?:specialized|dedicated|qualifying|physical) hardware|nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device|tinygo\s+flash|(?:flash|flashing)\s+(?:the\s+)?(?:firmware|device|board))\b/i,
   },
   {
     category: "gated platform validation",
@@ -176,12 +178,13 @@ const EXTERNAL_PREREQUISITE_CATEGORIES = [
   },
 ];
 
-const EXTERNAL_PREREQUISITE_REQUIREMENT = /\b(?:must|required|mandatory|prerequisites?|need(?:ed)? to|needs? (?:an?|the|your)|have to|has to|shall)\b/i;
-const EXTERNAL_PREREQUISITE_DIRECTIVE = /^(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b|:\s*(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b/i;
+const EXTERNAL_PREREQUISITE_REQUIREMENT = /\b(?:must|required|mandatory|prerequisites?|need(?:ed)? to|needs? (?:an?|the|your)|(?:we(?:'re| are) going to|you(?:'ll| will)) need|have to|has to|shall)\b/i;
+const EXTERNAL_PREREQUISITE_DIRECTIVE = /^(?:(?:please|kindly)\s+)?(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b|:\s*(?:grab|create|register|sign[ -]?up|obtain|get|configure|include|record|upload|publish|post|share|tag|run|use|provide|attach|submit|install|connect|test)\b/i;
 const EXTERNAL_PREREQUISITE_EXCLUSIVE_VALIDATION = /\b(?:no|not)\s+(?:other\s+)?(?:reliable\s+)?(?:way|method)\s+(?:of|to)\s+(?:test(?:ing)?|validat(?:e|ing)|verif(?:y|ying))\b.{0,100}\b(?:except|without|other than)\b/i;
 const EXTERNAL_PREREQUISITE_OPT_OUT = /\b(?:optional(?:ly)?|not required|isn['’]?t required|aren['’]?t required|not mandatory|if (?:available|desired|helpful|you (?:want|wish|have))|nice to have|may (?:include|use|provide|record|post|publish|run)|can optionally)\b|\bno\b.{0,60}\b(?:required|mandatory)\b/i;
 const EXTERNAL_PREREQUISITE_SECTION = /\b(?:prerequisites?|requirements?|implementation guidelines?|submission instructions?|steps? to participate)\b/i;
 const EXTERNAL_PREREQUISITE_REFERENCE_ONLY = /^(?:see|read|reference|docs?|documentation|guide|example|learn more)\b/i;
+const HARDWARE_EXECUTION_REQUIREMENT = /\b(?:run|test|benchmark|flash|deploy|compile|profile|measure|validate|verify|connect|install|execute|reproduce)\b.{0,100}\b(?:nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device|hardware|firmware|board)\b|\b(?:must|required|need(?:ed)? to|needs? to|have to|shall)\b.{0,80}\b(?:have|obtain|access|use|provide|connect)\b.{0,80}\b(?:nvidia|cuda|gpus?|tpus?|ledger device|esp32|raspberry pi|physical (?:phone|device)|test device|hardware)\b|\b(?:tinygo\s+flash|(?:flash|flashing)\s+(?:the\s+)?(?:firmware|device|board))\b/i;
 
 function mandatoryExternalPrerequisites(value) {
   const categories = new Set();
@@ -197,7 +200,9 @@ function mandatoryExternalPrerequisites(value) {
       .trim();
     if (!line || EXTERNAL_PREREQUISITE_OPT_OUT.test(line)) continue;
 
-    const matched = EXTERNAL_PREREQUISITE_CATEGORIES.filter(({ pattern }) => pattern.test(line));
+    const matched = EXTERNAL_PREREQUISITE_CATEGORIES.filter(({ category, pattern }) =>
+      pattern.test(line) && (category !== "specialized hardware" || HARDWARE_EXECUTION_REQUIREMENT.test(line))
+    );
     if (!matched.length) continue;
     const directive = EXTERNAL_PREREQUISITE_REQUIREMENT.test(line) ||
       EXTERNAL_PREREQUISITE_DIRECTIVE.test(line) ||
@@ -209,6 +214,62 @@ function mandatoryExternalPrerequisites(value) {
   return EXTERNAL_PREREQUISITE_CATEGORIES
     .map(({ category }) => category)
     .filter((category) => categories.has(category));
+}
+
+const TASK_AUTONOMY_BLOCKER_CATEGORIES = [
+  {
+    category: "HUMAN_ELIGIBILITY_OR_IDENTITY",
+    patterns: [
+      /\b(?:must|required|mandatory|need(?:ed)? to|needs? to|have to|has to|shall)\b.{0,120}\b(?:student|researcher|resident|citizen|natural person|human participant)\b/i,
+      /\b(?:student|researcher|resident|citizen|natural person|human participant)\b.{0,120}\b(?:only|eligible|eligibility|required|mandatory)\b/i,
+      /\b(?:proof of human(?:ity)?|know your customer|kyc|verified identity)\b.{0,100}\b(?:required|mandatory|must|need(?:ed)?|will be required)\b/i,
+      /\b(?:required|mandatory|must|need(?:ed)?|will be required)\b.{0,100}\b(?:proof of human(?:ity)?|know your customer|kyc|verified identity)\b/i,
+    ],
+  },
+  {
+    category: "SYNCHRONOUS_HUMAN_PARTICIPATION",
+    patterns: [
+      /\b(?:must|required|mandatory|need(?:ed)? to|needs? to|have to|has to|shall|be ready (?:to|for))\b.{0,140}\b(?:live\s*(?:(?:\(\s*)?(?:telco|video|human|poh)(?:\s*\))?)?\s*(?:meeting|review|demo|demonstration|interview)|video call|screen[ -]?share|telco meeting)\b/i,
+      /\b(?:live\s*(?:(?:\(\s*)?(?:telco|video|human|poh)(?:\s*\))?)?\s*(?:meeting|review|demo|demonstration|interview)|video call|screen[ -]?share|telco meeting)\b.{0,140}\b(?:must|required|mandatory|need(?:ed)?|have to|shall|be ready)\b/i,
+      /\b(?:finalists?|participants?|contributors?|applicants?|submitters?|you)\b.{0,80}\b(?:must|required|need(?:ed)? to|have to|shall)\b.{0,80}\b(?:attend|join|participate in|present at)\b.{0,60}\b(?:zoom|meet|teams|video|live|telco)\b.{0,40}\b(?:call|meeting|interview|review|demo|session)\b/i,
+      /\b(?:can['’]?t|cannot|unable to)\b.{0,120}\b(?:explain|present|defend|demonstrate)\b.{0,80}\blive\b.{0,80}\b(?:avoid|do not|don['’]?t)\b.{0,50}\b(?:enter(?:ing)?|participate|apply|submit)\b/i,
+      /\b(?:avoid|do not|don['’]?t)\b.{0,50}\b(?:enter(?:ing)?|participate|apply|submit)\b.{0,80}\b(?:can['’]?t|cannot|unable to)\b.{0,120}\b(?:explain|present|defend|demonstrate)\b.{0,80}\blive\b/i,
+    ],
+  },
+  {
+    category: "AI_AGENT_EXCLUDED",
+    patterns: [
+      /\b(?:ai|llm|chatgpt).{0,80}\b(?:prompt engineers?|agents?)\b[\s\S]{0,1200}\bgo away\b/i,
+      /\bgo away\b.{0,80}\b(?:ai|llm|chatgpt).{0,80}\b(?:prompt engineers?|agents?)\b/i,
+      /\b(?:ai|llm|chatgpt)(?:[ -](?:powered|driven))?[ -]agents?\b.{0,100}\b(?:prohibited|forbidden|not allowed|ineligible|may not|must not)\b.{0,100}\b(?:participat|contribut|submit|enter|apply|compete)\w*\b/i,
+      /\b(?:prohibited|forbidden|not allowed|ineligible|may not|must not)\b.{0,100}\b(?:ai|llm|chatgpt)(?:[ -](?:powered|driven))?[ -]agents?\b.{0,100}\b(?:participat|contribut|submit|enter|apply|compete)\w*\b/i,
+    ],
+  },
+];
+
+const TASK_AUTONOMY_OPT_OUT = /\b(?:optional(?:ly)?|not required|isn['’]?t required|aren['’]?t required|not mandatory|open to (?:everyone|anyone|all)|no\b.{0,80}\b(?:identity verification|verified identity|kyc|proof of human(?:ity)?|live (?:meeting|review|demo|interview))\b.{0,40}\b(?:required|mandatory))\b/i;
+const TASK_AUTONOMY_PRODUCT_SUPPORT = /\b(?:implementation|library|product|application|app|system|feature|software|code|api|client|server)\b.{0,80}\b(?:must|should|needs? to|shall)\s+support\b/i;
+const POH_IDENTITY_REQUIREMENT = /\bpoh\b.{0,80}\b(?:required|mandatory|must|need(?:ed)?|before (?:payout|payment|reward|claim|submission)|eligibility|identity|human)\b|\b(?:required|mandatory|must|need(?:ed)?|before (?:payout|payment|reward|claim|submission)|eligibility|identity|human)\b.{0,80}\bpoh\b/i;
+
+function taskAutonomyBlockerCategories(value) {
+  const text = unquotedClaimText(value);
+  const clauses = text
+    .split(/\r?\n|(?<=[.!?])\s+/u)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  return TASK_AUTONOMY_BLOCKER_CATEGORIES
+    .filter(({ category, patterns }) => category === "AI_AGENT_EXCLUDED"
+      ? policyBlocksAiContributions(text) || patterns.some((pattern) => pattern.test(text))
+      : clauses.some((clause) =>
+          !TASK_AUTONOMY_OPT_OUT.test(clause) &&
+          !TASK_AUTONOMY_PRODUCT_SUPPORT.test(clause) &&
+          (patterns.some((pattern) => pattern.test(clause)) ||
+            (category === "HUMAN_ELIGIBILITY_OR_IDENTITY" &&
+              POH_IDENTITY_REQUIREMENT.test(clause) &&
+              !/\b(?:consensus|blockchain|protocol|cryptograph|hash)\b/i.test(clause)))
+        )
+    )
+    .map(({ category }) => category);
 }
 
 const CLAIM_INTENT_TTL_DAYS = 30;
@@ -1158,8 +1219,10 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     return category ? [{ ...source, category }] : [];
   });
   const authoritativePrerequisiteSources = [
-    { body: issue.body, html_url: issue.html_url },
-    ...comments.filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association)),
+    { body: issue.body, html_url: issue.html_url, source: "issue_body" },
+    ...comments
+      .filter((comment) => MAINTAINER_ASSOCIATIONS.has(comment.author_association))
+      .map((comment) => ({ ...comment, source: "maintainer_comment" })),
   ];
   const externalPrerequisites = EXTERNAL_PREREQUISITE_CATEGORIES
     .map(({ category }) => category)
@@ -1169,6 +1232,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const gatedValidationSource = authoritativePrerequisiteSources.find(({ body }) =>
     mandatoryExternalPrerequisites(body).includes("gated platform validation")
   );
+  const taskAutonomyBlockers = TASK_AUTONOMY_BLOCKER_CATEGORIES.flatMap(({ category }) => {
+    const source = authoritativePrerequisiteSources.find(({ body }) =>
+      taskAutonomyBlockerCategories(body).includes(category)
+    );
+    return source ? [{
+      category,
+      source: source.source,
+      evidenceUrl: source.html_url ?? issue.html_url,
+    }] : [];
+  });
   const issueAge = daysSince(issue.updated_at, now);
   const repoAge = daysSince(repository.pushed_at, now);
   let score = 50;
@@ -1533,6 +1606,17 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     ));
   }
 
+  if (taskAutonomyBlockers.length) {
+    score -= 100;
+    signals.push(signal(
+      "Task blocks autonomous agent execution",
+      -100,
+      `The authoritative task requirements include autonomous-execution blockers: ${taskAutonomyBlockers.map(({ category }) => category).join(", ")}.`,
+      taskAutonomyBlockers[0].evidenceUrl,
+      true,
+    ));
+  }
+
   if (unsafeTaskInstructions.length) {
     score -= 100;
     const instruction = unsafeTaskInstructions[0];
@@ -1570,7 +1654,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
   const verdict = hasHardStop || score < 45
     ? "AVOID"
     : claimantInterest.length ||
-      externalPrerequisites.includes("gated platform validation") ||
+      externalPrerequisites.length ||
       score < 75 ||
       incompleteCoverage
     ? "CAUTION"
@@ -1588,6 +1672,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     aiPolicyBlocks,
     aiPolicyRequirements,
     externalPrerequisites,
+    taskAutonomyBlockers,
     unsafeTaskInstructions,
     reward,
     activeClaims,

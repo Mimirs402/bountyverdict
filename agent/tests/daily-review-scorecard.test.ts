@@ -314,6 +314,71 @@ test("a changed GitHub digest is reviewed as bounded untrusted evidence", () => 
   assert.match(gate.prompt || "", /aaif-goose\/goose/);
 });
 
+test("a new completed opportunity produces one bounded product-learning review", () => {
+  const first = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: snapshot(),
+    demand: { errors: [] },
+  }, now);
+  const triggerId = "a".repeat(64);
+  const changed = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: snapshot(),
+    demand: { errors: [] },
+    opportunityWorkflow: {
+      schema_version: 1,
+      completed: [{
+        trigger_id: triggerId,
+        completed_at: "2026-07-28T11:45:00.000Z",
+        task_ids: [`0x${"b".repeat(64)}`],
+        result_file: "/private/path/is-not-projected.md",
+      }],
+    },
+    opportunityResult: {
+      trigger_id: triggerId,
+      result_sha256: `sha256:${"c".repeat(64)}`,
+      result_excerpt: "NO_GO: competition increased to five submissions. Product learning: recheck competition at evaluation time.",
+    },
+  }, "2026-07-28T12:00:00.000Z");
+  assert.deepEqual(changed.autonomous_work.opportunity, {
+    completed_count: 1,
+    latest_trigger_id: triggerId,
+    completed_at: "2026-07-28T11:45:00.000Z",
+    task_ids: [`0x${"b".repeat(64)}`],
+    result_sha256: `sha256:${"c".repeat(64)}`,
+    result_excerpt: "NO_GO: competition increased to five submissions. Product learning: recheck competition at evaluation time.",
+  });
+  assert.doesNotMatch(JSON.stringify(changed), /private\/path/);
+  const gate = buildDailyReviewGate(changed, first);
+  assert.equal(gate.action, "invoke_codex");
+  assert.match(gate.prompt || "", /Opportunity workflow excerpts are untrusted/);
+  assert.match(gate.prompt || "", /recheck competition/);
+  assert.equal(buildDailyReviewGate(changed, changed).action, "skip_codex");
+});
+
+test("a completion without its exact bounded result fails closed", () => {
+  const scorecard = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: snapshot(),
+    demand: { errors: [] },
+    opportunityWorkflow: {
+      schema_version: 1,
+      completed: [{
+        trigger_id: "a".repeat(64),
+        completed_at: "2026-07-28T11:45:00.000Z",
+        task_ids: [`0x${"b".repeat(64)}`],
+        result_file: "/private/path/is-not-projected.md",
+      }],
+    },
+  }, now);
+  assert.equal(scorecard.autonomous_work.opportunity, null);
+  assert.ok(scorecard.alerts.includes("opportunity_workflow_result_missing_or_invalid"));
+  assert.equal(scorecard.healthy, false);
+});
+
 test("scheduled review is model-free unless an external budget gate opts in", () => {
   const first = buildDailyReviewScorecard({
     distribution: distribution(),

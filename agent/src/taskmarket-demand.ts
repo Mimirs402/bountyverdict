@@ -9,6 +9,11 @@ const atomicPattern = /^(?:0|[1-9][0-9]{0,15})$/;
 const maximumTasksPerPage = 100;
 const maximumSubmissionsPerTask = 1_000;
 const maximumDescriptionBytes = 20_000;
+const freshOpportunityMaximumAgeMs = 12 * 60 * 60 * 1_000;
+const freshOpportunityMinimumRemainingMs = 2 * 60 * 60 * 1_000;
+const freshOpportunityMaximumSubmissions = 3;
+const freshOpportunityMinimumNetAtomic = 5_000_000n;
+const freshOpportunityLimit = 10;
 // Canonical Base deployment and settlement event documented by Taskmarket:
 // https://docs.taskmarket.dev/smart-contracts/overview
 const baseUsdcAddress = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -277,6 +282,9 @@ export type TaskmarketTask = {
   mode: TaskMode;
   claimedBy: string | null;
   submissionWindowOpen: boolean;
+  submissionCount: number;
+  pitchCount: number;
+  pitchDeadline: string | null;
 };
 
 export type TaskmarketPage = {
@@ -379,6 +387,13 @@ function booleanValue(value: unknown, label: string): boolean {
   return value;
 }
 
+function boundedCount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 10_000) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return Number(value);
+}
+
 function nullableAddress(value: unknown, label: string): string | null {
   return value === null ? null : exactPattern(value, label, addressPattern, 42);
 }
@@ -422,6 +437,9 @@ function parseTask(value: unknown, requiredStatus?: TaskStatus): TaskmarketTask 
     mode,
     claimedBy: nullableAddress(value.claimedBy, "Taskmarket claimed worker"),
     submissionWindowOpen: booleanValue(value.submissionWindowOpen, "Taskmarket submission window"),
+    submissionCount: boundedCount(value.submissionCount, "Taskmarket submission count"),
+    pitchCount: boundedCount(value.pitchCount, "Taskmarket pitch count"),
+    pitchDeadline: nullableTimestamp(value.pitchDeadline, "Taskmarket pitch deadline"),
   };
 }
 
@@ -472,6 +490,59 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
   });
   const reward = tasks.reduce((sum, task) => sum + BigInt(task.rewardAtomic), 0n);
   const submissionOpenReward = submissionOpen.reduce((sum, task) => sum + BigInt(task.rewardAtomic), 0n);
+  const excludedOwnerAddresses = new Set(
+    [TASKMARKET_WORKER_ADDRESS, ...TASKMARKET_OWNER_IDENTITIES].map((address) => address.toLowerCase()),
+  );
+  const freshLowCompetitionCandidates = submissionOpen
+    .filter((task) => {
+      const createdMs = Date.parse(task.createdAt);
+      const expiryMs = Date.parse(task.expiryTime);
+      return task.mode === "bounty" &&
+        !excludedOwnerAddresses.has(task.requester.toLowerCase()) &&
+        task.submissionCount <= freshOpportunityMaximumSubmissions &&
+        BigInt(task.netRewardAtomic) >= freshOpportunityMinimumNetAtomic &&
+        createdMs <= nowMs &&
+        nowMs - createdMs <= freshOpportunityMaximumAgeMs &&
+        expiryMs - nowMs >= freshOpportunityMinimumRemainingMs;
+    })
+    .map((task) => {
+      const netReward = BigInt(task.netRewardAtomic);
+      const scoreAtomic = netReward / BigInt(task.submissionCount + 1);
+      return {
+        task_id: task.id,
+        title: taskTitle(task.description),
+        mode: task.mode,
+        gross_reward_usdc: atomicToDecimal(BigInt(task.rewardAtomic)),
+        net_reward_usdc: atomicToDecimal(netReward),
+        submission_count: task.submissionCount,
+        created_at: task.createdAt,
+        deadline_at: task.expiryTime,
+        hours_remaining: Math.round((Date.parse(task.expiryTime) - nowMs) / 36_000) / 100,
+        escrow_tx_hash: task.escrowTxHash,
+        requester: task.requester,
+        opportunity_score_usdc_per_current_entry: atomicToDecimal(scoreAtomic),
+        requires_agent_fit_review: true,
+        selection_basis:
+          "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+      };
+    })
+    .sort((left, right) => {
+      const scoreDifference = Number(right.opportunity_score_usdc_per_current_entry) -
+        Number(left.opportunity_score_usdc_per_current_entry);
+      if (scoreDifference !== 0) return scoreDifference;
+      const rewardDifference = Number(right.net_reward_usdc) - Number(left.net_reward_usdc);
+      return rewardDifference !== 0 ? rewardDifference : left.created_at.localeCompare(right.created_at);
+    })
+    .slice(0, freshOpportunityLimit);
+  const saturatedSubmissionOpenTasks = submissionOpen
+    .filter((task) => task.submissionCount > freshOpportunityMaximumSubmissions)
+    .length;
+  const expiredPitchEntryTasks = tasks.filter((task) =>
+    task.mode === "pitch" &&
+    task.status === "open" &&
+    task.pitchDeadline !== null &&
+    Date.parse(task.pitchDeadline) <= nowMs
+  ).length;
   return {
     open_tasks: tasks.length,
     api_escrow_backed_open_tasks: tasks.length,
@@ -480,9 +551,15 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
     unassigned_unexpired_reward_usdc: atomicToDecimal(submissionOpenReward),
     exact_candidates: candidates,
     exact_candidate_count: candidates.length,
+    fresh_low_competition_candidates: freshLowCompetitionCandidates,
+    fresh_low_competition_candidate_count: freshLowCompetitionCandidates.length,
+    saturated_submission_open_tasks: saturatedSubmissionOpenTasks,
+    expired_pitch_entry_tasks: expiredPitchEntryTasks,
     rejected_escrow_non_matches: submissionOpen.length - candidates.length,
     excluded_expired_assigned_or_closed_window: tasks.length - submissionOpen.length,
     funding_rule: "official_open_task_feed_plus_valid_nonzero_reward_and_escrow_tx_hash; API escrow evidence is not independently relabeled as worker revenue",
+    fresh_low_competition_rule:
+      "bounty_mode_plus_open_unassigned_submission_window_plus_non_owner_requester_plus_max_3_submissions_plus_min_5_usdc_net_plus_max_12h_age_plus_min_2h_remaining; candidate requires agent fit and canonical task review before any action",
   };
 }
 

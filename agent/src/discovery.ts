@@ -3,7 +3,7 @@ import { addHttpMethod } from "./bazaar.ts";
 import { SERVICE_REUSE, serviceReuseSchema } from "./reuse.ts";
 
 export const BOUNTY_DISCOVERY_DESCRIPTION =
-  "Should I work on this GitHub issue? Bounty eligibility and claimability preflight for one public issue. Checks canonical status, whether already assigned or claimed, soft locks, transfer-safe Algora records, Lightning Bounties secured versus reclaimable sats, trusted funding, withdrawn or non-cash rewards, linked source issues and PRs, attempt crowding, and AI-use rules. Returns AVOID, CAUTION, or VIABLE with public evidence, bounded newest windows, and truncation.";
+  "Should I work on this GitHub issue? Bounty eligibility and claimability preflight for one public issue. Checks canonical status, whether already assigned or claimed, soft locks, transfer-safe funding records, linked source issues and PRs, attempt crowding, AI-use rules, human eligibility, live participation, and required external capabilities. Returns AVOID, CAUTION, or VIABLE with public evidence, bounded newest windows, and truncation.";
 
 export const exampleVerdict = {
   product: "BountyVerdict",
@@ -94,6 +94,11 @@ export const exampleVerdict = {
       },
     ],
   },
+  task_requirements: {
+    agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+    blockers: [],
+    capability_requirements: [],
+  },
   reward: {
     state: "WITHDRAWN",
     verification: "NONE",
@@ -132,6 +137,7 @@ export const exampleVerdict = {
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
+    "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions; absence of a blocker is not proof that autonomous completion is possible.",
   ],
 };
 
@@ -189,6 +195,49 @@ export const outputSchema = {
         },
       },
       required: ["ai_use", "documents"],
+    },
+    task_requirements: {
+      type: "object",
+      properties: {
+        agent_execution: {
+          type: "string",
+          enum: ["BLOCKED", "CAPABILITY_REVIEW_REQUIRED", "NO_EXPLICIT_BLOCKER_FOUND"],
+        },
+        blockers: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              category: {
+                type: "string",
+                enum: [
+                  "HUMAN_ELIGIBILITY_OR_IDENTITY",
+                  "SYNCHRONOUS_HUMAN_PARTICIPATION",
+                  "AI_AGENT_EXCLUDED",
+                ],
+              },
+              source: { type: "string", enum: ["issue_body", "maintainer_comment"] },
+              evidence_url: { type: "string" },
+            },
+            required: ["category", "source", "evidence_url"],
+          },
+        },
+        capability_requirements: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "ACCOUNT_OR_REGISTRATION",
+              "API_KEY_OR_PROVIDER_DATA",
+              "DEMO_VIDEO",
+              "PUBLIC_SOCIAL_POSTING_OR_ENGAGEMENT",
+              "SPECIALIZED_HARDWARE",
+              "GATED_PLATFORM_VALIDATION",
+            ],
+          },
+        },
+      },
+      required: ["agent_execution", "blockers", "capability_requirements"],
     },
     reward: {
       type: "object",
@@ -256,6 +305,7 @@ export const outputSchema = {
     "issue",
     "signals",
     "contribution_policy",
+    "task_requirements",
     "reward",
     "linked_source",
     "coverage",
@@ -385,6 +435,11 @@ const portfolioAssignedVerdict = {
       },
     ],
   },
+  task_requirements: {
+    agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+    blockers: [],
+    capability_requirements: [],
+  },
   reward: {
     state: "UNVERIFIED",
     verification: "UNVERIFIED",
@@ -423,6 +478,7 @@ const portfolioAssignedVerdict = {
     "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
     "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
     "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
+    "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions; absence of a blocker is not proof that autonomous completion is possible.",
   ],
 };
 
@@ -472,6 +528,11 @@ export const portfolioDiscoveryExample = {
       hard_stop: true,
     }],
     contribution_policy: { ai_use: "NO_EXPLICIT_RULE_FOUND", documents: [] },
+    task_requirements: {
+      agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+      blockers: [],
+      capability_requirements: [],
+    },
     reward: {
       state: "WITHDRAWN",
       verification: "NONE",

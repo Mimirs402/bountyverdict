@@ -37,6 +37,7 @@
     "agentmrr:reconcile-release": "node --experimental-strip-types scripts/reconcile-agentmrr-code-release.ts",
     "agentmrr:release-current": "node --experimental-strip-types scripts/release-agentmrr-current.ts",
     "demand:watch": "node --experimental-strip-types scripts/demand-watch.ts",
+    "opportunity:agent": "node --experimental-strip-types scripts/opportunity-agent-workflow.ts",
     "taskmarket:aibtc-submit": "node --experimental-strip-types scripts/taskmarket-aibtc-submit.ts",
     "clawlancer:work": "node --experimental-strip-types scripts/clawlancer-work.ts",
     "review:daily": "node --experimental-strip-types scripts/daily-review.ts",

@@ -15,6 +15,11 @@ function verdict(url: string, decision: AgentVerdict["verdict"], score: number):
     issue: { url, title: "Issue", state: "open", repository: "acme/widget" },
     signals: [],
     contribution_policy: { ai_use: "NO_EXPLICIT_RULE_FOUND", documents: [] },
+    task_requirements: {
+      agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+      blockers: [],
+      capability_requirements: [],
+    },
     coverage: {
       comments_scanned: 0,
       timeline_events_scanned: 0,

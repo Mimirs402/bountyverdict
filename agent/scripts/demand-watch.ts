@@ -29,12 +29,18 @@ import {
   type TaskmarketTrackedSpecification,
   type TaskmarketTrackedPayload,
 } from "../src/taskmarket-demand.ts";
+import {
+  buildOpportunityTrigger,
+  OPPORTUNITY_MARKER_VERSION,
+} from "../src/opportunity-agent-workflow.ts";
 
 const MOLTJOBS_API = "https://api.moltjobs.io/v1/jobs";
 const OPENJOBS_API = "https://openjobs.bot/api/v1/jobs";
 const BASE_MAINNET_RPC = "https://mainnet.base.org";
 const stateFile = process.env.DEMAND_WATCH_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/demand-watch.json`;
+const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
+  `${homedir()}/.local/state/bountyverdict/opportunity-trigger.json`;
 const timeoutMs = 20_000;
 const maximumResponseBytes = 2_000_000;
 
@@ -327,6 +333,24 @@ const degradedSources = Object.values(statuses).filter(({ error }) => error !== 
 const trackedRefreshed = trackedDecision.due &&
   statuses.taskmarket_tracked.error === null &&
   statuses.taskmarket_tracked.last_good_at === checkedAt;
+const previousRememberedOpportunityFingerprints = previous?.opportunity_event_loop &&
+  typeof previous.opportunity_event_loop === "object" &&
+  !Array.isArray(previous.opportunity_event_loop)
+  ? (previous.opportunity_event_loop as JsonRecord).triggered_opportunity_fingerprints ??
+    (previous.opportunity_event_loop as JsonRecord).triggered_task_ids
+  : undefined;
+const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
+  statuses.taskmarket_inventory.last_good_at === checkedAt;
+const opportunityEvent = buildOpportunityTrigger(
+  taskmarketInventoryFresh
+    ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
+    : [],
+  previousRememberedOpportunityFingerprints,
+  checkedAt,
+);
+if (opportunityEvent.trigger) {
+  await atomicWrite(opportunityTriggerFile, `${JSON.stringify(opportunityEvent.trigger, null, 2)}\n`);
+}
 const state = {
   schema_version: 2,
   checked_at: checkedAt,
@@ -335,6 +359,21 @@ const state = {
   errors: degradedSources,
   degraded_sources: degradedSources,
   source_status: statuses,
+  opportunity_event_loop: {
+    marker_version: OPPORTUNITY_MARKER_VERSION,
+    inventory_fresh: taskmarketInventoryFresh,
+    observed_candidates: (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count,
+    eligible_candidates: taskmarketInventoryFresh
+      ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count
+      : 0,
+    emitted_new_trigger: opportunityEvent.trigger !== null,
+    trigger_id: opportunityEvent.trigger?.trigger_id || null,
+    suppressed_reason: taskmarketInventoryFresh ? null : "taskmarket_inventory_not_fresh",
+    triggered_opportunity_fingerprints: opportunityEvent.remembered_opportunity_fingerprints,
+    trigger_contract_file: opportunityTriggerFile,
+    workflow_scope: "agent_fit_review_and_local_solution_only",
+    external_actions_enabled: false,
+  },
   sources: {
     moltjobs,
     openjobs,
@@ -369,6 +408,14 @@ console.log(JSON.stringify({
     moltjobs: (moltjobs as JsonRecord).exact_candidate_count,
     openjobs: (openjobs as JsonRecord).exact_candidate_count,
     taskmarket: (taskmarketInventory as JsonRecord).exact_candidate_count,
+  },
+  taskmarket_opportunity_event_loop: {
+    inventory_fresh: taskmarketInventoryFresh,
+    eligible_candidates: taskmarketInventoryFresh
+      ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count
+      : 0,
+    emitted_new_trigger: opportunityEvent.trigger !== null,
+    trigger_id: opportunityEvent.trigger?.trigger_id || null,
   },
   taskmarket_tracked: {
     attempted: trackedDecision.due,

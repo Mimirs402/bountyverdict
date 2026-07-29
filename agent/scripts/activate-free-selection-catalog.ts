@@ -27,7 +27,7 @@ if (missing.length) throw new Error(`Missing free catalog activation coordinates
 const ledgerPath = process.env.TRUSTED_FUNNEL_HISTORY_FILE ||
   `${homedir()}/.local/state/bountyverdict/funnel-trusted-epochs.json`;
 const activationPath = process.env.FREE_SELECTION_CATALOG_EXPERIMENT_ACTIVATION_FILE ||
-  `${homedir()}/.config/bountyverdict/free-selection-catalog-v1.activation.json`;
+  `${homedir()}/.config/bountyverdict/free-selection-catalog-v2.activation.json`;
 
 const ledger = await readPrivateJson(ledgerPath);
 if (!ledger) throw new Error("Trusted funnel epoch ledger is missing.");

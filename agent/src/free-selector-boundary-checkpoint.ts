@@ -4,12 +4,14 @@ import {
 } from "./funnel-epoch.ts";
 import { loadFunnelSnapshot } from "./funnel-telemetry.ts";
 import {
+  type DescriptionExperimentId,
   FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
   updateTaskLeadingDescriptionExperiment,
 } from "./task-leading-description-experiment.ts";
 
 export type FreeSelectorBoundaryCheckpointInput = {
+  experimentId?: DescriptionExperimentId;
   observedAt: string;
   funnelState: unknown;
   trustedBaseline: unknown;
@@ -35,6 +37,7 @@ function record(value: unknown, label: string): Record<string, any> {
 export function checkpointFreeSelectorBoundary(
   input: FreeSelectorBoundaryCheckpointInput,
 ): FreeSelectorBoundaryCheckpoint {
+  const experimentId = input.experimentId || FREE_SELECTION_ROUTER_EXPERIMENT_ID;
   if (!Number.isFinite(Date.parse(input.observedAt))) {
     throw new Error("Free selector boundary observation time is invalid.");
   }
@@ -44,7 +47,7 @@ export function checkpointFreeSelectorBoundary(
   if (!baseline?.mcp) throw new Error("Free selector boundary trusted MCP baseline is missing.");
   const activation = parseTaskLeadingDescriptionActivation(
     input.activation,
-    FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+    experimentId,
   );
   if (!activation) throw new Error("Free selector boundary activation is missing.");
 
@@ -70,7 +73,7 @@ export function checkpointFreeSelectorBoundary(
     rotation.activated_at === activation.epoch_activated_at;
   const cleanDelta = trustedMcpDelta(funnel, baseline.mcp).buyer_candidate_totals;
   const experiment = updateTaskLeadingDescriptionExperiment({
-    experimentId: FREE_SELECTION_ROUTER_EXPERIMENT_ID,
+    experimentId,
     observedAt: input.observedAt,
     activation,
     currentEpochId: Number(ledger.active_epoch_id),

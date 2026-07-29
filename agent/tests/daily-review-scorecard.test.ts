@@ -121,6 +121,48 @@ test("scorecard stays bounded and derives buyer counters with owner exclusions",
   assert.ok(Buffer.byteLength(JSON.stringify(scorecard)) <= DAILY_REVIEW_SCORECARD_MAX_BYTES);
 });
 
+test("fresh source evidence clears stale snapshot alerts and prefers the clean catalog checkpoint", () => {
+  const staleDistribution = {
+    ...distribution(),
+    healthy: false,
+    errors: [
+      "Functional canary state is stale (543 minutes old).",
+      "PayanAgent: Payan demand capture state is stale.",
+    ],
+  };
+  const scorecard = buildDailyReviewScorecard({
+    distribution: staleDistribution,
+    functional: { ...functional(), checked_at: now },
+    funnel: snapshot(),
+    payan: { checked_at: now },
+    demand: { errors: [] },
+    catalogExperiment: {
+      experiment_id: "mcp-free-selection-catalog-v2",
+      state: {
+        id: "mcp-free-selection-catalog-v2",
+        status: "running_clean_epoch",
+        decision: "awaiting_25_eligible_tools_list_events",
+        eligible_delta: {
+          selection_preview: 0,
+          payment_required: 0,
+          paid_success: 0,
+        },
+      },
+    },
+  }, now);
+  assert.equal(scorecard.healthy, true);
+  assert.equal(scorecard.reliability.monitor_healthy, true);
+  assert.deepEqual(scorecard.reliability.monitor_errors, []);
+  assert.deepEqual(scorecard.experiment, {
+    name: "mcp-free-selection-catalog-v2",
+    status: "running_clean_epoch",
+    decision: "awaiting_25_eligible_tools_list_events",
+    selection_preview: 0,
+    payment_required: 0,
+    paid_success: 0,
+  });
+});
+
 test("healthy baseline and immaterial reach growth skip Codex", () => {
   const firstSnapshot = snapshot();
   for (let index = 0; index < 25; index += 1) {

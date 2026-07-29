@@ -21,6 +21,7 @@ export type DailyReviewState = {
   taskmarket?: unknown;
   payan?: unknown;
   clawlancer?: unknown;
+  catalogExperiment?: unknown;
 };
 
 export type DailyReviewScorecard = {
@@ -261,7 +262,7 @@ export function buildDailyReviewScorecard(
   const functionalChecks = Array.isArray(functional.checks) ? functional.checks : [];
   const mcpContract = object(functional.mcp_contract);
   const mcpChecks = Array.isArray(mcpContract.checks) ? mcpContract.checks : [];
-  const monitorErrors = boundedStrings(distribution.errors);
+  const rawMonitorErrors = boundedStrings(distribution.errors);
 
   const rawFunnel = loadFunnelSnapshot(input.funnel, generatedAt);
   const funnelProvenance = rawFunnel
@@ -281,10 +282,14 @@ export function buildDailyReviewScorecard(
       distributionFunnel.trusted_mcp_buyer_candidate ||
       distributionFunnel.mcp_buyer_candidate,
     );
-  const experimentState = object(distributionFunnel.mcp_free_selection_router_experiment);
+  const catalogCheckpoint = object(object(input.catalogExperiment).state);
+  const experimentState = Object.keys(catalogCheckpoint).length
+    ? catalogCheckpoint
+    : object(distributionFunnel.mcp_free_selection_catalog_experiment ||
+      distributionFunnel.mcp_free_selection_router_experiment);
   const experimentDelta = object(experimentState.eligible_delta || experimentState.delta);
   const experiment = Object.keys(experimentState).length ? {
-    name: safeString(experimentState.experiment_id) || "free_selection_router_v1",
+    name: safeString(experimentState.id || experimentState.experiment_id) || "free_selection_router_v1",
     status: safeString(experimentState.status),
     decision: safeString(experimentState.decision),
     selection_preview: safeCount(experimentDelta.selection_preview),
@@ -309,12 +314,25 @@ export function buildDailyReviewScorecard(
   const taskmarket = object(input.taskmarket);
   const payan = object(input.payan);
   const clawlancer = object(input.clawlancer);
+  const freshWithin = (value: unknown, maxAgeMs: number): boolean => {
+    if (typeof value !== "string") return false;
+    const age = Date.parse(generatedAt) - Date.parse(value);
+    return Number.isFinite(age) && age >= 0 && age <= maxAgeMs;
+  };
+  const functionalFresh = functional.healthy === true &&
+    freshWithin(functional.checked_at, 8 * 60 * 60 * 1_000);
+  const payanFresh = freshWithin(payan.checked_at, 60 * 60 * 1_000);
+  const monitorErrors = rawMonitorErrors.filter((error) =>
+    !(functionalFresh && /^Functional canary state is stale \(\d+ minutes old\)\.$/.test(error)) &&
+    !(payanFresh && error === "PayanAgent: Payan demand capture state is stale.")
+  );
   const githubUpdates = compactGithubDigest(input.githubDigest);
   const demandErrors = Array.isArray(demand.errors)
     ? demand.errors.length
     : typeof demand.errors === "number" ? safeCount(demand.errors) : null;
 
-  const monitorHealthy = distribution.healthy === true;
+  const monitorHealthy = distribution.healthy === true ||
+    (distribution.healthy === false && rawMonitorErrors.length > 0 && monitorErrors.length === 0);
   const functionalHealthy = functional.healthy === true;
   const mcpContractHealthy = mcpContract.healthy === true &&
     mcpContract.payment_or_signing_attempted === false;

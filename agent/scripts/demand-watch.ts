@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -30,9 +30,10 @@ import {
   type TaskmarketTrackedPayload,
 } from "../src/taskmarket-demand.ts";
 import {
-  buildOpportunityTrigger,
   OPPORTUNITY_MARKER_VERSION,
+  parseOpportunityTrigger,
 } from "../src/opportunity-agent-workflow.ts";
+import { coordinateOpportunityTrigger } from "../src/opportunity-trigger-coordination.ts";
 
 const MOLTJOBS_API = "https://api.moltjobs.io/v1/jobs";
 const OPENJOBS_API = "https://openjobs.bot/api/v1/jobs";
@@ -43,6 +44,7 @@ const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
   `${homedir()}/.local/state/bountyverdict/opportunity-trigger.json`;
 const timeoutMs = 20_000;
 const maximumResponseBytes = 2_000_000;
+const maximumOpportunityTriggerBytes = 256 * 1024;
 
 type JsonRecord = Record<string, any>;
 
@@ -65,6 +67,22 @@ async function readPreviousState(): Promise<JsonRecord | null> {
       throw new Error("Previous demand-watch state is incompatible.");
     }
     return state;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function pendingOpportunityTriggerId(): Promise<string | null> {
+  try {
+    const metadata = await lstat(opportunityTriggerFile);
+    const expectedUid = process.getuid?.() ?? -1;
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== expectedUid ||
+      (metadata.mode & 0o777) !== 0o600 || metadata.size < 2 ||
+      metadata.size > maximumOpportunityTriggerBytes) {
+      throw new Error("Pending opportunity trigger must be a bounded private owner-owned file.");
+    }
+    return parseOpportunityTrigger(JSON.parse(await readFile(opportunityTriggerFile, "utf8")) as unknown).trigger_id;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
@@ -341,16 +359,18 @@ const previousRememberedOpportunityFingerprints = previous?.opportunity_event_lo
   : undefined;
 const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
   statuses.taskmarket_inventory.last_good_at === checkedAt;
-const opportunityEvent = buildOpportunityTrigger(
-  taskmarketInventoryFresh
+const pendingTriggerId = await pendingOpportunityTriggerId();
+const opportunityEvent = await coordinateOpportunityTrigger({
+  candidates: taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
     : [],
-  previousRememberedOpportunityFingerprints,
+  rememberedOpportunityFingerprints: previousRememberedOpportunityFingerprints,
   checkedAt,
-);
-if (opportunityEvent.trigger) {
-  await atomicWrite(opportunityTriggerFile, `${JSON.stringify(opportunityEvent.trigger, null, 2)}\n`);
-}
+  pendingTriggerId,
+  writeTrigger: async (trigger) => {
+    await atomicWrite(opportunityTriggerFile, `${JSON.stringify(trigger, null, 2)}\n`);
+  },
+});
 const state = {
   schema_version: 2,
   checked_at: checkedAt,
@@ -368,7 +388,12 @@ const state = {
       : 0,
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
-    suppressed_reason: taskmarketInventoryFresh ? null : "taskmarket_inventory_not_fresh",
+    pending_trigger_id: pendingTriggerId,
+    suppressed_reason: !taskmarketInventoryFresh
+      ? "taskmarket_inventory_not_fresh"
+      : pendingTriggerId
+        ? "pending_opportunity_workflow"
+        : null,
     triggered_opportunity_fingerprints: opportunityEvent.remembered_opportunity_fingerprints,
     trigger_contract_file: opportunityTriggerFile,
     workflow_scope: "agent_fit_review_and_local_solution_only",

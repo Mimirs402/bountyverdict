@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "experiment_id": "mcp-catalog-free-proof-v1",
+  "release_commit": "pending-reviewed-release-commit",
+  "production_activation_commit": "pending-production-activation-commit",
+  "production_activated_at": "1970-01-01T00:00:00.000Z",
+  "drain_rotation_id": "pending_catalog_free_proof_rotation",
+  "measurement_epoch_id": 0,
+  "epoch_activated_at": "1970-01-01T00:00:00.000Z",
+  "target_tools_list": 25
+}

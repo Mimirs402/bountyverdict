@@ -20,6 +20,8 @@
     "experiment:activate-free-router": "ACTIVATE_FREE_SELECTION_ROUTER_EXPERIMENT=YES node --experimental-strip-types scripts/activate-free-selection-router.ts",
     "experiment:activate-free-catalog": "ACTIVATE_FREE_SELECTION_CATALOG_EXPERIMENT=YES node --experimental-strip-types scripts/activate-free-selection-catalog.ts",
     "experiment:checkpoint-free-catalog": "node --experimental-strip-types scripts/check-free-selection-catalog-boundary.ts",
+    "experiment:activate-catalog-free-proof": "ACTIVATE_CATALOG_FREE_PROOF_EXPERIMENT=YES node --experimental-strip-types scripts/activate-catalog-free-proof.ts",
+    "experiment:checkpoint-catalog-free-proof": "node --experimental-strip-types scripts/check-catalog-free-proof-boundary.ts",
     "nominate:github-mcp": "node --env-file-if-exists=$HOME/.config/bountyverdict/github-nomination.env --experimental-strip-types scripts/send-github-mcp-nomination.ts",
     "funnel:tail": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/cloudflare-funnel-tail.ts",
     "funnel:epoch": "node --experimental-strip-types scripts/start-funnel-epoch.ts",

@@ -32,6 +32,18 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /freeRoute\?\.next_call\?\.tool_name !== "diagnose_github_actions_run"/);
   assert.match(workflow, /freeRoute\?\.total_price_usdc !== "0\.04"/);
   assert.match(workflow, /freeRoute\?\.selector_call_payment_required !== false/);
+  assert.match(workflow, /Inspect a representative result before paying:/);
+  assert.match(workflow, /Exact authorization cap:/);
+  for (const [samplePath, price] of [
+    ["/api/sample", "0.05"],
+    ["/api/portfolio/sample", "0.40"],
+    ["/api/harness/sample", "0.03"],
+    ["/api/run/sample", "0.04"],
+    ["/api/flake/sample", "0.07"],
+    ["/api/mcp-drift/sample", "0.02"],
+  ]) {
+    assert.match(workflow, new RegExp(`${samplePath.replaceAll("/", "\\/")}.*${price.replace(".", "\\.")}`));
+  }
   assert.match(workflow, /freeRoute\?\.next_call\?\.payment_required !== true/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.authorization_required_before_settlement !== true/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.unsigned_call_action !== "inspect_quote_then_authorize_or_stop"/);

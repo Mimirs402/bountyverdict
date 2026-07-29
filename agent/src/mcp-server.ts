@@ -118,6 +118,11 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   check_mcp_tool_drift: "Will upgrading to this complete MCP tools/list break my agent or weaken declared safety hints? Compares caller-supplied baseline and current snapshots; never fetches or invokes tools.",
 };
 
+function catalogToolDescription(toolName: ToolName, origin: string): string {
+  const product = PRODUCT_CATALOG[TOOL_PRODUCT[toolName]];
+  return `${TOOL_DESCRIPTIONS[toolName]} Inspect a representative result before paying: ${origin}${product.samplePath}. Exact authorization cap: ${product.priceUsd.slice(1)} USDC.`;
+}
+
 const issueUrlSchema = z.string()
   .regex(GITHUB_ISSUE_URL_PATTERN)
   .describe(ISSUE_URL_DESCRIPTION);
@@ -423,7 +428,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     return jsonResult(publicRoute);
   });
 
-  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: TOOL_DESCRIPTIONS.check_github_bounty, inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {
+  server.registerTool("check_github_bounty", { title: "Check GitHub bounty claimability risk", description: catalogToolDescription("check_github_bounty", origin), inputSchema: z.object({ issue_url: issueUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_github_bounty, annotations: githubAnnotations }, async ({ issue_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeIssueUrl(issue_url); } catch (error) {
       emitMcpEvent("validation_error", "single", request, "invalid_issue_url");
@@ -435,7 +440,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: TOOL_DESCRIPTIONS.rank_github_bounties, inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.rank_github_bounties, annotations: githubAnnotations }, async ({ issue_urls }, extra) => {
+  server.registerTool("rank_github_bounties", { title: "Choose the best GitHub bounty", description: catalogToolDescription("rank_github_bounties", origin), inputSchema: z.object({ issue_urls: portfolioUrlsSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.rank_github_bounties, annotations: githubAnnotations }, async ({ issue_urls }, extra) => {
     let normalized: string[];
     try { normalized = validatePortfolioUrls(issue_urls); } catch (error) {
       emitMcpEvent("validation_error", "portfolio", request, "invalid_portfolio");
@@ -447,7 +452,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: TOOL_DESCRIPTIONS.audit_agent_harness, inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.audit_agent_harness, annotations: githubAnnotations }, async ({ repo_url }, extra) => {
+  server.registerTool("audit_agent_harness", { title: "Audit coding-agent repository instructions", description: catalogToolDescription("audit_agent_harness", origin), inputSchema: z.object({ repo_url: repositoryUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.audit_agent_harness, annotations: githubAnnotations }, async ({ repo_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRepositoryUrl(repo_url); } catch (error) {
       emitMcpEvent("validation_error", "harness", request, "invalid_repository_url");
@@ -459,7 +464,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: TOOL_DESCRIPTIONS.diagnose_github_actions_run, inputSchema: z.object({ run_url: runUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.diagnose_github_actions_run, annotations: githubAnnotations }, async ({ run_url }, extra) => {
+  server.registerTool("diagnose_github_actions_run", { title: "Find why a GitHub Actions run failed", description: catalogToolDescription("diagnose_github_actions_run", origin), inputSchema: z.object({ run_url: runUrlSchema }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.diagnose_github_actions_run, annotations: githubAnnotations }, async ({ run_url }, extra) => {
     let normalized: string;
     try { normalized = normalizeRunUrl(run_url); } catch (error) {
       emitMcpEvent("validation_error", "run", request, "invalid_run_or_attempt");
@@ -471,7 +476,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("classify_github_actions_flake", { title: "Decide whether to retry failed GitHub Actions", description: TOOL_DESCRIPTIONS.classify_github_actions_flake, inputSchema: z.object({
+  server.registerTool("classify_github_actions_flake", { title: "Decide whether to retry failed GitHub Actions", description: catalogToolDescription("classify_github_actions_flake", origin), inputSchema: z.object({
     run_url: runUrlSchema,
     attempt: z.number().int().positive().optional().describe(FLAKE_ATTEMPT_DESCRIPTION),
   }).strict(), outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.classify_github_actions_flake, annotations: githubAnnotations }, async ({ run_url, attempt }, extra) => {
@@ -501,7 +506,7 @@ async function createMcpServer(env: McpEnvironment, origin: string, request: Req
     });
   });
 
-  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: TOOL_DESCRIPTIONS.check_mcp_tool_drift, inputSchema: mcpDriftLiveInputSchema, outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_mcp_tool_drift, annotations: closedWorldAnnotations }, async (args, extra) => {
+  server.registerTool("check_mcp_tool_drift", { title: "Check whether an MCP tools update is breaking", description: catalogToolDescription("check_mcp_tool_drift", origin), inputSchema: mcpDriftLiveInputSchema, outputSchema: MCP_SUCCESS_OUTPUT_SCHEMAS.check_mcp_tool_drift, annotations: closedWorldAnnotations }, async (args, extra) => {
     let result: Awaited<ReturnType<typeof parseAndAnalyzeMcpDrift>>;
     const normalized = { contract_version: args.contract_version, subject: args.subject, annotation_source_trust: args.annotation_source_trust, baseline: args.baseline, current: args.current };
     try { result = await parseAndAnalyzeMcpDrift(JSON.stringify(normalized)); }

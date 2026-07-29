@@ -1,0 +1,12 @@
+[Unit]
+Description=Checkpoint the clean catalog free-proof experiment every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=bountyverdict-catalog-free-proof-boundary.service
+
+[Install]
+WantedBy=timers.target

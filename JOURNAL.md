@@ -1542,3 +1542,33 @@ Realistic owner-run Bazaar searches found six products at strong ranks, but Skil
 SkillVerdict now stages the same strict canonical `POST /api/skill` JSON transport used by the six indexed products. It validates exactly `repo_url` and `skill_path` before issuing HTTP 402, preserves the normalized body and advisory hash across the signed retry, and publishes a strict Bazaar POST schema. The existing GET query transport remains payable but deprecated and no longer advertises a second Bazaar declaration.
 
 All **607 / 607** Worker tests, **208 / 208** public tests, TypeScript checking, synchronized public contracts, and a dry Worker deployment pass. No production deployment, self-payment, marketplace mutation, bounty submission, client contact, or revenue claim occurred.
+
+## 2026-07-29 — Paid tool descriptions expose free proof before authorization
+
+- Genuine external purchases: **0 / 10**
+- Customer revenue: **$0.00**
+- Completed clean baseline: **75 tools/list events, 0 downstream tool calls**
+- Experiment boundary: **25 fresh eligible tools/list events**
+
+Three completed clean cohorts and the first post-v1.1.15 clean observation all
+stopped after MCP catalog enumeration. No eligible agent called the free
+selector or any paid tool, so checkout and paid-result satisfaction still have
+no clean buyer evidence. Directory crawlers and owner audits remain excluded.
+
+Each of the six paid MCP tool descriptions now keeps its task-leading first
+sentence and adds the canonical free representative-result URL plus the exact
+USDC authorization cap. An agent can therefore inspect concrete output and
+price directly from `tools/list` without first invoking the unused selector.
+Handlers, schemas, prices, products, safety annotations, validation, and
+settlement behavior are unchanged.
+
+The isolated `mcp-catalog-free-proof-v1` measurement starts only after a
+reviewed production activation and exact fresh funnel rotation. A local
+five-minute boundary check freezes the first report at or above 25 eligible
+non-owner `tools/list` events before audited marketplace retrieval resumes.
+The primary signal is any valid paid-tool invocation reaching an unsigned
+payment requirement; sample visits, selector calls, validation errors, payment
+presentations, genuine settlements, and revenue remain separately classified.
+Aggregate telemetry cannot prove a same-agent causal journey. No self-install,
+self-payment, synthetic traffic, marketplace mutation, bounty submission, or
+revenue claim occurred.

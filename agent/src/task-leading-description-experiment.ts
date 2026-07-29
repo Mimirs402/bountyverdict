@@ -4,6 +4,7 @@ export const AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID = "mcp-agent-question-desc
 export const FREE_SELECTION_ROUTER_EXPERIMENT_ID = "mcp-free-selection-router-v1";
 export const FREE_SELECTION_CATALOG_V1_EXPERIMENT_ID = "mcp-free-selection-catalog-v1";
 export const FREE_SELECTION_CATALOG_EXPERIMENT_ID = "mcp-free-selection-catalog-v2";
+export const CATALOG_FREE_PROOF_EXPERIMENT_ID = "mcp-catalog-free-proof-v1";
 export const TASK_LEADING_DESCRIPTION_TARGET_TOOLS_LIST = 25;
 
 export type DescriptionExperimentId =
@@ -12,7 +13,8 @@ export type DescriptionExperimentId =
   | typeof AGENT_QUESTION_DESCRIPTION_EXPERIMENT_ID
   | typeof FREE_SELECTION_ROUTER_EXPERIMENT_ID
   | typeof FREE_SELECTION_CATALOG_V1_EXPERIMENT_ID
-  | typeof FREE_SELECTION_CATALOG_EXPERIMENT_ID;
+  | typeof FREE_SELECTION_CATALOG_EXPERIMENT_ID
+  | typeof CATALOG_FREE_PROOF_EXPERIMENT_ID;
 
 export const TASK_LEADING_DESCRIPTION_COUNTER_KEYS = Object.freeze([
   "initialize",
@@ -174,9 +176,16 @@ function decisionFor(
   const freeRouter = experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID ||
     experimentId === FREE_SELECTION_CATALOG_V1_EXPERIMENT_ID ||
     experimentId === FREE_SELECTION_CATALOG_EXPERIMENT_ID;
+  const catalogFreeProof = experimentId === CATALOG_FREE_PROOF_EXPERIMENT_ID;
   if (delta.paid_success > 0) return {
-    decision: freeRouter ? "paid_conversion_observed_after_free_router_release" : "paid_conversion_observed_without_task_copy_attribution",
-    interpretation: freeRouter
+    decision: catalogFreeProof
+      ? "paid_conversion_observed_after_catalog_free_proof"
+      : freeRouter
+        ? "paid_conversion_observed_after_free_router_release"
+        : "paid_conversion_observed_without_task_copy_attribution",
+    interpretation: catalogFreeProof
+      ? "A paid success occurred in the bounded catalog free-proof sample; aggregate counters cannot establish that the same agent inspected a linked sample first."
+      : freeRouter
       ? "A paid success occurred in the bounded post-router sample; aggregate counters cannot establish that the same agent first used the free selector."
       : "A paid success occurred in the post-release sample; aggregate counters cannot attribute it to task-leading descriptions.",
   };
@@ -193,14 +202,26 @@ function decisionFor(
     interpretation: "A valid call reached a capacity gate; copy is not the nearest observed blocker.",
   };
   if (delta.payment_required > 0) return {
-    decision: freeRouter ? "paid_tool_interest_observed_after_free_router_release" : "known_valid_tool_interest_observed_without_task_copy_attribution",
-    interpretation: freeRouter
+    decision: catalogFreeProof
+      ? "valid_tool_interest_observed_after_catalog_free_proof"
+      : freeRouter
+        ? "paid_tool_interest_observed_after_free_router_release"
+        : "known_valid_tool_interest_observed_without_task_copy_attribution",
+    interpretation: catalogFreeProof
+      ? "A valid paid-tool invocation reached its unsigned payment requirement in the bounded catalog free-proof sample; aggregate telemetry cannot prove the linked sample caused the invocation."
+      : freeRouter
       ? "A paid tool call reached payment in the bounded post-router sample; aggregate telemetry cannot establish a same-agent selector-to-paid-tool journey."
       : "A known valid tool call reached payment, but aggregate telemetry cannot attribute selection to task-leading descriptions.",
   };
   if (delta.selection_preview > 0) return {
-    decision: freeRouter ? "free_selection_preview_observed" : "free_selection_preview_observed_without_task_copy_attribution",
-    interpretation: freeRouter
+    decision: catalogFreeProof
+      ? "free_selection_preview_observed_after_catalog_free_proof"
+      : freeRouter
+        ? "free_selection_preview_observed"
+        : "free_selection_preview_observed_without_task_copy_attribution",
+    interpretation: catalogFreeProof
+      ? "The existing free selector was called during the bounded catalog free-proof sample; this is downstream selection, not payment intent, a purchase, or revenue."
+      : freeRouter
       ? "The free router was called, proving selection beyond tools/list in the bounded clean epoch; this is not payment intent, a purchase, or revenue."
       : "The free router was called, proving task selection beyond tools/list; aggregate telemetry cannot attribute that choice to a particular description exposure.",
   };
@@ -325,6 +346,8 @@ export function updateTaskLeadingDescriptionExperiment(
     observation_rule:
       experimentId === TASK_LEADING_DESCRIPTION_EXPERIMENT_ID
         ? "first_monitor_report_at_or_above_25_eligible_task_leading_description_tools_list_events"
+        : experimentId === CATALOG_FREE_PROOF_EXPERIMENT_ID
+          ? "first_monitor_report_at_or_above_25_eligible_catalog_free_proof_tools_list_events"
         : experimentId === FREE_SELECTION_ROUTER_EXPERIMENT_ID ||
             experimentId === FREE_SELECTION_CATALOG_V1_EXPERIMENT_ID ||
             experimentId === FREE_SELECTION_CATALOG_EXPERIMENT_ID

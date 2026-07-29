@@ -1244,6 +1244,30 @@ test("the free-selector boundary gate freezes locally before rearming audited di
   assert.match(script, /writeMeasurementExperimentCheckpoint/);
 });
 
+test("the catalog free-proof boundary remains local until its exact clean N=25 sample freezes", async () => {
+  const [service, timer, boundary, activation, monitor] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-catalog-free-proof-boundary.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-catalog-free-proof-boundary.timer", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/check-catalog-free-proof-boundary.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/activate-catalog-free-proof.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/distribution-monitor.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(service, /ExecCondition=.*scripts\/check-catalog-free-proof-boundary\.ts/);
+  assert.match(service, /ExecStart=.*scripts\/run-audited-monitor\.ts/);
+  assert.ok(service.indexOf("ExecCondition=") < service.indexOf("ExecStart="));
+  assert.match(service, /ExecStartPost=.*enable --now bountyverdict-distribution-monitor\.timer/);
+  assert.match(service, /ExecStartPost=.*disable --now bountyverdict-catalog-free-proof-boundary\.timer/);
+  assert.match(timer, /OnUnitInactiveSec=5min/);
+  assert.match(timer, /Persistent=true/);
+  assert.doesNotMatch(boundary, /\bfetch\(|https?:\/\/|run-audited-monitor|distribution-monitor/);
+  assert.match(boundary, /CATALOG_FREE_PROOF_EXPERIMENT_ID/);
+  assert.match(boundary, /checkpointFreeSelectorBoundary/);
+  assert.match(activation, /activationFromVerifiedFreeSelectionEpoch/);
+  assert.match(activation, /CATALOG_FREE_PROOF_DRAIN_ROTATION_ID/);
+  assert.match(monitor, /mcp_catalog_free_proof_experiment/);
+  assert.match(monitor, /mcp-catalog-free-proof-v1\.json/);
+});
+
 test("the functional canary schedules a fresh run after every timer activation", async () => {
   const timer = await readFile(functionalCanaryTimerUrl, "utf8");
   assert.match(timer, /OnActiveSec=1min/);

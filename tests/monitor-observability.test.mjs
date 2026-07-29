@@ -12,6 +12,9 @@ const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.u
 const paymentSmokeUrl = new URL("../agent/scripts/payment-smoke.ts", import.meta.url);
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const demandTimerUrl = new URL("../ops/systemd/bountyverdict-demand-watch.timer", import.meta.url);
+const opportunityAgentServiceUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.service", import.meta.url);
+const opportunityAgentPathUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.path", import.meta.url);
+const opportunityAgentScriptUrl = new URL("../agent/scripts/opportunity-agent-workflow.ts", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
@@ -1018,6 +1021,30 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(distribution, /trackedSnapshotAt = sourceStatus\.taskmarket_tracked\.last_good_at/);
   assert.match(distribution, /state\.errors !== degradedSources/);
   assert.doesNotMatch(service, /EnvironmentFile/);
+});
+
+test("fresh Taskmarket markers launch one deduplicated guarded agent workflow", async () => {
+  const [watcher, service, path, workflow] = await Promise.all([
+    readFile(demandWatchUrl, "utf8"),
+    readFile(opportunityAgentServiceUrl, "utf8"),
+    readFile(opportunityAgentPathUrl, "utf8"),
+    readFile(opportunityAgentScriptUrl, "utf8"),
+  ]);
+  assert.match(watcher, /buildOpportunityTrigger/);
+  assert.match(watcher, /fresh_low_competition_candidates/);
+  assert.match(watcher, /external_actions_enabled: false/);
+  assert.match(path, /PathChanged=%h\/\.local\/state\/bountyverdict\/opportunity-trigger\.json/);
+  assert.match(path, /Unit=bountyverdict-opportunity-agent\.service/);
+  assert.match(service, /Type=oneshot/);
+  assert.match(service, /NoNewPrivileges=yes/);
+  assert.match(service, /UMask=0077/);
+  assert.match(service, /Nice=10/);
+  assert.match(workflow, /execFileAsync\("codex"/);
+  assert.match(workflow, /"--ephemeral"/);
+  assert.match(workflow, /"workspace-write"/);
+  assert.match(workflow, /"--output-last-message"/);
+  assert.doesNotMatch(workflow, /\bexec\(|shell:\s*true/);
+  assert.doesNotMatch(workflow, /taskmarket.*(?:submit|claim|pitch)|method:\s*["']POST["']/i);
 });
 
 test("Clawlancer delivery and revenue require exact Base escrow evidence", async () => {

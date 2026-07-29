@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the guarded bounty opportunity agent on a new marker
+
+[Path]
+PathChanged=%h/.local/state/bountyverdict/opportunity-trigger.json
+Unit=bountyverdict-opportunity-agent.service
+
+[Install]
+WantedBy=paths.target

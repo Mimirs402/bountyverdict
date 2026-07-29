@@ -42,10 +42,8 @@ const ownerHeaders = {
 const url = new URL(contract.path, baseUrl);
 if (product === "single") url.searchParams.set("issue_url", issueUrl);
 const harnessRepo = process.env.REPO_URL || defaultRepo;
-if (product === "skill") {
-  url.searchParams.set("repo_url", process.env.SKILL_REPO_URL || "https://github.com/coinbase/agentic-wallet-skills");
-  url.searchParams.set("skill_path", process.env.SKILL_PATH || "skills/agentic-wallet");
-}
+const skillRepo = process.env.SKILL_REPO_URL || "https://github.com/coinbase/agentic-wallet-skills";
+const skillPath = process.env.SKILL_PATH || "skills/agentic-wallet";
 const runUrl = process.env.RUN_URL || defaultRun;
 const flakeRunUrl = process.env.FLAKE_RUN_URL || defaultFlakeRun;
 let flakeAttempt: number | undefined;
@@ -62,6 +60,8 @@ const postBody: unknown = product === "portfolio"
     ? { issue_urls: issueUrls }
     : product === "harness"
       ? { repo_url: harnessRepo }
+      : product === "skill"
+        ? { repo_url: skillRepo, skill_path: skillPath }
       : product === "run"
         ? { run_url: runUrl }
         : product === "flake"

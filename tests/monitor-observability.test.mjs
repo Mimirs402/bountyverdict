@@ -894,6 +894,8 @@ test("production payment inspection exercises the Agentic Wallet-compatible Boun
     readFile(distributionUrl, "utf8"),
   ]);
   assert.match(smoke, /if \(product === "single"\) url\.searchParams\.set\("issue_url", issueUrl\)/);
+  assert.doesNotMatch(smoke, /if \(product === "skill"\) \{\s*url\.searchParams\.set/);
+  assert.match(smoke, /product === "skill"\s*\?\s*\{ repo_url: skillRepo, skill_path: skillPath \}/);
   assert.match(smoke, /const expectedMethod = product === "single" \? "GET" : contract\.method/);
   assert.match(smoke, /if \(expectedMethod === "POST" && challenge\.extensions\?\.bazaar\?\.info\?\.input\?\.bodyType !== "json"\)/);
   assert.match(smoke, /maximumChallengeAttempts = workerVersionOverride \? 30 : 1/);

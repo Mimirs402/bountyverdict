@@ -32,6 +32,14 @@ const expectedTaskOpeners = Object.freeze({
   classify_github_actions_flake: /^Is this failed GitHub Actions run flaky/,
   check_mcp_tool_drift: /^Will upgrading to this complete MCP tools\/list break my agent/,
 } as const);
+const expectedPaidProof = Object.freeze({
+  check_github_bounty: ["/api/sample", "0.05"],
+  rank_github_bounties: ["/api/portfolio/sample", "0.40"],
+  audit_agent_harness: ["/api/harness/sample", "0.03"],
+  diagnose_github_actions_run: ["/api/run/sample", "0.04"],
+  classify_github_actions_flake: ["/api/flake/sample", "0.07"],
+  check_mcp_tool_drift: ["/api/mcp-drift/sample", "0.02"],
+} as const);
 
 await execFileAsync("docker", ["build", "--pull", "--tag", image, ".."], {
   timeout: 180_000,
@@ -90,7 +98,20 @@ try {
       tool.description || "",
       expectedTaskOpeners[tool.name as keyof typeof expectedTaskOpeners],
     );
-    assert.doesNotMatch(tool.description || "", /\bx402\b|\bUSDC\b|payment quote|authorized signed retry|https?:\/\//i);
+    assert.doesNotMatch(tool.description || "", /\bx402\b|payment quote|authorized signed retry/i);
+    if (tool.name !== "choose_github_agent_decision") {
+      const description = tool.description || "";
+      const [samplePath, price] = expectedPaidProof[tool.name as keyof typeof expectedPaidProof];
+      if (/Inspect a representative result before paying:/.test(description)) {
+        assert.match(
+          description,
+          new RegExp(`https://bountyverdict-agent-production\\.mimirslab\\.workers\\.dev${samplePath.replaceAll("/", "\\/")}`),
+        );
+        assert.match(description, new RegExp(`Exact authorization cap: ${price.replace(".", "\\.")} USDC\\.$`));
+      } else {
+        assert.doesNotMatch(description, /\bUSDC\b|https?:\/\//i);
+      }
+    }
   }
 } catch (error) {
   if (stderr) console.error(stderr.slice(0, 4_000));

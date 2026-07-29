@@ -6,6 +6,7 @@ import {
   type FreeSelectionRouterReleaseCoordinates,
 } from "../src/free-selection-router-experiment.ts";
 import {
+  CATALOG_FREE_PROOF_EXPERIMENT_ID,
   FREE_SELECTION_CATALOG_EXPERIMENT_ID,
   FREE_SELECTION_ROUTER_EXPERIMENT_ID,
   parseTaskLeadingDescriptionActivation,
@@ -84,6 +85,52 @@ test("zero-argument catalog activation has a distinct immutable experiment ident
     () => parseTaskLeadingDescriptionActivation(activation, FREE_SELECTION_ROUTER_EXPERIMENT_ID),
     /identity is invalid/,
   );
+});
+
+test("catalog free-proof activation has a distinct immutable experiment identity", () => {
+  const activation = activationFromVerifiedFreeSelectionEpoch(
+    ledger,
+    coordinates,
+    CATALOG_FREE_PROOF_EXPERIMENT_ID,
+  );
+  assert.equal(activation?.experiment_id, CATALOG_FREE_PROOF_EXPERIMENT_ID);
+  assert.equal(activation?.measurement_epoch_id, 60);
+  assert.throws(
+    () => parseTaskLeadingDescriptionActivation(activation, FREE_SELECTION_CATALOG_EXPERIMENT_ID),
+    /identity is invalid/,
+  );
+});
+
+test("catalog free-proof experiment classifies the first valid paid-tool invocation", () => {
+  const activation = activationFromVerifiedFreeSelectionEpoch(
+    ledger,
+    coordinates,
+    CATALOG_FREE_PROOF_EXPERIMENT_ID,
+  )!;
+  const counters = {
+    ...zeroTaskLeadingDescriptionCounters(),
+    initialize: 25,
+    tools_list: 25,
+    payment_required: 1,
+  };
+  const result = updateTaskLeadingDescriptionExperiment({
+    experimentId: CATALOG_FREE_PROOF_EXPERIMENT_ID,
+    observedAt: "2026-07-28T11:00:00.000Z",
+    activation,
+    currentEpochId: 60,
+    measurementEligible: true,
+    cleanEpochDelta: counters,
+    trustedBaselineInitializedAt: activatedAt,
+    trustedRotation: ledger.rotation,
+    previous: null,
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.decision, "valid_tool_interest_observed_after_catalog_free_proof");
+  assert.equal(
+    (result.boundary as Record<string, unknown>).observation_rule,
+    "first_monitor_report_at_or_above_25_eligible_catalog_free_proof_tools_list_events",
+  );
+  assert.equal(result.causal_copy_claim, false);
 });
 
 test("free router measurement starts at zero and freezes one bounded selector outcome", () => {

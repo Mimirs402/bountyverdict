@@ -123,11 +123,21 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
     openWorldHint: false,
   });
   const paidTools = body.result.tools.filter((tool: any) => MCP_PAID_TOOL_NAMES.includes(tool.name));
+  const expectedProof = {
+    check_github_bounty: ["single", "0.05"],
+    rank_github_bounties: ["portfolio", "0.40"],
+    audit_agent_harness: ["harness", "0.03"],
+    diagnose_github_actions_run: ["run", "0.04"],
+    classify_github_actions_flake: ["flake", "0.07"],
+    check_mcp_tool_drift: ["mcpdrift", "0.02"],
+  } as const;
   assert.equal(paidTools.length, 6);
   for (const tool of paidTools) {
     assert.match(tool.description, taskLeadingDescriptions[tool.name as keyof typeof taskLeadingDescriptions]);
-    assert.doesNotMatch(tool.description, /\bx402\b|\bUSDC\b|payment quote|authorized signed retry/i);
-    assert.doesNotMatch(tool.description, /https?:\/\//i);
+    const [product, price] = expectedProof[tool.name as keyof typeof expectedProof];
+    assert.match(tool.description, new RegExp(`Inspect a representative result before paying: ${origin.replaceAll(".", "\\.")}${PRODUCT_CATALOG[product].samplePath.replaceAll("/", "\\/")}`));
+    assert.match(tool.description, new RegExp(`Exact authorization cap: ${price.replace(".", "\\.")} USDC\\.$`));
+    assert.doesNotMatch(tool.description, /\bx402\b|payment quote|authorized signed retry/i);
     assert.deepEqual(tool.annotations, {
       readOnlyHint: true,
       destructiveHint: false,

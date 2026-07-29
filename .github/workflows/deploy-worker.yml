@@ -437,6 +437,19 @@ jobs:
           const listed = await rpc(2, "tools/list");
           const expectedNames = ["choose_github_agent_decision", "check_github_bounty", "rank_github_bounties", "audit_agent_harness", "diagnose_github_actions_run", "classify_github_actions_flake", "check_mcp_tool_drift"];
           if (JSON.stringify(listed.result?.tools?.map(({ name }) => name)) !== JSON.stringify(expectedNames)) process.exit(1);
+          const expectedPaidProof = {
+            check_github_bounty: ["/api/sample", "0.05"],
+            rank_github_bounties: ["/api/portfolio/sample", "0.40"],
+            audit_agent_harness: ["/api/harness/sample", "0.03"],
+            diagnose_github_actions_run: ["/api/run/sample", "0.04"],
+            classify_github_actions_flake: ["/api/flake/sample", "0.07"],
+            check_mcp_tool_drift: ["/api/mcp-drift/sample", "0.02"],
+          };
+          for (const tool of listed.result.tools.filter(({ name }) => name !== "choose_github_agent_decision")) {
+            const [samplePath, price] = expectedPaidProof[tool.name] || [];
+            if (!samplePath || !tool.description.includes(`Inspect a representative result before paying: ${api}${samplePath}.`) ||
+                !tool.description.endsWith(`Exact authorization cap: ${price} USDC.`)) process.exit(1);
+          }
           const outputSchemaSizes = listed.result.tools.map(({ outputSchema }) => Buffer.byteLength(JSON.stringify(outputSchema)));
           const descriptionSizes = listed.result.tools.map(({ description }) => Buffer.byteLength(description));
           if (listed.result.tools.some(({ outputSchema }) => outputSchema?.type !== "object" || !Array.isArray(outputSchema.required))) process.exit(1);

@@ -37,6 +37,12 @@ const legacyComment = {
   performed_via_github_app: null,
   user: { id: 136125894, login: "algora-pbc", type: "User" },
 };
+const legacyBotComment = {
+  body: `## 💎 $200 bounty [• Gyroflow](https://algora.io/gyroflow)
+Thank you for contributing to gyroflow/gyroflow!`,
+  performed_via_github_app: null,
+  user: { id: 121443259, login: "algora-pbc[bot]", type: "Bot" },
+};
 
 test("parses a transfer-safe Algora sponsor row and exposes active claims", () => {
   const result = parseAlgoraSponsorPage(
@@ -104,6 +110,35 @@ test("requires immutable legacy actor identity plus the exact console bounty ref
     ...legacyComment,
     performed_via_github_app: { slug: "untrusted" },
   }]), false);
+});
+
+test("recognizes the immutable legacy Algora app bot and still binds the exact issue row", async () => {
+  assert.equal(hasTrustedAlgoraReference([legacyBotComment]), true);
+  assert.equal(hasTrustedAlgoraReference([{
+    ...legacyBotComment,
+    user: { ...legacyBotComment.user, id: 1 },
+  }]), false);
+  const requested: string[] = [];
+  const result = await fetchAlgoraEvidence(
+    [legacyBotComment],
+    { owner: "gyroflow", repo: "gyroflow", number: 150 },
+    { owner: "gyroflow", repo: "gyroflow", number: 150 },
+    async (input) => {
+      requested.push(String(input));
+      return new Response(`<table>${row({
+        id: "clmtxwkem0018lb0ghxnjrmjz",
+        amount: "200",
+        claims: 4,
+        issueUrl: "https://github.com/gyroflow/gyroflow/issues/150",
+      })}</table>`, { headers: { "content-type": "text/html" } });
+    },
+  );
+  assert.deepEqual(requested, ["https://algora.io/gyroflow/bounties?status=open"]);
+  assert.equal(result?.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result?.state, "CLAIMED");
+  assert.equal(result?.amount, 200);
+  assert.equal(result?.claim_count, 4);
+  assert.deepEqual(result?.bounty_ids, ["clmtxwkem0018lb0ghxnjrmjz"]);
 });
 
 test("fetches one exact official sponsor page and binds a submitted pre-transfer route", async () => {

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildBusinessPullRequestReviewEvents,
   buildGithubDigest,
   GITHUB_DIGEST_MAX_EVENTS,
+  mergeGithubDigestEvents,
+  parseBusinessAuthoredOpenPullRequests,
   preserveLatestNonEmptyGithubDigest,
 } from "../src/github-digest.ts";
 
@@ -66,4 +69,83 @@ test("an empty poll retains the latest non-empty digest without changing its fin
   assert.equal(retained.event_count, 1);
   assert.equal(retained.digest_fingerprint, previous.digest_fingerprint);
   assert.equal(retained.checked_at, "2026-07-29T08:00:00.000Z");
+});
+
+test("GitHub digest parses only complete open PR searches authored by the business account", () => {
+  const pullRequests = parseBusinessAuthoredOpenPullRequests({
+    total_count: 1,
+    incomplete_results: false,
+    items: [{
+      number: 10625,
+      state: "open",
+      title: "feat: add BountyVerdict",
+      html_url: "https://github.com/aaif-goose/goose/pull/10625",
+      repository_url: "https://api.github.com/repos/aaif-goose/goose",
+      user: { login: "Mimirs402" },
+      pull_request: { url: "https://api.github.com/repos/aaif-goose/goose/pulls/10625" },
+    }],
+  });
+  assert.deepEqual(pullRequests, [{
+    repository: "aaif-goose/goose",
+    number: 10625,
+    title: "feat: add BountyVerdict",
+    url: "https://github.com/aaif-goose/goose/pull/10625",
+    author: "Mimirs402",
+  }]);
+  assert.throws(() => parseBusinessAuthoredOpenPullRequests({
+    total_count: 1,
+    incomplete_results: true,
+    items: [],
+  }), /incomplete/);
+});
+
+test("GitHub digest captures read inline reviews that notifications can miss", () => {
+  const pullRequest = {
+    repository: "aaif-goose/goose",
+    number: 10625,
+    title: "feat: add BountyVerdict",
+    url: "https://github.com/aaif-goose/goose/pull/10625",
+    author: "Mimirs402" as const,
+  };
+  const reviewEvents = buildBusinessPullRequestReviewEvents([{
+    pull_request: pullRequest,
+    review_comments: [{
+      id: 3668540783,
+      body: "Please remove the nonexistent selector.",
+      html_url: `${pullRequest.url}#discussion_r3668540783`,
+      updated_at: "2026-07-28T07:45:00Z",
+      user: { login: "chatgpt-codex-connector" },
+    }],
+    reviews: [{
+      id: 987,
+      state: "CHANGES_REQUESTED",
+      body: "",
+      html_url: `${pullRequest.url}#pullrequestreview-987`,
+      submitted_at: "2026-07-28T07:50:00Z",
+      user: { login: "maintainer" },
+    }],
+  }], since);
+  assert.equal(reviewEvents.length, 2);
+  assert.deepEqual(reviewEvents.map(({ reason }) => reason).sort(), ["review", "review_comment"]);
+  assert.ok(reviewEvents.every(({ actionable }) => actionable));
+
+  const notifications = buildGithubDigest([], new Map(), since, checkedAt);
+  const merged = mergeGithubDigestEvents(notifications, reviewEvents);
+  assert.equal(merged.event_count, 2);
+  assert.equal(merged.actionable_count, 2);
+  assert.match(merged.digest_fingerprint, /^sha256:[a-f0-9]{64}$/);
+});
+
+test("GitHub digest rejects truncated review feedback", () => {
+  assert.throws(() => buildBusinessPullRequestReviewEvents([{
+    pull_request: {
+      repository: "aaif-goose/goose",
+      number: 10625,
+      title: "feat: add BountyVerdict",
+      url: "https://github.com/aaif-goose/goose/pull/10625",
+      author: "Mimirs402",
+    },
+    review_comments: Array.from({ length: 100 }, () => ({})),
+    reviews: [],
+  }], since), /truncated/);
 });

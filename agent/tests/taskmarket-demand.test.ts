@@ -38,6 +38,9 @@ function rawTask(overrides: Record<string, unknown> = {}): Record<string, unknow
     mode: "bounty",
     claimedBy: null,
     submissionWindowOpen: true,
+    submissionCount: 0,
+    pitchCount: 0,
+    pitchDeadline: null,
     awardCount: 0,
     awards: [],
     ...overrides,
@@ -539,6 +542,9 @@ test("Taskmarket open feed validates escrow evidence and strict pagination bound
   assert.equal(page.has_more, true);
   assert.throws(() => parseTaskmarketPage({ tasks: [rawTask()], hasMore: false, nextCursor: "2026-07-20T00:00:00.000Z" }), /flags disagree/);
   assert.throws(() => parseTaskmarketPage({ tasks: [rawTask({ escrowTxHash: "not-a-transaction" })], hasMore: false, nextCursor: null }), /escrow transaction is invalid/);
+  assert.throws(() => parseTaskmarketPage({ tasks: [rawTask({ submissionCount: -1 })], hasMore: false, nextCursor: null }), /submission count is invalid/);
+  assert.throws(() => parseTaskmarketPage({ tasks: [rawTask({ pitchCount: 10_001 })], hasMore: false, nextCursor: null }), /pitch count is invalid/);
+  assert.throws(() => parseTaskmarketPage({ tasks: [rawTask({ pitchDeadline: "not-a-date" })], hasMore: false, nextCursor: null }), /pitch deadline is invalid/);
   assert.throws(() => parseTaskmarketPage({
     tasks: Array.from({ length: 101 }, (_, index) => rawTask({ id: `0x${index.toString(16).padStart(64, "0")}` })),
     hasMore: false,
@@ -575,6 +581,67 @@ test("Taskmarket keeps API escrow-backed inventory separate from exact existing-
     ...exact,
     id: `0x${index.toString(16).padStart(64, "0")}`,
   })), now), /five-page audit/);
+});
+
+test("Taskmarket identifies only fresh escrowed low-competition bounties for agent review", () => {
+  const fresh = parseTaskmarketPage({
+    tasks: [rawTask({
+      description: "Implement a bounded parser for our public API.",
+      reward: "6000000",
+      netReward: "5550000",
+      createdAt: "2026-07-21T11:30:00.000Z",
+      expiryTime: "2026-07-21T18:00:00.000Z",
+      submissionCount: 1,
+    })],
+    hasMore: false,
+    nextCursor: null,
+  }).tasks[0];
+  const saturated = { ...fresh, id: `0x${"2".repeat(64)}`, submissionCount: 4 };
+  const owner = {
+    ...fresh,
+    id: `0x${"3".repeat(64)}`,
+    requester: TASKMARKET_WORKER_ADDRESS,
+  };
+  const stale = {
+    ...fresh,
+    id: `0x${"4".repeat(64)}`,
+    createdAt: "2026-07-20T20:00:00.000Z",
+  };
+  const lowReward = {
+    ...fresh,
+    id: `0x${"5".repeat(64)}`,
+    rewardAtomic: "4000000",
+    netRewardAtomic: "3700000",
+  };
+  const expiredPitch = {
+    ...fresh,
+    id: `0x${"6".repeat(64)}`,
+    mode: "pitch" as const,
+    submissionWindowOpen: false,
+    pitchDeadline: "2026-07-21T11:00:00.000Z",
+  };
+
+  const result = analyzeTaskmarket([fresh, saturated, owner, stale, lowReward, expiredPitch], now);
+  assert.equal(result.fresh_low_competition_candidate_count, 1);
+  assert.equal(result.saturated_submission_open_tasks, 1);
+  assert.equal(result.expired_pitch_entry_tasks, 1);
+  assert.deepEqual(result.fresh_low_competition_candidates, [{
+    task_id: taskId,
+    title: "Implement a bounded parser for our public API.",
+    mode: "bounty",
+    gross_reward_usdc: "6",
+    net_reward_usdc: "5.55",
+    submission_count: 1,
+    created_at: "2026-07-21T11:30:00.000Z",
+    deadline_at: "2026-07-21T18:00:00.000Z",
+    hours_remaining: 6,
+    escrow_tx_hash: escrowTx,
+    requester,
+    opportunity_score_usdc_per_current_entry: "2.775",
+    requires_agent_fit_review: true,
+    selection_basis:
+      "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+  }]);
 });
 
 test("Taskmarket submission and submit transaction remain zero revenue without a canonical award", () => {

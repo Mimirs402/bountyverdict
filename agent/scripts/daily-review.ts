@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import {
   DAILY_REVIEW_SCORECARD_SCHEMA_VERSION,
   applyDailyReviewModelBudget,
@@ -42,6 +43,39 @@ async function atomicWrite(path: string, value: unknown): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+async function readOpportunityResult(workflowValue: unknown): Promise<unknown | undefined> {
+  if (!workflowValue || typeof workflowValue !== "object" || Array.isArray(workflowValue)) return undefined;
+  const workflow = workflowValue as Record<string, unknown>;
+  if (workflow.schema_version !== 1 || !Array.isArray(workflow.completed) ||
+    workflow.completed.length === 0 || workflow.completed.length > 200) return undefined;
+  const latest = workflow.completed.at(-1);
+  if (!latest || typeof latest !== "object" || Array.isArray(latest)) return undefined;
+  const completion = latest as Record<string, unknown>;
+  if (typeof completion.trigger_id !== "string" || !/^[a-f0-9]{64}$/.test(completion.trigger_id) ||
+    typeof completion.result_file !== "string") return undefined;
+  const resultRoot = resolve(`${stateRoot}/opportunity-workflows`);
+  const resultPath = resolve(completion.result_file);
+  if (!resultPath.startsWith(`${resultRoot}${sep}`)) return undefined;
+  try {
+    const metadata = await lstat(resultPath);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 256 * 1024) return undefined;
+    const contents = await readFile(resultPath, "utf8");
+    const compact = contents.replace(/\s+/g, " ").trim();
+    if (!compact) return undefined;
+    const excerpt = compact.length <= 2_400
+      ? compact
+      : `${compact.slice(0, 1_190)} ... ${compact.slice(-1_190)}`;
+    return {
+      trigger_id: completion.trigger_id,
+      result_sha256: `sha256:${createHash("sha256").update(contents).digest("hex")}`,
+      result_excerpt: excerpt,
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
 }
 
 function validPrevious(value: unknown): value is DailyReviewScorecard {
@@ -112,6 +146,7 @@ const [
   payan,
   clawlancer,
   catalogExperiment,
+  opportunityWorkflow,
   previousValue,
 ] = await Promise.all([
   readJson("distribution-status.json"),
@@ -124,8 +159,10 @@ const [
   readJson("payan-demand.json"),
   readJson("clawlancer-work.json"),
   readJson("experiments/mcp-free-selection-catalog-v2.json"),
+  readJson("opportunity-workflow.json"),
   readJson("cadence/daily-review-scorecard-baseline.json"),
 ]);
+const opportunityResult = await readOpportunityResult(opportunityWorkflow);
 const previous = validPrevious(previousValue) ? previousValue : null;
 const scorecard = buildDailyReviewScorecard({
   distribution,
@@ -138,6 +175,8 @@ const scorecard = buildDailyReviewScorecard({
   payan,
   clawlancer,
   catalogExperiment,
+  opportunityWorkflow,
+  opportunityResult,
 });
 const gate = buildDailyReviewGate(scorecard, previous);
 const executionGate = applyDailyReviewModelBudget(gate, modelReviewEnabled);

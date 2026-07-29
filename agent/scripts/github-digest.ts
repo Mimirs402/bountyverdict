@@ -5,7 +5,13 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
+  buildBusinessPullRequestReviewEvents,
   buildGithubDigest,
+  GITHUB_DIGEST_ACCOUNT,
+  GITHUB_DIGEST_MAX_OPEN_PULL_REQUESTS,
+  GITHUB_DIGEST_MAX_PR_FEEDBACK_PER_KIND,
+  mergeGithubDigestEvents,
+  parseBusinessAuthoredOpenPullRequests,
   preserveLatestNonEmptyGithubDigest,
 } from "../src/github-digest.ts";
 
@@ -65,7 +71,7 @@ async function atomicWrite(path: string, value: unknown): Promise<void> {
 }
 
 const identity = await gh(["api", "user"]);
-if ((identity as Record<string, unknown>).login !== "Mimirs402") {
+if ((identity as Record<string, unknown>).login !== GITHUB_DIGEST_ACCOUNT) {
   throw new Error("GitHub digest requires the active Mimir's Lab account.");
 }
 const checkedAt = new Date().toISOString();
@@ -99,14 +105,44 @@ for (let index = 0; index < detailUrls.length; index += 5) {
   for (const [url, value] of values) if (value) details.set(url, value);
 }
 const currentDigest = buildGithubDigest(notifications, details, since, checkedAt);
-const digest = preserveLatestNonEmptyGithubDigest(currentDigest, previousDigest);
+const openPullRequests = parseBusinessAuthoredOpenPullRequests(await gh([
+  "api", "--method", "GET", "search/issues",
+  "-f", `q=author:${GITHUB_DIGEST_ACCOUNT} is:pr is:open`,
+  "-f", `per_page=${GITHUB_DIGEST_MAX_OPEN_PULL_REQUESTS}`,
+]));
+const feedback = [];
+for (let index = 0; index < openPullRequests.length; index += 5) {
+  const batch = openPullRequests.slice(index, index + 5);
+  feedback.push(...await Promise.all(batch.map(async (pullRequest) => ({
+    pull_request: pullRequest,
+    review_comments: await gh([
+      "api", "--method", "GET",
+      `repos/${pullRequest.repository}/pulls/${pullRequest.number}/comments`,
+      "-f", `per_page=${GITHUB_DIGEST_MAX_PR_FEEDBACK_PER_KIND}`,
+    ]),
+    reviews: await gh([
+      "api", "--method", "GET",
+      `repos/${pullRequest.repository}/pulls/${pullRequest.number}/reviews`,
+      "-f", `per_page=${GITHUB_DIGEST_MAX_PR_FEEDBACK_PER_KIND}`,
+    ]),
+  }))));
+}
+const reviewEvents = buildBusinessPullRequestReviewEvents(feedback, since);
+const mergedDigest = mergeGithubDigestEvents(currentDigest, reviewEvents);
+const digest = preserveLatestNonEmptyGithubDigest(mergedDigest, previousDigest);
 await atomicWrite(digestPath, digest);
-await atomicWrite(checkpointPath, { schema_version: 1, checked_at: checkedAt, account: "Mimirs402" });
+await atomicWrite(checkpointPath, {
+  schema_version: 1,
+  checked_at: checkedAt,
+  account: GITHUB_DIGEST_ACCOUNT,
+});
 console.log(JSON.stringify({
   product: "BountyVerdict GitHub digest",
   checked_at: digest.checked_at,
   since: digest.since,
-  new_events: currentDigest.event_count,
+  notification_events: currentDigest.event_count,
+  direct_review_events: reviewEvents.length,
+  new_events: mergedDigest.event_count,
   retained_events: digest.event_count,
   actionable: digest.actionable_count,
   digest_fingerprint: digest.digest_fingerprint,

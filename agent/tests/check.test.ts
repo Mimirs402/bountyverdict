@@ -234,7 +234,65 @@ test("returns structured evidence for a viable issue", async () => {
   assert.equal(result.coverage.comments_scanned, 0);
   assert.equal(result.coverage.policy_documents_scanned, 0);
   assert.equal(result.coverage.github_rate_limit_remaining, 4990);
+  assert.deepEqual(result.task_requirements, {
+    agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+    blockers: [],
+    capability_requirements: [],
+  });
   assert.ok(result.signals.some((signal) => signal.label === "No linked open PR found"));
+});
+
+test("returns structured task-level blockers for autonomous agents", async () => {
+  const constrainedIssue = {
+    ...issue,
+    body: `Use of AI is not disallowed, but avoid entering if you cannot explain your PR in a live telco meeting.
+You need to be a student or researcher. Proof of humanity will be required.`,
+    comments: 0,
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, constrainedIssue, 0),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.task_requirements.agent_execution, "BLOCKED");
+  assert.deepEqual(
+    result.task_requirements.blockers.map(({ category, source }) => ({ category, source })),
+    [
+      { category: "HUMAN_ELIGIBILITY_OR_IDENTITY", source: "issue_body" },
+      { category: "SYNCHRONOUS_HUMAN_PARTICIPATION", source: "issue_body" },
+    ],
+  );
+  assert.deepEqual(result.task_requirements.capability_requirements, []);
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Task blocks autonomous agent execution" && signal.hard_stop
+  ));
+});
+
+test("returns a capability-review gate for mandatory specialized hardware", async () => {
+  const hardwareIssue = {
+    ...issue,
+    body: `${issue.body}
+
+### Prerequisites
+- Run the acceptance benchmark on a dedicated NVIDIA CUDA GPU.`,
+    comments: 0,
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([], null, hardwareIssue, 0),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "CAUTION");
+  assert.deepEqual(result.task_requirements, {
+    agent_execution: "CAPABILITY_REVIEW_REQUIRED",
+    blockers: [],
+    capability_requirements: ["SPECIALIZED_HARDWARE"],
+  });
 });
 
 test("verifies an exact BountyHub platform listing instead of trusting the triggering comment", async () => {

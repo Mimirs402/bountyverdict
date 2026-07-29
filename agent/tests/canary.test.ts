@@ -75,6 +75,11 @@ test("single canary validates and compacts the real handler contract", async () 
       summary: "fixture", issue: { url, title: "Fixture", state: "open", repository: "typeorm/typeorm" },
       service_reuse: SERVICE_REUSE.single,
       signals: [], contribution_policy: { ai_use: "NO_EXPLICIT_RULE_FOUND", documents: [] },
+      task_requirements: {
+        agent_execution: "NO_EXPLICIT_BLOCKER_FOUND",
+        blockers: [],
+        capability_requirements: [],
+      },
       coverage: { comments_scanned: 3, timeline_events_scanned: 4, linked_pull_requests_found: 1, policy_documents_scanned: 2, github_rate_limit_remaining: 4990 },
       checked_at: now.toISOString(), limitations: [],
     }),

@@ -113,7 +113,7 @@ test("settlement fixtures are exact production-only resources", () => {
   );
   assert.equal(single.body, undefined);
   assert.deepEqual(
-    ["harness", "run", "flake"].map((product) => {
+    ["harness", "skill", "run", "flake"].map((product) => {
       const fixture = getSettlementCanaryFixture(product as SettlementCanaryProduct);
       return { product, method: fixture.method, path: new URL(fixture.url).pathname, body: JSON.parse(fixture.body || "null") };
     }),
@@ -123,6 +123,15 @@ test("settlement fixtures are exact production-only resources", () => {
         method: "POST",
         path: "/api/repository-agent-instructions-audit",
         body: { repo_url: "https://github.com/openai/codex" },
+      },
+      {
+        product: "skill",
+        method: "POST",
+        path: "/api/skill",
+        body: {
+          repo_url: "https://github.com/Mimirs402/bountyverdict",
+          skill_path: "skills/diagnose-github-actions",
+        },
       },
       {
         product: "run",

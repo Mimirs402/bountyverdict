@@ -227,7 +227,7 @@ jobs:
                   ["BountyVerdict", "$0.05", "/api/bounty-preflight", "POST"],
                   ["BountyVerdict Portfolio", "$0.40", "/api/portfolio", "POST"],
                   ["HarnessVerdict", "$0.03", "/api/repository-agent-instructions-audit", "POST"],
-                  ["SkillVerdict", "$0.06", "/api/skill", "GET"],
+                  ["SkillVerdict", "$0.06", "/api/skill", "POST"],
                   ["RunVerdict", "$0.04", "/api/github-actions-run-diagnosis", "POST"],
                   ["FlakeVerdict", "$0.07", "/api/github-actions-flake-retry-gate", "POST"],
                   ["MCPDriftVerdict", "$0.02", "/api/mcp-drift", "POST"],
@@ -558,6 +558,12 @@ jobs:
               const mcpSample = spec.paths?.["/api/mcp-drift/sample"]?.get;
               if (!mcpSample || mcp?.["x-x402"]?.price !== "$0.02" || mcp?.["x-x402"]?.network !== "eip155:8453") process.exit(1);
               if (mcp.requestBody?.content?.["application/json"]?.schema?.additionalProperties !== false) process.exit(1);
+              const skill = spec.paths?.["/api/skill"]?.post;
+              const legacySkill = spec.paths?.["/api/skill"]?.get;
+              const skillInput = skill?.requestBody?.content?.["application/json"]?.schema;
+              if (skill?.["x-x402"]?.price !== "$0.06" || skill?.["x-x402"]?.network !== "eip155:8453") process.exit(1);
+              if (skillInput?.additionalProperties !== false || JSON.stringify(skillInput?.required) !== JSON.stringify(["repo_url", "skill_path"])) process.exit(1);
+              if (legacySkill?.deprecated !== true || legacySkill?.operationId !== "checkSkillVerdictLegacy") process.exit(1);
             });
           '
           verify_stage payment-challenges

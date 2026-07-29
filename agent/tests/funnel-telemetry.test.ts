@@ -135,6 +135,11 @@ test("migrated canonical POST and legacy GET transports share product accounting
       legacy: "/api/harness?repo_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex",
     },
     {
+      product: "skill",
+      canonical: "/api/skill",
+      legacy: "/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex&skill_path=skills%2Freview",
+    },
+    {
       product: "run",
       canonical: "/api/github-actions-run-diagnosis",
       legacy: "/api/run?run_url=https%3A%2F%2Fgithub.com%2Fopenai%2Fcodex%2Factions%2Fruns%2F29728148711",
@@ -167,10 +172,11 @@ test("migrated canonical POST and legacy GET transports share product accounting
     recordFunnelObservation(snapshot, legacy!);
   }
   assert.equal(snapshot.by_product.harness.requests, 2);
+  assert.equal(snapshot.by_product.skill.requests, 2);
   assert.equal(snapshot.by_product.run.requests, 2);
   assert.equal(snapshot.by_product.flake.requests, 2);
-  assert.equal(snapshot.totals.requests, 6);
-  assert.equal(snapshot.by_source.owner_automation.requests, 3);
+  assert.equal(snapshot.totals.requests, 8);
+  assert.equal(snapshot.by_source.owner_automation.requests, 4);
 });
 
 test("learns MCP conversion stages without retaining tool arguments or request identity", () => {

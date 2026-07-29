@@ -43,17 +43,51 @@ test("opportunity workflow launches Codex once and persists a private completion
   await writeFile(triggerFile, `${JSON.stringify(trigger)}\n`, { mode: 0o600 });
   await writeFile(fakeCodex, `#!/usr/bin/env node
 import { appendFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 const outputIndex = process.argv.indexOf("--output-last-message");
 if (process.argv[2] !== "exec" || outputIndex < 0 || !process.argv[outputIndex + 1]) process.exit(2);
-await appendFile(process.env.FAKE_CODEX_INVOCATIONS, "called\\n");
-await writeFile(process.argv[outputIndex + 1], "FAKE_GO\\n", { mode: 0o600 });
+const sandbox = process.argv[process.argv.indexOf("--sandbox") + 1];
+const assessment = process.argv[outputIndex + 1].includes(".assessment.json");
+await appendFile(${JSON.stringify(invocationFile)}, JSON.stringify({
+  assessment,
+  sandbox,
+  args: process.argv.slice(2),
+  env_keys: Object.keys(process.env).sort(),
+}) + "\\n");
+const output = assessment
+  ? {
+      schema_version: 1,
+      trigger_id: ${JSON.stringify(trigger.trigger_id)},
+      decision: "READY_FOR_LOCAL_PREPARATION",
+      candidates: [{
+        task_id: ${JSON.stringify(candidate.task_id)},
+        decision: "READY_FOR_LOCAL_PREPARATION",
+        reason: "Canonical public evidence is complete and no blocker remains.",
+        evidence_urls: ["https://api.taskmarket.dev/api/tasks/${candidate.task_id}"],
+        capability_requirements: [],
+      }],
+      product_learning: [],
+    }
+  : {
+      schema_version: 1,
+      trigger_id: ${JSON.stringify(trigger.trigger_id)},
+      task_id: ${JSON.stringify(candidate.task_id)},
+      status: "PREPARED",
+      summary: "Prepared and tested locally.",
+      artifact_paths: [join(process.cwd(), "solution.txt")],
+      tests: [{ command: "test", result: "passed" }],
+      remaining_blockers: ["External submission remains disabled."],
+      product_learning: [],
+    };
+if (!assessment) await writeFile(output.artifact_paths[0], "solution\\n", { mode: 0o600 });
+await writeFile(process.argv[outputIndex + 1], JSON.stringify(output), { mode: 0o600 });
 process.stdout.write("fake workflow complete\\n");
 `, { mode: 0o700 });
   await chmod(fakeCodex, 0o700);
   const env = {
     ...process.env,
     PATH: `${root}:${process.env.PATH || ""}`,
-    FAKE_CODEX_INVOCATIONS: invocationFile,
+    SHOULD_NOT_LEAK_TO_CODEX: "secret",
     BOUNTY_OPPORTUNITY_STATE_ROOT: root,
     BOUNTY_OPPORTUNITY_TRIGGER_FILE: triggerFile,
     BOUNTY_OPPORTUNITY_WORKFLOW_STATE_FILE: stateFile,
@@ -70,12 +104,33 @@ process.stdout.write("fake workflow complete\\n");
   const state = JSON.parse(await readFile(stateFile, "utf8")) as Record<string, any>;
   assert.equal(state.completed.length, 1);
   assert.equal(state.completed[0].trigger_id, trigger.trigger_id);
-  assert.equal(await readFile(state.completed[0].result_file, "utf8"), "FAKE_GO\n");
+  const result = JSON.parse(await readFile(state.completed[0].result_file, "utf8")) as Record<string, unknown>;
+  assert.equal(result.outcome, "PREPARED");
+  assert.equal((result.assessment as Record<string, unknown>).decision, "READY_FOR_LOCAL_PREPARATION");
+  assert.equal((result.preparation as Record<string, unknown>).status, "PREPARED");
+  const invocations = (await readFile(invocationFile, "utf8"))
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Record<string, any>);
+  assert.deepEqual(invocations.map(({ assessment }) => assessment), [true, false]);
+  assert.deepEqual(invocations.map(({ sandbox }) => sandbox), ["workspace-write", "workspace-write"]);
+  for (const invocation of invocations) {
+    assert.ok(invocation.args.includes("--ignore-user-config"));
+    assert.ok(invocation.args.some((argument: string) => /shell_environment_policy=.*inherit="none"/.test(argument)));
+    assert.ok(invocation.args.includes("sandbox_workspace_write.network_access=true"));
+    assert.ok(invocation.args.includes("features.network_proxy.enabled=true"));
+    assert.ok(invocation.args.some((argument: string) =>
+      argument.startsWith("features.network_proxy.domains=") &&
+      argument.includes('"api.taskmarket.dev"="allow"') &&
+      argument.includes('"github.com"="allow"')
+    ));
+    assert.ok(!invocation.env_keys.includes("SHOULD_NOT_LEAK_TO_CODEX"));
+  }
 
   const second = await execFileAsync(process.execPath, [
     "--experimental-strip-types",
     workflowScript.pathname,
   ], { env, encoding: "utf8" });
   assert.match(second.stdout, /"reason":"trigger_already_completed"/);
-  assert.equal(await readFile(invocationFile, "utf8"), "called\n");
+  assert.equal((await readFile(invocationFile, "utf8")).trim().split("\n").length, 2);
 });

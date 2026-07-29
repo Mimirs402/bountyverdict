@@ -42,6 +42,22 @@ export interface AgentVerdict {
     ai_use: "BLOCKED" | "DISCLOSURE_REQUIRED" | "NO_EXPLICIT_RULE_FOUND";
     documents: Array<{ path: string; url: string }>;
   };
+  task_requirements: {
+    agent_execution: "BLOCKED" | "CAPABILITY_REVIEW_REQUIRED" | "NO_EXPLICIT_BLOCKER_FOUND";
+    blockers: Array<{
+      category: "HUMAN_ELIGIBILITY_OR_IDENTITY" | "SYNCHRONOUS_HUMAN_PARTICIPATION" | "AI_AGENT_EXCLUDED";
+      source: "issue_body" | "maintainer_comment";
+      evidence_url: string;
+    }>;
+    capability_requirements: Array<
+      "ACCOUNT_OR_REGISTRATION" |
+      "API_KEY_OR_PROVIDER_DATA" |
+      "DEMO_VIDEO" |
+      "PUBLIC_SOCIAL_POSTING_OR_ENGAGEMENT" |
+      "SPECIALIZED_HARDWARE" |
+      "GATED_PLATFORM_VALIDATION"
+    >;
+  };
   reward: {
     state: "LISTED" | "PROMISED" | "UNVERIFIED" | "NOT_FOUND" | "WITHDRAWN" | "PAID_OR_AWARDED";
     verification: "TRUSTED_PLATFORM_APP" | "TRUSTED_PLATFORM_API" | "MAINTAINER_STATEMENT" | "UNVERIFIED" | "NONE";
@@ -83,6 +99,12 @@ interface AnalysisResult {
   pullRequests: unknown[];
   aiPolicyBlocks: unknown[];
   aiPolicyRequirements: unknown[];
+  taskAutonomyBlockers: Array<{
+    category: AgentVerdict["task_requirements"]["blockers"][number]["category"];
+    source: AgentVerdict["task_requirements"]["blockers"][number]["source"];
+    evidenceUrl: string;
+  }>;
+  externalPrerequisites: string[];
   reward: {
     state: AgentVerdict["reward"]["state"];
     verification: AgentVerdict["reward"]["verification"];
@@ -114,6 +136,15 @@ export class CheckError extends Error {
     this.code = code;
   }
 }
+
+const capabilityRequirementMap = Object.freeze({
+  "account or registration": "ACCOUNT_OR_REGISTRATION",
+  "API key or provider data": "API_KEY_OR_PROVIDER_DATA",
+  "demo video": "DEMO_VIDEO",
+  "public social posting or engagement": "PUBLIC_SOCIAL_POSTING_OR_ENGAGEMENT",
+  "specialized hardware": "SPECIALIZED_HARDWARE",
+  "gated platform validation": "GATED_PLATFORM_VALIDATION",
+} as const);
 
 interface GithubResponse {
   data: any;
@@ -606,6 +637,22 @@ async function checkGithubIssueInternal(
         url: document.html_url,
       })),
     },
+    task_requirements: {
+      agent_execution: analysis.taskAutonomyBlockers.length
+        ? "BLOCKED"
+        : analysis.externalPrerequisites.length
+          ? "CAPABILITY_REVIEW_REQUIRED"
+        : "NO_EXPLICIT_BLOCKER_FOUND",
+      blockers: analysis.taskAutonomyBlockers.map((blocker) => ({
+        category: blocker.category,
+        source: blocker.source,
+        evidence_url: blocker.evidenceUrl,
+      })),
+      capability_requirements: analysis.externalPrerequisites.flatMap((requirement) => {
+        const mapped = capabilityRequirementMap[requirement as keyof typeof capabilityRequirementMap];
+        return mapped ? [mapped] : [];
+      }),
+    },
     reward: {
       state: analysis.reward.state,
       verification: analysis.reward.verification,
@@ -666,6 +713,7 @@ async function checkGithubIssueInternal(
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
       "AI-policy detection checks four conventional contribution-document paths and may not find policies stored elsewhere.",
+      "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions; absence of a blocker is not proof that autonomous completion is possible.",
     ],
   };
 }

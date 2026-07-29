@@ -333,10 +333,11 @@ const degradedSources = Object.values(statuses).filter(({ error }) => error !== 
 const trackedRefreshed = trackedDecision.due &&
   statuses.taskmarket_tracked.error === null &&
   statuses.taskmarket_tracked.last_good_at === checkedAt;
-const previousRememberedTaskIds = previous?.opportunity_event_loop &&
+const previousRememberedOpportunityFingerprints = previous?.opportunity_event_loop &&
   typeof previous.opportunity_event_loop === "object" &&
   !Array.isArray(previous.opportunity_event_loop)
-  ? (previous.opportunity_event_loop as JsonRecord).triggered_task_ids
+  ? (previous.opportunity_event_loop as JsonRecord).triggered_opportunity_fingerprints ??
+    (previous.opportunity_event_loop as JsonRecord).triggered_task_ids
   : undefined;
 const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
   statuses.taskmarket_inventory.last_good_at === checkedAt;
@@ -344,7 +345,7 @@ const opportunityEvent = buildOpportunityTrigger(
   taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
     : [],
-  previousRememberedTaskIds,
+  previousRememberedOpportunityFingerprints,
   checkedAt,
 );
 if (opportunityEvent.trigger) {
@@ -368,7 +369,7 @@ const state = {
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
     suppressed_reason: taskmarketInventoryFresh ? null : "taskmarket_inventory_not_fresh",
-    triggered_task_ids: opportunityEvent.remembered_task_ids,
+    triggered_opportunity_fingerprints: opportunityEvent.remembered_opportunity_fingerprints,
     trigger_contract_file: opportunityTriggerFile,
     workflow_scope: "agent_fit_review_and_local_solution_only",
     external_actions_enabled: false,

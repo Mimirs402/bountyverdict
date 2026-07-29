@@ -179,6 +179,8 @@ test("umbrella routing skill selects one product and preserves payment safety", 
   assert.match(skill, /example input as documentation/);
   assert.match(skill, /Never reveal wallet secrets/);
   assert.match(skill, /service_reuse/);
+  assert.match(skill, /SkillVerdict \| `POST \/api\/skill`/);
+  assert.match(skill, /challenge\.resource\.url` binds the route but does not bind a POST body/);
   assert.match(skill, /byte-identical validated request body/);
 });
 

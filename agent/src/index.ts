@@ -172,7 +172,7 @@ const INPUT_GUIDANCE = Object.freeze({
   },
   skill: {
     product: "SkillVerdict",
-    method: "GET",
+    method: "POST",
     required: ["repo_url", "skill_path"],
     example: { repo_url: "https://github.com/owner/skills", skill_path: "skills/example" },
   },
@@ -196,6 +196,19 @@ const INPUT_GUIDANCE = Object.freeze({
     example: mcpDriftExampleInput,
   },
 } as const);
+
+const LEGACY_SKILL_INPUT_GUIDANCE = Object.freeze({
+  product: "SkillVerdict",
+  method: "GET",
+  required: ["repo_url", "skill_path"],
+  example: { repo_url: "https://github.com/owner/skills", skill_path: "skills/example" },
+  deprecated: true,
+  canonical_transport: {
+    method: "POST",
+    path: PRODUCT_CATALOG.skill.path,
+    body: { repo_url: "https://github.com/owner/skills", skill_path: "skills/example" },
+  },
+});
 
 const LEGACY_SINGLE_INPUT_GUIDANCE = Object.freeze({
   product: "BountyVerdict",
@@ -424,7 +437,15 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
     iconUrl: ICON_URL,
     unpaidResponseBody: (context) => unpaidDecisionBody({
       productKey: "skill",
+      method: "POST",
+    }, context, network),
+  };
+  const legacySkillRouteConfig: RouteConfig = {
+    ...skillRouteConfig,
+    unpaidResponseBody: (context) => unpaidDecisionBody({
+      productKey: "skill",
       method: "GET",
+      legacyTransport: true,
     }, context, network),
   };
   const runRouteConfig: RouteConfig = {
@@ -502,7 +523,8 @@ function buildPaymentMiddleware(env: Env): MiddlewareHandler {
       [`POST ${PORTFOLIO_ENDPOINT}`]: portfolioRouteConfig,
       [`POST ${HARNESS_ENDPOINT}`]: harnessRouteConfig,
       [`GET ${LEGACY_HARNESS_PATH}`]: legacyHarnessRouteConfig,
-      [`GET ${SKILL_ENDPOINT}`]: skillRouteConfig,
+      [`POST ${SKILL_ENDPOINT}`]: skillRouteConfig,
+      [`GET ${SKILL_ENDPOINT}`]: legacySkillRouteConfig,
       [`POST ${RUN_ENDPOINT}`]: runRouteConfig,
       [`GET ${LEGACY_RUN_PATH}`]: legacyRunRouteConfig,
       [`POST ${FLAKE_ENDPOINT}`]: flakeRouteConfig,
@@ -571,7 +593,9 @@ app.get("/", (c) =>
         name: "SkillVerdict",
         price: SKILL_PRICE_USD,
         endpoint: SKILL_ENDPOINT,
-        method: "GET",
+        method: "POST",
+        legacy_endpoint: SKILL_ENDPOINT,
+        legacy_method: "GET",
         use_when: "Audit a public SKILL.md bundle before installation or execution.",
         skill: `${SKILLS_URL}preflight-agent-skills/SKILL.md`,
         input: { repo_url: "https://github.com/owner/skills", skill_path: "skills/example" },
@@ -1009,6 +1033,52 @@ const legacyHarnessPreflight: MiddlewareHandler<AppBindings> = async (c, next) =
 };
 
 const skillPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
+  if (c.req.method !== "POST") return await next();
+  const contentType = c.req.header("Content-Type") || "";
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    return preflightFailure(c, "skill", "INVALID_CONTENT_TYPE", "Content-Type must be application/json.");
+  }
+  const declaredLength = c.req.header("Content-Length");
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > DECISION_MAX_BODY_BYTES) {
+    return preflightFailure(c, "skill", "INPUT_TOO_LARGE", "Request body exceeds 4,096 bytes.", 413);
+  }
+  try {
+    const raw = await c.req.raw.clone().text();
+    if (new TextEncoder().encode(raw).byteLength > DECISION_MAX_BODY_BYTES) {
+      return preflightFailure(c, "skill", "INPUT_TOO_LARGE", "Request body exceeds 4,096 bytes.", 413);
+    }
+    const input = JSON.parse(raw) as Record<string, unknown>;
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).sort().join(",") !== "repo_url,skill_path" ||
+      typeof input.repo_url !== "string" || typeof input.skill_path !== "string") {
+      return preflightFailure(
+        c,
+        "skill",
+        "INVALID_INPUT",
+        "Request body must contain exactly two string fields: repo_url and skill_path.",
+      );
+    }
+    const parsed = parseRepositoryUrl(input.repo_url);
+    const skill = normalizeSkillPath(input.skill_path);
+    c.set("skillRepoUrl", `https://github.com/${parsed.owner}/${parsed.repo}`);
+    c.set("skillPath", skill.entry);
+    return await next();
+  } catch (error) {
+    const code = error instanceof SyntaxError
+      ? "INVALID_JSON"
+      : error instanceof HarnessError ? error.code : "INVALID_INPUT";
+    return preflightFailure(
+      c,
+      "skill",
+      code,
+      error instanceof SyntaxError
+        ? "Request body must be valid JSON."
+        : error instanceof Error ? error.message : "Skill input is invalid.",
+    );
+  }
+};
+
+const legacySkillPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
   if (c.req.method !== "GET") return await next();
   try {
     const parsed = parseRepositoryUrl(c.req.query("repo_url") || "");
@@ -1018,7 +1088,15 @@ const skillPreflight: MiddlewareHandler<AppBindings> = async (c, next) => {
     return await next();
   } catch (error) {
     const code = error instanceof HarnessError ? error.code : "INVALID_INPUT";
-    return preflightFailure(c, "skill", code, error instanceof Error ? error.message : "Skill input is invalid.");
+    return preflightFailure(
+      c,
+      "skill",
+      code,
+      error instanceof Error ? error.message : "Skill input is invalid.",
+      400,
+      {},
+      LEGACY_SKILL_INPUT_GUIDANCE,
+    );
   }
 };
 
@@ -1138,6 +1216,7 @@ app.use(PORTFOLIO_ENDPOINT, portfolioPreflight);
 app.use(HARNESS_ENDPOINT, harnessPreflight);
 app.use(LEGACY_HARNESS_PATH, legacyHarnessPreflight);
 app.use(SKILL_ENDPOINT, skillPreflight);
+app.use(SKILL_ENDPOINT, legacySkillPreflight);
 app.use(RUN_ENDPOINT, runPreflight);
 app.use(LEGACY_RUN_PATH, legacyRunPreflight);
 app.use(FLAKE_ENDPOINT, flakePreflight);
@@ -1240,7 +1319,7 @@ const harnessHandler = async (c: Context<AppBindings>) => {
 app.post(HARNESS_ENDPOINT, harnessHandler);
 app.get(LEGACY_HARNESS_PATH, harnessHandler);
 
-app.get(SKILL_ENDPOINT, async (c) => {
+const skillHandler = async (c: Context<AppBindings>) => {
   const repoUrl = c.get("skillRepoUrl");
   const skillPath = c.get("skillPath");
   try {
@@ -1253,7 +1332,10 @@ app.get(SKILL_ENDPOINT, async (c) => {
     console.error(error);
     return c.json({ error: "INTERNAL_ERROR", message: "The skill audit could not be produced." }, 500);
   }
-});
+};
+
+app.post(SKILL_ENDPOINT, skillHandler);
+app.get(SKILL_ENDPOINT, skillHandler);
 
 const runHandler = async (c: Context<AppBindings>) => {
   const runUrl = c.get("runUrl");

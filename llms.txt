@@ -33,7 +33,7 @@
 - HarnessVerdict price: $0.03 USDC per successful commit-pinned audit
 - Harness verdicts: READY, REVIEW, REPAIR
 - Free SkillVerdict sample: https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill/sample
-- Paid SkillVerdict: GET https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill?repo_url=<PUBLIC_GITHUB_REPOSITORY_URL>&skill_path=<SKILL_DIRECTORY>
+- Paid SkillVerdict: POST https://bountyverdict-agent-production.mimirslab.workers.dev/api/skill with JSON body {"repo_url":"<PUBLIC_GITHUB_REPOSITORY_URL>","skill_path":"<SKILL_DIRECTORY>"} (legacy GET compatibility remains available)
 - SkillVerdict price: $0.06 USDC per successful commit-pinned pre-install audit
 - Skill verdicts: LOW_RISK, REVIEW, BLOCK
 - Free RunVerdict sample: https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample

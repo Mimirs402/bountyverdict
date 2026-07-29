@@ -96,7 +96,7 @@ test("the scheduled acquisition snapshot has no marketplace mutation request pat
   assert.match(directory, /await call\(1, "mcp_get", \{ slug: agentageSlug \}\)/);
   assert.match(directory, /name: "search_servers"/);
 
-  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 8);
+  assert.equal((distribution.match(/method:\s*"POST"/g) || []).length, 9);
   assert.match(distribution, /services\/\$\{encodeURIComponent\(String\(service\.id\)\)\}\/test[\s\S]{0,180}method: "POST"/);
   assert.equal((distribution.match(/method:\s*"(?:PUT|PATCH|DELETE)"/g) || []).length, 0);
   assert.equal((distribution.match(/params: \{ name: "(?:get|search_live)"/g) || []).length, 2);
@@ -645,7 +645,7 @@ test("x402scan monitoring follows the seven canonical paid transports", async ()
     '{ product: "single", url: `${productionOrigin}/api/bounty-preflight`, method: "POST" }',
     '{ product: "portfolio", url: `${productionOrigin}/api/portfolio`, method: "POST" }',
     '{ product: "harness", url: `${productionOrigin}/api/repository-agent-instructions-audit`, method: "POST" }',
-    '{ product: "skill", url: `${productionOrigin}/api/skill`, method: "GET" }',
+    '{ product: "skill", url: `${productionOrigin}/api/skill`, method: "POST" }',
     '{ product: "run", url: `${productionOrigin}/api/github-actions-run-diagnosis`, method: "POST" }',
     '{ product: "flake", url: `${productionOrigin}/api/github-actions-flake-retry-gate`, method: "POST" }',
     '{ product: "mcpdrift", url: `${productionOrigin}/api/mcp-drift`, method: "POST" }',

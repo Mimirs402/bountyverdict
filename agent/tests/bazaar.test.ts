@@ -151,9 +151,18 @@ test("HarnessVerdict canonical POST declaration is a strict JSON body", () => {
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
 });
 
-test("SkillVerdict GET declaration passes Bazaar schema and protocol validation", () => {
+test("SkillVerdict canonical POST declaration is a strict JSON body", () => {
   const extension = skillDiscoveryExtension.bazaar;
-  assert.equal(extension.info.input.method, "GET");
+  const bodySchema = extension.schema.properties.input.properties.body;
+  assert.equal(extension.info.input.method, "POST");
+  assert.equal(extension.info.input.bodyType, "json");
+  assert.deepEqual(extension.info.input.body, {
+    repo_url: "https://github.com/coinbase/agentic-wallet-skills",
+    skill_path: "skills/agentic-wallet",
+  });
+  assert.deepEqual(bodySchema.required, ["repo_url", "skill_path"]);
+  assert.deepEqual(Object.keys(bodySchema.properties), ["repo_url", "skill_path"]);
+  assert.equal(bodySchema.additionalProperties, false);
   assert.deepEqual(validateDiscoveryExtensionSpec(extension), { valid: true });
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
 });
@@ -189,19 +198,34 @@ test("FlakeVerdict canonical POST declaration is a strict JSON body", () => {
   assert.deepEqual(validateDiscoveryExtension(extension), { valid: true });
 });
 
-test("the remaining advertised GET example survives preflight and returns a payable crawler challenge", async () => {
-  const routes = [
-    ["/api/skill", skillDiscoveryExtension],
-  ] as const;
-  for (const [path, declaration] of routes) {
-    const input = declaration.bazaar.info.input;
-    assert.equal(input.method, "GET");
-    assert.ok(input.queryParams && Object.keys(input.queryParams).length > 0);
-    const query = new URLSearchParams(Object.entries(input.queryParams).map(([key, value]) => [key, String(value)]));
-    const response = await app.request(`${path}?${query}`, {}, crawlerEnv);
-    assert.equal(response.status, 402, `${path} must challenge the exact advertised Bazaar input`);
-    assert.ok(response.headers.get("payment-required"));
-  }
+test("SkillVerdict canonical POST example survives preflight and carries Bazaar metadata", async () => {
+  const input = skillDiscoveryExtension.bazaar.info.input;
+  const response = await app.request("/api/skill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input.body),
+  }, crawlerEnv);
+  assert.equal(response.status, 402);
+  const encoded = response.headers.get("payment-required");
+  assert.ok(encoded);
+  const challenge = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(challenge.resource.url, "http://localhost/api/skill");
+  assert.equal(challenge.extensions.bazaar.info.input.method, "POST");
+  assert.deepEqual(challenge.extensions.bazaar.info.input.body, input.body);
+});
+
+test("legacy SkillVerdict GET remains payable without advertising a second Bazaar contract", async () => {
+  const response = await app.request(
+    "/api/skill?repo_url=https%3A%2F%2Fgithub.com%2Fcoinbase%2Fagentic-wallet-skills&skill_path=skills%2Fagentic-wallet",
+    {},
+    crawlerEnv,
+  );
+  assert.equal(response.status, 402);
+  const encoded = response.headers.get("payment-required");
+  assert.ok(encoded);
+  const challenge = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(challenge.resource.url.includes("/api/skill?repo_url="), true);
+  assert.equal(challenge.extensions?.bazaar, undefined);
 });
 
 test("legacy BountyVerdict GET remains payable without advertising a second Bazaar contract", async () => {

@@ -44,7 +44,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     spec.paths["/api/bounty-preflight"].post,
     spec.paths["/api/portfolio"].post,
     spec.paths["/api/repository-agent-instructions-audit"].post,
-    spec.paths["/api/skill"].get,
+    spec.paths["/api/skill"].post,
     spec.paths["/api/github-actions-run-diagnosis"].post,
     spec.paths["/api/github-actions-flake-retry-gate"].post,
     spec.paths["/api/mcp-drift"].post,
@@ -82,8 +82,20 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     "https://github.com/openai/codex",
   );
   assert.equal(spec.paths["/api/harness"].get.deprecated, true);
-  assert.equal(spec.paths["/api/skill"].get["x-x402"].price, "$0.06");
-  assert.match(spec.paths["/api/skill"].get.description, /^Is this agent skill safe to install\?/i);
+  const skill = spec.paths["/api/skill"].post;
+  assert.equal(skill["x-x402"].price, "$0.06");
+  assert.match(skill.description, /^Is this agent skill safe to install\?/i);
+  assert.deepEqual(
+    skill.requestBody.content["application/json"].schema.required,
+    ["repo_url", "skill_path"],
+  );
+  assert.equal(skill.requestBody.content["application/json"].schema.additionalProperties, false);
+  assert.deepEqual(skill.requestBody.content["application/json"].example, {
+    repo_url: "https://github.com/coinbase/agentic-wallet-skills",
+    skill_path: "skills/agentic-wallet",
+  });
+  assert.equal(spec.paths["/api/skill"].get.deprecated, true);
+  assert.equal(spec.paths["/api/skill"].get.operationId, "checkSkillVerdictLegacy");
   assert.deepEqual(spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.name), ["repo_url", "skill_path"]);
   assert.deepEqual(
     spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.schema.example),

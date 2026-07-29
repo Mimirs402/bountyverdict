@@ -27,7 +27,7 @@ export const PRODUCT_CATALOG = Object.freeze({
     service: "SkillVerdict",
     path: "/api/skill",
     samplePath: "/api/skill/sample",
-    method: "GET" as const,
+    method: "POST" as const,
     priceUsd: "$0.06",
     amountAtomic: 60_000n,
   }),
@@ -80,9 +80,9 @@ export function productForTransport(path: string, method: string): ProductKey | 
   }
   if (
     normalizedMethod === "GET" &&
-    path === PRODUCT_CATALOG.single.path
+    (path === PRODUCT_CATALOG.single.path || path === PRODUCT_CATALOG.skill.path)
   ) {
-    return "single";
+    return path === PRODUCT_CATALOG.single.path ? "single" : "skill";
   }
   if (normalizedMethod === "GET") {
     for (const [product, legacyPath] of Object.entries(LEGACY_GET_PATHS) as [keyof typeof LEGACY_GET_PATHS, string][]) {

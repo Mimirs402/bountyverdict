@@ -138,11 +138,12 @@ const FIXTURES: Readonly<Record<SettlementCanaryProduct, SettlementCanaryFixture
       product: "skill",
       service: "SkillVerdict",
       amountAtomic: "60000",
-      method: "GET",
-      url: fixtureUrl("/api/skill", [
-        ["repo_url", "https://github.com/Mimirs402/bountyverdict"],
-        ["skill_path", "skills/diagnose-github-actions"],
-      ]),
+      method: "POST",
+      url: fixtureUrl(PRODUCT_CATALOG.skill.path),
+      body: JSON.stringify({
+        repo_url: "https://github.com/Mimirs402/bountyverdict",
+        skill_path: "skills/diagnose-github-actions",
+      }),
     }),
     run: Object.freeze({
       product: "run",

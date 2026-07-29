@@ -413,10 +413,72 @@ export function createOpenApi(
         },
       },
       "/api/skill": {
-        get: {
+        post: {
           summary: "Audit a public agent skill before installation",
           description: SKILL_DISCOVERY_DESCRIPTION,
           operationId: "checkSkillVerdict",
+          ...agentMetadata(origin, {
+            tags: ["skill-security"],
+            samplePath: "/api/skill/sample",
+            skill: "preflight-agent-skills",
+            useWhen: "Decide whether a third-party public SKILL.md bundle is safe to install or requires review.",
+            reuse: SERVICE_REUSE.skill,
+          }),
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    repo_url: {
+                      type: "string",
+                      pattern: "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+(\\.git)?$",
+                      description: "Canonical public GitHub repository URL",
+                      example: "https://github.com/coinbase/agentic-wallet-skills",
+                    },
+                    skill_path: {
+                      type: "string",
+                      pattern: "^[A-Za-z0-9._/-]+$",
+                      description: "Repository-relative skill directory or exact SKILL.md path",
+                      example: "skills/agentic-wallet",
+                    },
+                  },
+                  required: ["repo_url", "skill_path"],
+                },
+                example: {
+                  repo_url: "https://github.com/coinbase/agentic-wallet-skills",
+                  skill_path: "skills/agentic-wallet",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Commit-pinned redacted skill security audit after x402 settlement",
+              content: { "application/json": { schema: { type: "object", ...skillOutputSchema } } },
+            },
+            "402": { description: "Payment required; inspect the PAYMENT-REQUIRED header" },
+            "400": { description: "Invalid JSON, repository URL, or skill path; no payment challenge is issued" },
+            "404": { description: "Public repository or skill not found; verified payment is not settled" },
+            "502": { description: "GitHub upstream failure; verified payment is not settled" },
+            "503": { description: "Temporary capacity or service configuration failure" },
+          },
+          "x-x402": {
+            version: 2,
+            scheme: "exact",
+            network,
+            price: prices.skill,
+            currency: "USDC",
+          },
+          "x-payment-info": paymentInfo(prices.skill),
+        },
+        get: {
+          summary: "Audit a public agent skill before installation (legacy query transport)",
+          description: `Deprecated GET compatibility transport. New integrations should preserve the canonical POST JSON body. ${SKILL_DISCOVERY_DESCRIPTION}`,
+          operationId: "checkSkillVerdictLegacy",
+          deprecated: true,
           ...agentMetadata(origin, {
             tags: ["skill-security"],
             samplePath: "/api/skill/sample",
@@ -747,7 +809,7 @@ export function createLlmsText(origin: string): string {
 - HarnessVerdict price: $0.03 USDC per successful commit-pinned audit
 - Harness verdicts: READY, REVIEW, REPAIR
 - Free SkillVerdict sample: ${origin}/api/skill/sample
-- Paid SkillVerdict: GET ${origin}/api/skill?repo_url=<PUBLIC_GITHUB_REPOSITORY_URL>&skill_path=<SKILL_DIRECTORY>
+- Paid SkillVerdict: POST ${origin}/api/skill with JSON body {"repo_url":"<PUBLIC_GITHUB_REPOSITORY_URL>","skill_path":"<SKILL_DIRECTORY>"} (legacy GET compatibility remains available)
 - SkillVerdict price: $0.06 USDC per successful commit-pinned pre-install audit
 - Skill verdicts: LOW_RISK, REVIEW, BLOCK
 - Free RunVerdict sample: ${origin}/api/run/sample

@@ -85,6 +85,11 @@ type McpValidationKind =
   | "invalid_run_or_attempt"
   | "invalid_mcp_snapshot"
   | "schema_rejected_before_handler";
+type McpProtocolErrorKind =
+  | "not_applicable"
+  | "unsupported_protocol"
+  | "malformed_tool_call"
+  | "free_selector_schema_rejected";
 
 const TOOL_PRODUCT = Object.freeze({
   check_github_bounty: "single",
@@ -272,16 +277,18 @@ function emitMcpEvent(
   product: DistributedProduct | null,
   request: RequestClassification,
   validationKind: McpValidationKind = "not_applicable",
+  protocolErrorKind: McpProtocolErrorKind = "not_applicable",
 ): void {
   if (product || stage === "tool_not_found" || stage === "selection_preview") request.toolStageEmitted = true;
   console.log(JSON.stringify({
     type: "bountyverdict_mcp_funnel",
-    schema_version: 3,
+    schema_version: 4,
     stage,
     product,
     source: request.ownerAutomation ? "owner_automation" : "external",
     client_family: stage === "initialize" ? request.clientFamily : "not_applicable",
     validation_kind: validationKind,
+    protocol_error_kind: protocolErrorKind,
   }));
 }
 
@@ -603,10 +610,24 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     const response = await transport.handleRequest(request, parsedBody === undefined ? undefined : { parsedBody });
-    if (unsupportedProtocol && response.status >= 400) emitMcpEvent("protocol_error", null, classification);
+    if (unsupportedProtocol && response.status >= 400) {
+      emitMcpEvent(
+        "protocol_error",
+        null,
+        classification,
+        "not_applicable",
+        "unsupported_protocol",
+      );
+    }
     if (method === "tools/call" && !classification.toolStageEmitted && !unsupportedProtocol) {
       if (!validatedRpc.success || !validatedCall.success) {
-        emitMcpEvent("protocol_error", null, classification);
+        emitMcpEvent(
+          "protocol_error",
+          null,
+          classification,
+          "not_applicable",
+          "malformed_tool_call",
+        );
       } else {
         const calledTool = validatedCall.data.params.name;
         const product = TOOL_PRODUCT[calledTool as ToolName];
@@ -615,6 +636,7 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
           product || null,
           classification,
           product ? "schema_rejected_before_handler" : "not_applicable",
+          calledTool === FREE_SELECTION_TOOL_NAME ? "free_selector_schema_rejected" : "not_applicable",
         );
       }
     }

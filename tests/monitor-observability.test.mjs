@@ -380,6 +380,10 @@ test("distribution monitoring reports MCP conversion from the active trusted epo
   assert.match(distribution, /trustedMcpDelta\(state, trustedBaseline\.mcp\)/);
   assert.match(distribution, /trusted_mcp_buyer_candidate/);
   assert.match(distribution, /trusted_mcp_external_by_product/);
+  assert.match(distribution, /trusted_mcp_protocol_error_kinds/);
+  assert.match(distribution, /Trusted MCP protocol-error reasons/);
+  assert.match(distribution, /privacy-safe aggregate categories only/);
+  assert.match(distribution, /not unique agents, linked sessions, purchases, or revenue/);
   assert.match(distribution, /mcp_epoch_baseline_unavailable/);
   assert.match(distribution, /exact active-epoch deltas/);
   assert.match(distribution, /Lifetime MCP buyer-candidate capture/);

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { selectExactPublicDemand } from "./exact-demand.ts";
 import type { DemandCandidate } from "./demand-watch.ts";
 
@@ -18,8 +19,15 @@ const freshOpportunityLimit = 10;
 // https://docs.taskmarket.dev/smart-contracts/overview
 const baseUsdcAddress = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-const taskmarketDiamond = "0xDDc6cC3e4D11c1f3527B867C7DAD4ED9869C33f7";
+export const TASKMARKET_DIAMOND = "0xDDc6cC3e4D11c1f3527B867C7DAD4ED9869C33f7";
 const taskCompletedTopic = "0x0c01e82f21f6dc480e3553e62cba7e6511685aa15d312f971ea64663bef07ecb";
+const taskCreatedTopic = "0xe0dc4072f8420c56e984e9c6eec7bad2e5616825f0d1ca581bd96ff3e8eec948";
+export const TASKMARKET_FORWARDER = "0x8884f95b69dd1581565633aea85f9a9f7067144d";
+export const TASKMARKET_GET_TASK_SELECTOR = "0x15a29035";
+export const TASKMARKET_GET_TASK_HOOKS_SELECTOR = "0x339f424b";
+export const TASKMARKET_EVALUATOR_FOR_SELECTOR = "0x9d691d36";
+export const TASKMARKET_GET_TASK_METADATA_SELECTOR = "0x33b76180";
+const bountyModeTopic = `0xa81913a5${"0".repeat(56)}`;
 
 export const TASKMARKET_API = "https://api.taskmarket.dev";
 export const TASKMARKET_WORKER_ADDRESS = "0xe5E0fe496B7283032d034Dc79C305b384Ad1ee67";
@@ -285,6 +293,21 @@ export type TaskmarketTask = {
   submissionCount: number;
   pitchCount: number;
   pitchDeadline: string | null;
+  submissionVisibility: "public" | "reveal_all" | "winner_only" | "never";
+  taskVisibility: "public" | "unlisted" | "private";
+  hooks: string[] | null;
+  evaluator: string | null | undefined;
+};
+
+export type TaskmarketFundingReceiptPayload = {
+  transaction_hash: string;
+  receipt: unknown | null;
+  task_id: string;
+  task_result: unknown | null;
+  task_hooks_result: unknown | null;
+  task_evaluator_result: unknown | null;
+  task_metadata_result: unknown | null;
+  unavailable_reason?: string;
 };
 
 export type TaskmarketPage = {
@@ -405,6 +428,16 @@ function parseTags(value: unknown): string[] {
   return tags;
 }
 
+function parseHooks(value: unknown): string[] | null {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length > 8) throw new Error("Taskmarket hooks are invalid.");
+  const hooks = value.map((hook) => exactPattern(hook, "Taskmarket hook", addressPattern, 42));
+  if (new Set(hooks.map((hook) => hook.toLowerCase())).size !== hooks.length) {
+    throw new Error("Taskmarket hooks are duplicated.");
+  }
+  return hooks;
+}
+
 function parseTask(value: unknown, requiredStatus?: TaskStatus): TaskmarketTask {
   if (!isObject(value)) throw new Error("Taskmarket task is malformed.");
   const status = requiredString(value.status, "Taskmarket task status", 30) as TaskStatus;
@@ -423,6 +456,18 @@ function parseTask(value: unknown, requiredStatus?: TaskStatus): TaskmarketTask 
   if (new TextEncoder().encode(description).length > maximumDescriptionBytes) {
     throw new Error("Taskmarket description exceeds its byte cap.");
   }
+  const submissionVisibility = requiredString(
+    value.submissionVisibility,
+    "Taskmarket submission visibility",
+    20,
+  ) as TaskmarketTask["submissionVisibility"];
+  if (!["public", "reveal_all", "winner_only", "never"].includes(submissionVisibility)) {
+    throw new Error("Taskmarket submission visibility is unsupported.");
+  }
+  const taskVisibility = requiredString(value.taskVisibility, "Taskmarket task visibility", 20) as TaskmarketTask["taskVisibility"];
+  if (!["public", "unlisted", "private"].includes(taskVisibility)) {
+    throw new Error("Taskmarket task visibility is unsupported.");
+  }
   return {
     id: exactPattern(value.id, "Taskmarket task ID", bytes32Pattern, 66),
     requester: exactPattern(value.requester, "Taskmarket requester", addressPattern, 42),
@@ -440,7 +485,15 @@ function parseTask(value: unknown, requiredStatus?: TaskStatus): TaskmarketTask 
     submissionCount: boundedCount(value.submissionCount, "Taskmarket submission count"),
     pitchCount: boundedCount(value.pitchCount, "Taskmarket pitch count"),
     pitchDeadline: nullableTimestamp(value.pitchDeadline, "Taskmarket pitch deadline"),
+    submissionVisibility,
+    taskVisibility,
+    hooks: parseHooks(value.hooks),
+    evaluator: value.evaluator === undefined ? undefined : nullableAddress(value.evaluator, "Taskmarket evaluator"),
   };
+}
+
+export function parseTaskmarketTask(value: unknown): TaskmarketTask {
+  return parseTask(value);
 }
 
 export function parseTaskmarketPage(value: unknown): TaskmarketPage {
@@ -461,7 +514,149 @@ function taskTitle(description: string): string {
   return description.split(/\r?\n/, 1)[0].trim().slice(0, 500) || "Taskmarket task";
 }
 
-export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): Record<string, unknown> {
+export function taskmarketTaskSnapshotSha256(task: TaskmarketTask): string {
+  return createHash("sha256").update(JSON.stringify({
+    id: task.id.toLowerCase(),
+    requester: task.requester.toLowerCase(),
+    description: task.description,
+    reward_atomic: task.rewardAtomic,
+    net_reward_atomic: task.netRewardAtomic,
+    escrow_tx_hash: task.escrowTxHash.toLowerCase(),
+    created_at: task.createdAt,
+    expiry_time: task.expiryTime,
+    mode: task.mode,
+    submission_visibility: task.submissionVisibility,
+    task_visibility: task.taskVisibility,
+  })).digest("hex");
+}
+
+function taskmarketOpportunityPreliminary(task: TaskmarketTask, nowMs: number): boolean {
+  const createdMs = Date.parse(task.createdAt);
+  const expiryMs = Date.parse(task.expiryTime);
+  const excludedOwnerAddresses = new Set(
+    [TASKMARKET_WORKER_ADDRESS, ...TASKMARKET_OWNER_IDENTITIES].map((address) => address.toLowerCase()),
+  );
+  return task.status === "open" && task.submissionWindowOpen && task.claimedBy === null &&
+    task.mode === "bounty" &&
+    task.submissionVisibility === "public" &&
+    task.taskVisibility === "public" &&
+    !excludedOwnerAddresses.has(task.requester.toLowerCase()) &&
+    task.submissionCount <= freshOpportunityMaximumSubmissions &&
+    BigInt(task.netRewardAtomic) >= freshOpportunityMinimumNetAtomic &&
+    createdMs <= nowMs &&
+    nowMs - createdMs <= freshOpportunityMaximumAgeMs &&
+    expiryMs - nowMs >= freshOpportunityMinimumRemainingMs;
+}
+
+export function taskmarketOpportunityFundingTransactionHashes(
+  tasks: readonly TaskmarketTask[],
+  nowMs = Date.now(),
+): string[] {
+  return tasks.filter((task) => taskmarketOpportunityPreliminary(task, nowMs)).map(({ escrowTxHash }) => escrowTxHash);
+}
+
+function addressTopic(address: string): string {
+  return `0x${"0".repeat(24)}${address.slice(2).toLowerCase()}`;
+}
+
+function receiptRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function verifyTaskmarketFundingReceipt(
+  task: TaskmarketTask,
+  payload: TaskmarketFundingReceiptPayload | undefined,
+): boolean {
+  if (!payload || payload.transaction_hash.toLowerCase() !== task.escrowTxHash.toLowerCase() ||
+    payload.task_id.toLowerCase() !== task.id.toLowerCase()) return false;
+  const receipt = receiptRecord(payload.receipt);
+  if (!receipt || receipt.status !== "0x1" ||
+    typeof receipt.transactionHash !== "string" || receipt.transactionHash.toLowerCase() !== task.escrowTxHash.toLowerCase() ||
+    typeof receipt.to !== "string" || receipt.to.toLowerCase() !== TASKMARKET_FORWARDER ||
+    typeof receipt.from !== "string" || !addressPattern.test(receipt.from) ||
+    !Array.isArray(receipt.logs) || receipt.logs.length > 1_000) return false;
+  const logs = receipt.logs.map(receiptRecord).filter((log): log is Record<string, unknown> => log !== null);
+  if (logs.length !== receipt.logs.length) return false;
+  const transfers = logs.filter((log) =>
+    typeof log.address === "string" && log.address.toLowerCase() === baseUsdcAddress.toLowerCase() &&
+    Array.isArray(log.topics) && log.topics.length === 3 &&
+    typeof log.topics[0] === "string" && log.topics[0].toLowerCase() === transferTopic &&
+    typeof log.topics[1] === "string" && log.topics[1].toLowerCase() === addressTopic(receipt.from as string) &&
+    typeof log.topics[2] === "string" && log.topics[2].toLowerCase() === addressTopic(TASKMARKET_DIAMOND)
+  );
+  const creations = logs.filter((log) =>
+    typeof log.address === "string" && log.address.toLowerCase() === TASKMARKET_DIAMOND.toLowerCase() &&
+    Array.isArray(log.topics) && log.topics.length === 4 &&
+    typeof log.topics[0] === "string" && log.topics[0].toLowerCase() === taskCreatedTopic &&
+    typeof log.topics[1] === "string" && log.topics[1].toLowerCase() === task.id.toLowerCase() &&
+    typeof log.topics[2] === "string" && log.topics[2].toLowerCase() === addressTopic(task.requester) &&
+    typeof log.topics[3] === "string" && log.topics[3].toLowerCase() === bountyModeTopic
+  );
+  if (transfers.length !== 1 || creations.length !== 1) return false;
+  const transferData = transfers[0].data;
+  const creationData = creations[0].data;
+  if (typeof transferData !== "string" || !/^0x[a-f0-9]{64}$/i.test(transferData) ||
+    typeof creationData !== "string" || !/^0x[a-f0-9]{256}$/i.test(creationData)) return false;
+  try {
+    const reward = BigInt(task.rewardAtomic);
+    const expirySeconds = BigInt(Math.floor(Date.parse(task.expiryTime) / 1_000));
+    const taskResult = payload.task_result;
+    if (typeof taskResult !== "string" || !/^0x[a-f0-9]{896}$/i.test(taskResult)) return false;
+    const words = taskResult.slice(2).match(/.{64}/g);
+    if (!words || words.length !== 14) return false;
+    const requesterWord = `${"0".repeat(24)}${task.requester.slice(2).toLowerCase()}`;
+    const zeroWord = "0".repeat(64);
+    if (typeof payload.task_hooks_result !== "string" || typeof payload.task_evaluator_result !== "string" ||
+      typeof payload.task_metadata_result !== "string") return false;
+    const hooks = decodeFunctionResult({
+      abi: [{ type: "function", name: "getTaskHooks", stateMutability: "view", inputs: [{ name: "taskId", type: "bytes32" }], outputs: [{ name: "", type: "address[]" }] }],
+      functionName: "getTaskHooks",
+      data: payload.task_hooks_result as `0x${string}`,
+    });
+    const evaluator = decodeFunctionResult({
+      abi: [{ type: "function", name: "evaluatorFor", stateMutability: "view", inputs: [{ name: "taskId", type: "bytes32" }], outputs: [{ name: "", type: "address" }] }],
+      functionName: "evaluatorFor",
+      data: payload.task_evaluator_result as `0x${string}`,
+    });
+    const metadata = decodeFunctionResult({
+      abi: [{ type: "function", name: "getTaskMetadata", stateMutability: "view", inputs: [{ name: "taskId", type: "bytes32" }], outputs: [{ name: "", type: "tuple", components: [
+        { name: "createdAt", type: "uint256" }, { name: "claimedAt", type: "uint256" },
+        { name: "contentHash", type: "bytes32" }, { name: "contentURI", type: "string" },
+      ] }] }],
+      functionName: "getTaskMetadata",
+      data: payload.task_metadata_result as `0x${string}`,
+    });
+    const feeBps = BigInt(`0x${words[8]}`);
+    const onchainNet = reward - (reward * feeBps / 10_000n);
+    const createdExpiry = BigInt(`0x${creationData.slice(66, 130)}`);
+    const taskExpiry = BigInt(`0x${words[6]}`);
+    const metadataCreatedAt = metadata.createdAt;
+    const apiCreatedAt = BigInt(Math.floor(Date.parse(task.createdAt) / 1_000));
+    return BigInt(transferData) === reward &&
+      BigInt(`0x${creationData.slice(2, 66)}`) === reward &&
+      createdExpiry === taskExpiry && (createdExpiry >= expirySeconds ? createdExpiry - expirySeconds : expirySeconds - createdExpiry) <= 1n &&
+      BigInt(`0x${creationData.slice(130, 194)}`) === BigInt(`0x${words[12]}`) &&
+      BigInt(`0x${creationData.slice(194, 258)}`) === BigInt(`0x${words[13]}`) &&
+      Array.isArray(hooks) && hooks.length === 0 && evaluator.toLowerCase() === `0x${"0".repeat(40)}` &&
+      (metadataCreatedAt >= apiCreatedAt ? metadataCreatedAt - apiCreatedAt : apiCreatedAt - metadataCreatedAt) <= 1n &&
+      words[0].toLowerCase() === task.id.slice(2).toLowerCase() &&
+      words[1].toLowerCase() === requesterWord && words[2] === zeroWord &&
+      BigInt(`0x${words[3]}`) === 0n && words[4].toLowerCase() === bountyModeTopic.slice(2) &&
+      BigInt(`0x${words[5]}`) === reward &&
+      feeBps <= 10_000n && onchainNet === BigInt(task.netRewardAtomic) &&
+      words[9] === zeroWord;
+  } catch {
+    return false;
+  }
+}
+
+export function analyzeTaskmarket(
+  tasks: TaskmarketTask[],
+  nowMs = Date.now(),
+  fundingReceipts: readonly TaskmarketFundingReceiptPayload[] = [],
+): Record<string, unknown> {
   if (tasks.length > 500 || new Set(tasks.map(({ id }) => id.toLowerCase())).size !== tasks.length) {
     throw new Error("Taskmarket open inventory is duplicated or exceeds the bounded five-page audit.");
   }
@@ -490,21 +685,17 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
   });
   const reward = tasks.reduce((sum, task) => sum + BigInt(task.rewardAtomic), 0n);
   const submissionOpenReward = submissionOpen.reduce((sum, task) => sum + BigInt(task.rewardAtomic), 0n);
-  const excludedOwnerAddresses = new Set(
-    [TASKMARKET_WORKER_ADDRESS, ...TASKMARKET_OWNER_IDENTITIES].map((address) => address.toLowerCase()),
-  );
+  const fundingByTransaction = new Map<string, TaskmarketFundingReceiptPayload>();
+  for (const payload of fundingReceipts) {
+    if (!bytes32Pattern.test(payload.transaction_hash) ||
+      fundingByTransaction.has(payload.transaction_hash.toLowerCase())) {
+      throw new Error("Taskmarket funding receipts are malformed or duplicated.");
+    }
+    fundingByTransaction.set(payload.transaction_hash.toLowerCase(), payload);
+  }
   const freshLowCompetitionCandidates = submissionOpen
-    .filter((task) => {
-      const createdMs = Date.parse(task.createdAt);
-      const expiryMs = Date.parse(task.expiryTime);
-      return task.mode === "bounty" &&
-        !excludedOwnerAddresses.has(task.requester.toLowerCase()) &&
-        task.submissionCount <= freshOpportunityMaximumSubmissions &&
-        BigInt(task.netRewardAtomic) >= freshOpportunityMinimumNetAtomic &&
-        createdMs <= nowMs &&
-        nowMs - createdMs <= freshOpportunityMaximumAgeMs &&
-        expiryMs - nowMs >= freshOpportunityMinimumRemainingMs;
-    })
+    .filter((task) => taskmarketOpportunityPreliminary(task, nowMs) &&
+      verifyTaskmarketFundingReceipt(task, fundingByTransaction.get(task.escrowTxHash.toLowerCase())))
     .map((task) => {
       const netReward = BigInt(task.netRewardAtomic);
       const scoreAtomic = netReward / BigInt(task.submissionCount + 1);
@@ -521,10 +712,11 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
         hours_remaining: Math.round((Date.parse(task.expiryTime) - nowMs) / 36_000) / 100,
         escrow_tx_hash: task.escrowTxHash,
         requester: task.requester,
+        task_snapshot_sha256: taskmarketTaskSnapshotSha256(task),
         opportunity_score_usdc_per_current_entry: atomicToDecimal(scoreAtomic),
         requires_agent_fit_review: true,
         selection_basis:
-          "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+          "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
       };
     })
     .sort((left, right) => {
@@ -558,9 +750,9 @@ export function analyzeTaskmarket(tasks: TaskmarketTask[], nowMs = Date.now()): 
     expired_pitch_entry_tasks: expiredPitchEntryTasks,
     rejected_escrow_non_matches: submissionOpen.length - candidates.length,
     excluded_expired_assigned_or_closed_window: tasks.length - submissionOpen.length,
-    funding_rule: "official_open_task_feed_plus_valid_nonzero_reward_and_escrow_tx_hash; API escrow evidence is not independently relabeled as worker revenue",
+    funding_rule: "fresh opportunity candidates require a successful Base receipt with the exact TaskCreated event and exact Base-USDC escrow transfer to the pinned Taskmarket Diamond; open inventory remains API-reported and neither is revenue",
     fresh_low_competition_rule:
-      "bounty_mode_plus_open_unassigned_submission_window_plus_non_owner_requester_plus_max_3_submissions_plus_min_5_usdc_net_plus_max_12h_age_plus_min_2h_remaining; candidate requires agent fit and canonical task review before any action",
+      "onchain_verified_escrow_plus_bounty_mode_plus_open_unassigned_submission_window_plus_non_owner_requester_plus_max_3_submissions_plus_min_5_usdc_net_plus_max_12h_age_plus_min_2h_remaining; candidate requires agent fit and canonical task review before any action",
   };
 }
 
@@ -739,7 +931,7 @@ export function verifyTaskmarketSettlementReceipt(input: {
   const matchingTransfers: Array<{ arrayIndex: number; logIndex: number }> = [];
   const workerTopic = `0x${"0".repeat(24)}${worker.slice(2).toLowerCase()}`;
   const requesterTopic = `0x${"0".repeat(24)}${requester.slice(2).toLowerCase()}`;
-  const diamondTopic = `0x${"0".repeat(24)}${taskmarketDiamond.slice(2).toLowerCase()}`;
+  const diamondTopic = `0x${"0".repeat(24)}${TASKMARKET_DIAMOND.slice(2).toLowerCase()}`;
   const workerPaymentWord = workerPayment.toString(16).padStart(64, "0");
   const platformFeeWord = platformFee.toString(16).padStart(64, "0");
   for (let index = 0; index < receipt.logs.length; index += 1) {
@@ -752,7 +944,7 @@ export function verifyTaskmarketSettlementReceipt(input: {
       ? Number(BigInt(log.logIndex))
       : Number.NaN;
     if (!Number.isSafeInteger(logIndex) || logIndex < 0) return unavailable("receipt_log_index_malformed");
-    if (typeof log.address === "string" && log.address.toLowerCase() === taskmarketDiamond.toLowerCase() &&
+    if (typeof log.address === "string" && log.address.toLowerCase() === TASKMARKET_DIAMOND.toLowerCase() &&
       log.topics.length === 4 && String(log.topics[0]).toLowerCase() === taskCompletedTopic &&
       String(log.topics[1]).toLowerCase() === taskId.toLowerCase() &&
       String(log.topics[2]).toLowerCase() === requesterTopic &&
@@ -778,7 +970,7 @@ export function verifyTaskmarketSettlementReceipt(input: {
     network: "eip155:8453",
     settlement_tx_hash: transactionHash,
     block_number: String(BigInt(receipt.blockNumber)),
-    taskmarket_settlement_contract: taskmarketDiamond,
+    taskmarket_settlement_contract: TASKMARKET_DIAMOND,
     task_completed_topic: taskCompletedTopic,
     task_completed_log_index: canonicalEvent.logIndex,
     task_completed_receipt_array_index: canonicalEvent.arrayIndex,
@@ -787,7 +979,7 @@ export function verifyTaskmarketSettlementReceipt(input: {
     onchain_requester_address: requester,
     base_usdc_address: baseUsdcAddress,
     transfer_topic: transferTopic,
-    transfer_source_address: taskmarketDiamond,
+    transfer_source_address: TASKMARKET_DIAMOND,
     transfer_source_topic: diamondTopic,
     worker_address: worker,
     worker_payment_atomic: String(workerPayment),
@@ -1129,3 +1321,4 @@ export function reconcileTaskmarketTracked(input: {
     accounting_rule: "only a completed task's canonical award becomes one purchase and positive worker-payment revenue after a successful Base receipt binds the canonical Taskmarket Diamond TaskCompleted event to the exact task, onchain non-owner requester, worker payment, platform fee, and a unique exact Base-USDC payout transfer from the Diamond to the worker; submissions, platform awards, and submit transaction hashes alone remain zero",
   };
 }
+import { decodeFunctionResult } from "viem";

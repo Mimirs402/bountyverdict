@@ -40,6 +40,7 @@
     "agentmrr:release-current": "node --experimental-strip-types scripts/release-agentmrr-current.ts",
     "demand:watch": "node --experimental-strip-types scripts/demand-watch.ts",
     "opportunity:agent": "node --experimental-strip-types scripts/opportunity-agent-workflow.ts",
+    "opportunity:submit": "node --experimental-strip-types scripts/opportunity-taskmarket-submit.ts",
     "taskmarket:aibtc-submit": "node --experimental-strip-types scripts/taskmarket-aibtc-submit.ts",
     "clawlancer:work": "node --experimental-strip-types scripts/clawlancer-work.ts",
     "review:daily": "node --experimental-strip-types scripts/daily-review.ts",
@@ -56,6 +57,7 @@
   "dependencies": {
     "@coinbase/cdp-sdk": "1.53.0",
     "@coinbase/x402": "2.1.0",
+    "@lucid-agents/taskmarket": "1.4.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@x402/core": "2.19.0",
     "@x402/evm": "2.19.0",
@@ -83,6 +85,7 @@
   "overrides": {
     "@hono/node-server": "2.0.11",
     "axios": "1.18.1",
-    "sharp": "0.35.3"
+    "sharp": "0.35.3",
+    "undici": "6.27.0"
   }
 }

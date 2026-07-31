@@ -24,6 +24,7 @@ const candidate: OpportunityCandidate = {
   hours_remaining: 6,
   escrow_tx_hash: `0x${"b".repeat(64)}`,
   requester: "0x1111111111111111111111111111111111111111",
+  task_snapshot_sha256: "c".repeat(64),
   opportunity_score_usdc_per_current_entry: "2.775",
   requires_agent_fit_review: true,
   selection_basis:
@@ -39,6 +40,7 @@ const moltCandidate: OpportunityCandidate = {
   net_reward_usdc: "5.7",
   submission_count: 2,
   requester: "22222222-2222-4222-8222-222222222222",
+  task_snapshot_sha256: null,
 };
 
 test("opportunity event loop emits a deterministic guarded trigger only once per task", () => {
@@ -219,7 +221,7 @@ test("structured preparation result binds trigger and task identities", () => {
     status: "PREPARED",
     summary: "Prepared locally.",
     artifact_paths: ["/tmp/preparation/solution.txt"],
-    tests: [{ command: "npm test", result: "passed" }],
+    tests: [{ command: "npm test", passed: true, result: "passed" }],
     remaining_blockers: [],
     product_learning: [],
   }, trigger, candidate.task_id);

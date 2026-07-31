@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile an uncertain Taskmarket submission without resubmitting
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=10min
+AccuracySec=1min
+Unit=bountyverdict-opportunity-taskmarket-submit.service
+
+[Install]
+WantedBy=timers.target

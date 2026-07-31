@@ -22,10 +22,17 @@ import {
   analyzeTaskmarket,
   parseTaskmarketPage,
   reconcileTaskmarketTracked,
+  taskmarketOpportunityFundingTransactionHashes,
   taskmarketAwardSettlementHashes,
   TASKMARKET_API,
+  TASKMARKET_DIAMOND,
+  TASKMARKET_EVALUATOR_FOR_SELECTOR,
+  TASKMARKET_GET_TASK_SELECTOR,
+  TASKMARKET_GET_TASK_HOOKS_SELECTOR,
+  TASKMARKET_GET_TASK_METADATA_SELECTOR,
   TASKMARKET_TRACKED_SUBMISSIONS,
   TASKMARKET_WORKER_ADDRESS,
+  type TaskmarketFundingReceiptPayload,
   type TaskmarketTask,
   type TaskmarketSettlementReceiptPayload,
   type TaskmarketTrackedSpecification,
@@ -44,6 +51,8 @@ const stateFile = process.env.DEMAND_WATCH_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/demand-watch.json`;
 const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
   `${homedir()}/.local/state/bountyverdict/opportunity-trigger.json`;
+const dynamicTaskmarketTrackedFile = process.env.BOUNTY_OPPORTUNITY_TASKMARKET_TRACKED_FILE ||
+  `${homedir()}/.local/state/bountyverdict/opportunity-taskmarket-tracked.json`;
 const timeoutMs = 20_000;
 const maximumResponseBytes = 2_000_000;
 const maximumOpportunityTriggerBytes = 256 * 1024;
@@ -88,6 +97,26 @@ async function pendingOpportunityTriggerId(): Promise<string | null> {
     return parseOpportunityTrigger(JSON.parse(await readFile(opportunityTriggerFile, "utf8")) as unknown).trigger_id;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function dynamicTaskmarketTracked(): Promise<TaskmarketTrackedSpecification[]> {
+  try {
+    const metadata = await lstat(dynamicTaskmarketTrackedFile);
+    const expectedUid = process.getuid?.() ?? -1;
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== expectedUid ||
+      (metadata.mode & 0o777) !== 0o600 || metadata.size < 2 || metadata.size > maximumResponseBytes) {
+      throw new Error("Dynamic Taskmarket tracking registry must be a bounded private owner-owned file.");
+    }
+    const value = JSON.parse(await readFile(dynamicTaskmarketTrackedFile, "utf8")) as Record<string, unknown>;
+    if (value.schema_version !== 1 || value.worker_address !== TASKMARKET_WORKER_ADDRESS ||
+      !Array.isArray(value.submissions) || value.submissions.length > 89) {
+      throw new Error("Dynamic Taskmarket tracking registry is malformed.");
+    }
+    return value.submissions as TaskmarketTrackedSpecification[];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
 }
@@ -200,6 +229,56 @@ async function baseSettlementReceipt(transactionHash: string): Promise<Taskmarke
   }
 }
 
+async function baseTaskmarketFundingProof(
+  transactionHash: string,
+  taskId: string,
+): Promise<TaskmarketFundingReceiptPayload> {
+  const selectors = [TASKMARKET_GET_TASK_SELECTOR, TASKMARKET_GET_TASK_HOOKS_SELECTOR,
+    TASKMARKET_EVALUATOR_FOR_SELECTOR, TASKMARKET_GET_TASK_METADATA_SELECTOR];
+  const [receipt, ...taskResults] = await Promise.all([
+    baseSettlementReceipt(transactionHash),
+    ...selectors.map((selector) => (async (): Promise<unknown | null> => {
+      try {
+        const response = await fetch(BASE_MAINNET_RPC, {
+          method: "POST",
+          redirect: "error",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "User-Agent": "bountyverdict-read-only-demand-watch/1.0",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_call",
+            params: [{ to: TASKMARKET_DIAMOND, data: `${selector}${taskId.slice(2)}` }, "latest"],
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+          return null;
+        }
+        const payload = await response.json() as Record<string, unknown>;
+        return payload.jsonrpc === "2.0" && payload.id === 1 && typeof payload.result === "string"
+          ? payload.result
+          : null;
+      } catch {
+        return null;
+      }
+    })()),
+  ]);
+  return {
+    transaction_hash: transactionHash,
+    receipt: receipt.receipt,
+    task_id: taskId,
+    task_result: taskResults[0],
+    task_hooks_result: taskResults[1],
+    task_evaluator_result: taskResults[2],
+    task_metadata_result: taskResults[3],
+    unavailable_reason: receipt.unavailable_reason,
+  };
+}
+
 async function fetchMoltJobs(funded: boolean): Promise<MoltJob[]> {
   const jobs: MoltJob[] = [];
   const seenCursors = new Set<string>();
@@ -260,9 +339,11 @@ async function fetchTaskmarketOpen(): Promise<TaskmarketTask[]> {
   throw new Error("Taskmarket pagination exceeded the bounded five-page audit.");
 }
 
-async function fetchTaskmarketTracked(): Promise<{ payloads: TaskmarketTrackedPayload[]; stats: unknown }> {
+async function fetchTaskmarketTracked(
+  trackedSubmissions: readonly TaskmarketTrackedSpecification[],
+): Promise<{ payloads: TaskmarketTrackedPayload[]; stats: unknown }> {
   const [payloads, stats] = await Promise.all([
-    Promise.all(TASKMARKET_TRACKED_SUBMISSIONS.map(async (tracked: TaskmarketTrackedSpecification): Promise<TaskmarketTrackedPayload> => {
+    Promise.all(trackedSubmissions.map(async (tracked: TaskmarketTrackedSpecification): Promise<TaskmarketTrackedPayload> => {
       const { task_id, public_proof: publicProof } = tracked;
       const encodedTaskId = encodeURIComponent(task_id);
       const [detail, submissions, publicProofNotes] = await Promise.all([
@@ -294,6 +375,14 @@ async function fetchTaskmarketTracked(): Promise<{ payloads: TaskmarketTrackedPa
 const checkedAtMs = Date.now();
 const checkedAt = new Date(checkedAtMs).toISOString();
 const previous = await readPreviousState();
+const taskmarketTrackedSubmissions = [
+  ...TASKMARKET_TRACKED_SUBMISSIONS,
+  ...await dynamicTaskmarketTracked(),
+];
+if (new Set(taskmarketTrackedSubmissions.map(({ task_id }) => task_id.toLowerCase())).size !== taskmarketTrackedSubmissions.length ||
+  new Set(taskmarketTrackedSubmissions.map(({ submission_id }) => submission_id.toLowerCase())).size !== taskmarketTrackedSubmissions.length) {
+  throw new Error("Static and dynamic Taskmarket tracking registries overlap.");
+}
 const trackedDecision = shouldRefreshTaskmarketTracked(previous, checkedAtMs);
 const moltOwnerPosterIds = moltJobsOwnerPosterIds();
 const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
@@ -334,11 +423,19 @@ const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedR
       }
       return analyzeOpenJobs(openJobs, checkedAtMs);
     }),
-  fetchTaskmarketOpen().then((tasks) => analyzeTaskmarket(tasks, checkedAtMs)),
+  fetchTaskmarketOpen().then(async (tasks) => {
+    const preliminary = new Map(tasks.map((task) => [task.escrowTxHash.toLowerCase(), task]));
+    const fundingReceipts = await Promise.all(taskmarketOpportunityFundingTransactionHashes(tasks, checkedAtMs).map((hash) => {
+      const task = preliminary.get(hash.toLowerCase());
+      if (!task) throw new Error("Taskmarket preliminary funding proof lost its task binding.");
+      return baseTaskmarketFundingProof(hash, task.id);
+    }));
+    return analyzeTaskmarket(tasks, checkedAtMs, fundingReceipts);
+  }),
   trackedDecision.due
-    ? fetchTaskmarketTracked().then((tracked) => reconcileTaskmarketTracked({
+    ? fetchTaskmarketTracked(taskmarketTrackedSubmissions).then((tracked) => reconcileTaskmarketTracked({
         worker_address: TASKMARKET_WORKER_ADDRESS,
-        tracked: TASKMARKET_TRACKED_SUBMISSIONS,
+        tracked: taskmarketTrackedSubmissions,
         payloads: tracked.payloads,
         agent_stats: tracked.stats,
         now_ms: checkedAtMs,

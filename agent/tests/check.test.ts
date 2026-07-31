@@ -1933,8 +1933,12 @@ test("a merged cross-referenced implementation hard-stops an otherwise-open issu
         event: "cross-referenced",
         created_at: "2026-05-26T12:00:00Z",
         source: {
+          type: "issue",
           issue: {
+            number: 9,
+            repository_url: "https://api.github.com/repos/acme/widget",
             title: "Delivered implementation",
+            body: "Closes #4",
             state: "closed",
             user: { login: "solver" },
             pull_request: {
@@ -1958,6 +1962,102 @@ test("a merged cross-referenced implementation hard-stops an otherwise-open issu
   assert.equal(result.verdict, "AVOID");
   assert.equal(result.coverage.linked_pull_requests_found, 1);
   assert.ok(result.signals.some((signal) => signal.label === "Merged implementation PR" && signal.hard_stop));
+});
+
+test("a merged same-repository PR that closes another issue is not a merged implementation hard stop", async () => {
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: 0 }, { headers });
+    if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+    if (/\/comments\?/.test(url)) return Response.json([], { headers });
+    if (/\/timeline\?/.test(url)) {
+      return Response.json([{
+        event: "cross-referenced",
+        created_at: "2026-07-29T19:14:51Z",
+        source: {
+          type: "issue",
+          issue: {
+            number: 1641,
+            repository_url: "https://api.github.com/repos/acme/widget",
+            title: "Fix agent creation race condition and enforce plan limits",
+            body: "This does not close #4, but closes #1453.",
+            state: "closed",
+            user: { login: "solver" },
+            pull_request: {
+              html_url: "https://github.com/acme/widget/pull/1641",
+              merged_at: "2026-07-29T19:14:51Z",
+            },
+          },
+        },
+      }], { headers });
+    }
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-30T12:00:00Z"),
+  );
+
+  assert.equal(result.coverage.linked_pull_requests_found, 1);
+  assert.ok(!result.signals.some((signal) => signal.label === "Merged implementation PR"));
+  assert.ok(result.signals.some((signal) => signal.label === "Referenced competing PR"));
+});
+
+test("merged timeline hard stops reject ambiguous references and unauthenticated source identity", async () => {
+  const cases = [
+    { body: "Closes #4ever", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "Closes #4éver", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "This no longer closes #4", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "This does anything but close #4", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "This does anything but actually close #4", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "Closes #4", type: "commit", number: 9, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+    { body: "Closes #4", type: "issue", number: 9, repositoryUrl: "https://api.github.com/repos/evil/other" },
+    { body: "Closes #4", type: "issue", number: 10, repositoryUrl: "https://api.github.com/repos/acme/widget" },
+  ];
+
+  for (const current of cases) {
+    const mock = (async (input: URL | RequestInfo) => {
+      const url = String(input);
+      const headers = { "x-ratelimit-remaining": "4990" };
+      if (/\/issues\/4$/.test(url)) return Response.json({ ...issue, comments: 0 }, { headers });
+      if (/\/repos\/acme\/widget$/.test(url)) return Response.json(repository, { headers });
+      if (/\/comments\?/.test(url)) return Response.json([], { headers });
+      if (/\/timeline\?/.test(url)) {
+        return Response.json([{
+          event: "cross-referenced",
+          created_at: "2026-05-26T12:00:00Z",
+          source: {
+            type: current.type,
+            issue: {
+              number: current.number,
+              repository_url: current.repositoryUrl,
+              title: "Other implementation",
+              body: current.body,
+              state: "closed",
+              user: { login: "solver" },
+              pull_request: {
+                html_url: "https://github.com/acme/widget/pull/9",
+                merged_at: "2026-05-26T12:00:00Z",
+              },
+            },
+          },
+        }], { headers });
+      }
+      return Response.json({ message: "not found" }, { status: 404, headers });
+    }) as typeof fetch;
+
+    const result = await checkGithubIssue(
+      "https://github.com/acme/widget/issues/4",
+      {},
+      mock,
+      new Date("2026-07-30T12:00:00Z"),
+    );
+    assert.ok(!result.signals.some((signal) => signal.label === "Merged implementation PR"), JSON.stringify(current));
+  }
 });
 
 test("an unrelated repository timeline cross-reference is excluded from implementation evidence", async () => {
@@ -2028,6 +2128,60 @@ test("a transferred issue uses only its canonical destination repository", async
   assert.equal(result.issue.transferred, true);
   assert.equal(result.issue.repository, "newco/gadget");
   assert.ok(!requested.some((url) => /\/repos\/acme\/widget(?:$|\/contents|\/issues\/4\/(?:comments|timeline))/.test(url)));
+});
+
+test("a transferred issue preserves its exact submitted alias for legacy merged-PR evidence", async () => {
+  const transferredIssue = {
+    ...issue,
+    number: 9,
+    comments: 0,
+    repository_url: "https://api.github.com/repos/newco/gadget",
+    html_url: "https://github.com/newco/gadget/issues/9",
+    title: "$100 bounty moved with its repository",
+  };
+  const mock = (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    const headers = { "x-ratelimit-remaining": "4990" };
+    if (/\/repos\/acme\/widget\/issues\/4$/.test(url)) return Response.json(transferredIssue, { headers });
+    if (/\/repos\/newco\/gadget$/.test(url)) {
+      return Response.json({ ...repository, full_name: "newco/gadget", html_url: "https://github.com/newco/gadget" }, { headers });
+    }
+    if (/\/repos\/newco\/gadget\/issues\/9\/comments\?/.test(url)) return Response.json([], { headers });
+    if (/\/repos\/newco\/gadget\/issues\/9\/timeline\?/.test(url)) {
+      return Response.json([{
+        event: "cross-referenced",
+        created_at: "2026-07-29T19:14:51Z",
+        source: {
+          type: "issue",
+          issue: {
+            number: 18,
+            repository_url: "https://api.github.com/repos/acme/widget",
+            title: "Legacy implementation",
+            body: "Closes acme/widget#4",
+            state: "closed",
+            user: { login: "solver" },
+            pull_request: {
+              html_url: "https://github.com/acme/widget/pull/18",
+              merged_at: "2026-07-29T19:14:51Z",
+            },
+          },
+        },
+      }], { headers });
+    }
+    if (/\/repos\/newco\/gadget\/issues\?/.test(url)) return Response.json([], { headers });
+    return Response.json({ message: "not found" }, { status: 404, headers });
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-30T12:00:00Z"),
+  );
+
+  assert.equal(result.issue.transferred, true);
+  assert.equal(result.verdict, "AVOID");
+  assert.ok(result.signals.some((signal) => signal.label === "Merged implementation PR" && signal.hard_stop));
 });
 
 function transferredAlgoraMock(actorId: number, pageIssueUrl: string, requested: string[]): typeof fetch {

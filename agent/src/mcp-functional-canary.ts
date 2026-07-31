@@ -31,6 +31,9 @@ export type McpContractCheck = {
 export type McpContractCanaryReport = {
   healthy: boolean;
   endpoint: string;
+  server_version: string | null;
+  worker_version_id: string | null;
+  server_identity_error?: string;
   payment_or_signing_attempted: false;
   checks: McpContractCheck[];
 };
@@ -83,6 +86,43 @@ async function callTool(
   });
   requireCondition(response.ok, `MCP ${name} returned HTTP ${response.status}.`);
   return { response, payload: record(await response.json(), `${name} JSON-RPC response`) };
+}
+
+async function readServerVersion(
+  origin: string,
+  fetchImpl: FetchLike,
+  timeoutMs: number,
+): Promise<string> {
+  const response = await fetchImpl(`${origin}${MCP_PATH}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": PROTOCOL_VERSION,
+      "User-Agent": "bountyverdict-owner-audit/1.0",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 900,
+      method: "initialize",
+      params: {
+        protocolVersion: PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: "bountyverdict-functional-canary", version: "1.0.0" },
+      },
+    }),
+    redirect: "error",
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  requireCondition(response.ok, `MCP initialize returned HTTP ${response.status}.`);
+  const payload = record(await response.json(), "MCP initialize response");
+  requireCondition(payload.result?.serverInfo?.name === "BountyVerdict", "MCP initialize returned the wrong server identity.");
+  const version = payload.result?.serverInfo?.version;
+  requireCondition(
+    typeof version === "string" && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(version),
+    "MCP initialize returned an invalid semantic version.",
+  );
+  return version;
 }
 
 async function checkFreeSelector(
@@ -202,13 +242,42 @@ async function checkUnsignedPaidHandoff(
 
 export async function runMcpContractCanary(
   origin: string,
-  options: { fetch?: FetchLike; timeoutMs?: number; monotonic?: () => number } = {},
+  options: {
+    fetch?: FetchLike;
+    timeoutMs?: number;
+    monotonic?: () => number;
+    workerVersionOverride?: string;
+  } = {},
 ): Promise<McpContractCanaryReport> {
   const normalizedOrigin = new URL(origin).origin;
   requireCondition(normalizedOrigin === origin, "MCP canary origin must be an exact origin.");
   const fetchImpl = options.fetch || fetch;
+  const workerVersionOverride = options.workerVersionOverride;
+  if (workerVersionOverride) {
+    requireCondition(
+      /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionOverride),
+      "MCP canary Worker version override must be a lowercase UUID.",
+    );
+  }
+  const versionPinnedFetch: FetchLike = workerVersionOverride
+    ? (input, init = {}) => {
+        const headers = new Headers(init.headers);
+        headers.set(
+          "Cloudflare-Workers-Version-Overrides",
+          `bountyverdict-agent-production="${workerVersionOverride}"`,
+        );
+        return fetchImpl(input, { ...init, headers });
+      }
+    : fetchImpl;
   const timeoutMs = options.timeoutMs || 30_000;
   const monotonic = options.monotonic || (() => performance.now());
+  let serverVersion: string | null = null;
+  let serverIdentityError: string | undefined;
+  try {
+    serverVersion = await readServerVersion(origin, versionPinnedFetch, timeoutMs);
+  } catch (error) {
+    serverIdentityError = error instanceof Error ? error.message : String(error);
+  }
   const definitions = [
     ["free_selector", checkFreeSelector],
     ["unsigned_paid_handoff_v2", checkUnsignedPaidHandoff],
@@ -217,7 +286,7 @@ export async function runMcpContractCanary(
   for (const [kind, check] of definitions) {
     const started = monotonic();
     try {
-      await check(origin, fetchImpl, timeoutMs);
+      await check(origin, versionPinnedFetch, timeoutMs);
       checks.push({ kind, ok: true, contract: "1.0", duration_ms: Math.max(0, Math.round(monotonic() - started)) });
     } catch (error) {
       checks.push({
@@ -230,8 +299,11 @@ export async function runMcpContractCanary(
     }
   }
   return {
-    healthy: checks.length === MCP_CANARY_KINDS.length && checks.every(({ ok }) => ok),
+    healthy: serverVersion !== null && checks.length === MCP_CANARY_KINDS.length && checks.every(({ ok }) => ok),
     endpoint: `${origin}${MCP_PATH}`,
+    server_version: serverVersion,
+    worker_version_id: workerVersionOverride || null,
+    ...(serverIdentityError ? { server_identity_error: serverIdentityError } : {}),
     payment_or_signing_attempted: false,
     checks,
   };

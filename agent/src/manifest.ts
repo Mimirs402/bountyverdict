@@ -6,6 +6,7 @@ export interface AgentManifest {
   product: string;
   status: "awaiting_production" | "active";
   production_api: string | null;
+  worker_version_id: string | null;
   updated_at: string;
   [key: string]: unknown;
 }
@@ -13,6 +14,7 @@ export interface AgentManifest {
 export function activateManifest(
   value: unknown,
   productionApi: string,
+  workerVersionId: string,
   now = new Date(),
 ): AgentManifest {
   if (!value || typeof value !== "object") throw new Error("Agent manifest must be an object.");
@@ -37,6 +39,9 @@ export function activateManifest(
   ) {
     throw new Error("PRODUCTION_API_URL must be a credential-free HTTPS origin.");
   }
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionId)) {
+    throw new Error("CLOUDFLARE_WORKER_VERSION_OVERRIDE must be a lowercase UUID.");
+  }
 
   return {
     ...manifest,
@@ -49,6 +54,7 @@ export function activateManifest(
     },
     status: "active",
     production_api: origin.origin,
+    worker_version_id: workerVersionId,
     updated_at: now.toISOString(),
   };
 }

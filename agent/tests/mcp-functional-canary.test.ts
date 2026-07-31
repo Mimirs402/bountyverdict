@@ -7,6 +7,7 @@ import {
 } from "../src/payment-handoff.ts";
 
 const origin = "https://bountyverdict-agent-production.mimirslab.workers.dev";
+const workerVersionId = "12345678-1234-1234-1234-123456789abc";
 const args = { run_url: "https://github.com/owner/repo/actions/runs/1" };
 
 function jsonResponse(value: unknown, headers: Record<string, string> = {}): Response {
@@ -35,6 +36,18 @@ function selectorResponse(): Response {
     result: {
       content: [{ type: "text", text: JSON.stringify(route) }],
       structuredContent: route,
+    },
+  });
+}
+
+function initializeResponse(version = "1.1.18"): Response {
+  return jsonResponse({
+    jsonrpc: "2.0",
+    id: 900,
+    result: {
+      protocolVersion: "2025-11-25",
+      capabilities: {},
+      serverInfo: { name: "BountyVerdict", version },
     },
   });
 }
@@ -113,7 +126,7 @@ function handoffResponse(): Response {
 
 test("recurring MCP canary proves the free selector and handoff without credentials or payment", async () => {
   const requests: Array<{ url: string; init: RequestInit }> = [];
-  const responses = [selectorResponse(), handoffResponse()];
+  const responses = [initializeResponse(), selectorResponse(), handoffResponse()];
   const report = await runMcpContractCanary(origin, {
     fetch: async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -123,14 +136,17 @@ test("recurring MCP canary proves the free selector and handoff without credenti
       let value = 0;
       return () => value += 5;
     })(),
+    workerVersionOverride: workerVersionId,
   });
   assert.equal(report.healthy, true);
+  assert.equal(report.server_version, "1.1.18");
+  assert.equal(report.worker_version_id, workerVersionId);
   assert.equal(report.payment_or_signing_attempted, false);
   assert.deepEqual(report.checks.map(({ kind, ok }) => ({ kind, ok })), [
     { kind: "free_selector", ok: true },
     { kind: "unsigned_paid_handoff_v2", ok: true },
   ]);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   for (const [index, request] of requests.entries()) {
     assert.equal(request.url, `${origin}/mcp`);
     assert.equal(request.init.method, "POST");
@@ -139,9 +155,18 @@ test("recurring MCP canary proves the free selector and handoff without credenti
     assert.equal(headers.has("Payment-Signature"), false);
     assert.equal(headers.has("X-PAYMENT"), false);
     assert.equal(headers.get("User-Agent"), "bountyverdict-owner-audit/1.0");
+    assert.equal(
+      headers.get("Cloudflare-Workers-Version-Overrides"),
+      `bountyverdict-agent-production="${workerVersionId}"`,
+    );
     const rpc = JSON.parse(String(request.init.body));
+    if (index === 0) {
+      assert.equal(rpc.method, "initialize");
+      assert.equal(rpc.params.clientInfo.name, "bountyverdict-functional-canary");
+      continue;
+    }
     assert.equal(rpc.method, "tools/call");
-    assert.deepEqual(rpc.params, index === 0 ? {
+    assert.deepEqual(rpc.params, index === 1 ? {
       name: "choose_github_agent_decision",
       arguments: { task: "github_actions_root_cause" },
     } : {
@@ -153,16 +178,42 @@ test("recurring MCP canary proves the free selector and handoff without credenti
 
 test("recurring MCP canary fails closed when the free selector asks for payment", async () => {
   const responses = [
+    initializeResponse(),
     selectorResponse(),
     handoffResponse(),
   ];
-  responses[0] = jsonResponse(await responses[0].json(), { "Payment-Required": "challenge" });
+  responses[1] = jsonResponse(await responses[1].json(), { "Payment-Required": "challenge" });
   const report = await runMcpContractCanary(origin, {
     fetch: async () => responses.shift()!,
+    workerVersionOverride: workerVersionId,
   });
   assert.equal(report.healthy, false);
   assert.equal(report.checks[0].kind, "free_selector");
   assert.equal(report.checks[0].ok, false);
   assert.match(report.checks[0].error || "", /unexpectedly returned Payment-Required/);
   assert.equal(report.payment_or_signing_attempted, false);
+});
+
+test("recurring MCP canary fails closed when server release identity is invalid", async () => {
+  const responses = [initializeResponse("next"), selectorResponse(), handoffResponse()];
+  const report = await runMcpContractCanary(origin, {
+    fetch: async () => responses.shift()!,
+    workerVersionOverride: workerVersionId,
+  });
+  assert.equal(report.healthy, false);
+  assert.equal(report.server_version, null);
+  assert.match(report.server_identity_error || "", /invalid semantic version/);
+  assert.equal(report.checks.every(({ ok }) => ok), true);
+});
+
+test("recurring MCP canary rejects an invalid Worker version override before requests", async () => {
+  let requested = false;
+  await assert.rejects(() => runMcpContractCanary(origin, {
+    fetch: async () => {
+      requested = true;
+      return initializeResponse();
+    },
+    workerVersionOverride: "1.1.18",
+  }), /lowercase UUID/);
+  assert.equal(requested, false);
 });

@@ -1,0 +1,9 @@
+[Unit]
+Description=Run BountyVerdict functional canaries after a production runtime release change
+
+[Path]
+PathChanged=%h/Projects/sandbox/bountyverdict-production-runtime/agent-manifest.json
+Unit=bountyverdict-functional-canary.service
+
+[Install]
+WantedBy=default.target

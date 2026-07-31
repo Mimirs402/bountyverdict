@@ -19,6 +19,8 @@ const opportunityAgentScriptUrl = new URL("../agent/scripts/opportunity-agent-wo
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
+const functionalCanaryPathUrl = new URL("../ops/systemd/bountyverdict-functional-canary.path", import.meta.url);
+const functionalCanaryServiceUrl = new URL("../ops/systemd/bountyverdict-functional-canary.service", import.meta.url);
 const funnelTailServiceUrl = new URL("../ops/systemd/bountyverdict-funnel-tail.service", import.meta.url);
 const taskmarketPitchServiceUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.service", import.meta.url);
 const taskmarketPitchTimerUrl = new URL("../ops/systemd/bountyverdict-taskmarket-agentwork-pitch.timer", import.meta.url);
@@ -1300,11 +1302,27 @@ test("the catalog free-proof boundary remains local until its exact clean N=25 s
 });
 
 test("the functional canary schedules a fresh run after every timer activation", async () => {
-  const timer = await readFile(functionalCanaryTimerUrl, "utf8");
+  const [timer, path, service, canary, distribution, workflow] = await Promise.all([
+    readFile(functionalCanaryTimerUrl, "utf8"),
+    readFile(functionalCanaryPathUrl, "utf8"),
+    readFile(functionalCanaryServiceUrl, "utf8"),
+    readFile(new URL("../agent/scripts/functional-canary.ts", import.meta.url), "utf8"),
+    readFile(distributionUrl, "utf8"),
+    readFile(new URL("../.github/workflows/deploy-worker.yml", import.meta.url), "utf8"),
+  ]);
   assert.match(timer, /OnActiveSec=1min/);
   assert.match(timer, /OnUnitActiveSec=6h/);
   assert.match(timer, /Persistent=true/);
   assert.doesNotMatch(timer, /OnBootSec=/);
+  assert.match(path, /PathChanged=%h\/Projects\/sandbox\/bountyverdict-production-runtime\/agent-manifest\.json/);
+  assert.match(path, /Unit=bountyverdict-functional-canary\.service/);
+  assert.match(service, /WorkingDirectory=%h\/Projects\/sandbox\/bountyverdict-production-runtime\/agent/);
+  assert.match(canary, /activeReleaseIdentity/);
+  assert.match(canary, /mcp_server_version/);
+  assert.match(distribution, /validateFunctionalCanaryRelease/);
+  assert.ok(workflow.indexOf("Activate public agent manifest") < workflow.indexOf("Verify real production handlers and release identity"));
+  assert.match(workflow, /state\.release\?\.release_version !== process\.env\.WORKER_RELEASE_VERSION/);
+  assert.match(workflow, /state\.release\?\.worker_version_id !== process\.env\.CLOUDFLARE_WORKER_VERSION_OVERRIDE/);
 });
 
 test("the exact AgentWork pitch is polled read-only with private state", async () => {

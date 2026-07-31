@@ -1,6 +1,5 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { CallToolRequestSchema, JSONRPCRequestSchema, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, JSONRPCRequestSchema } from "@modelcontextprotocol/core";
+import { CLIENT_INFO_META_KEY, createMcpHandler, McpServer, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/server";
 import { createPaymentWrapper, type PaymentRequirements } from "@x402/mcp";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { z } from "zod";
@@ -24,7 +23,7 @@ import { PRODUCT_CATALOG, type ProductKey } from "./product-catalog.ts";
 import { createX402ServerContext, type X402ServerEnvironment } from "./x402-resource-server.ts";
 
 const MCP_BODY_LIMIT_BYTES = MCP_DRIFT_MAX_BODY_BYTES + 64 * 1024;
-const MCP_SERVER_VERSION = "1.1.19";
+const MCP_SERVER_VERSION = "1.1.20";
 const MCP_ALLOWED_BROWSER_ORIGINS = new Set(["https://playground.ai.cloudflare.com"]);
 const GITHUB_ISSUE_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9]\d*\/?$/;
 const GITHUB_REPOSITORY_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/;
@@ -143,13 +142,13 @@ const portfolioUrlsSchema = z.array(issueUrlSchema)
   .max(10)
   .refine((urls) => new Set(urls).size === urls.length, "Every issue URL must be unique.")
   .describe(PORTFOLIO_URLS_DESCRIPTION);
-const jsonSchemaObject = z.record(z.unknown())
+const jsonSchemaObject = z.record(z.string(), z.unknown())
   .describe("A bounded JSON Schema Draft 2020-12 object in MCPDriftVerdict's documented comparison subset.");
 const mcpToolSchema = z.object({
   name: z.string().regex(MCP_TOOL_NAME_PATTERN).describe("Stable MCP tool name."),
   title: z.string().max(512).optional().describe("Optional human-readable tool title."),
   description: z.string().max(16_384).optional().describe("Optional model-facing tool description."),
-  icons: z.array(z.record(z.unknown())).max(8).optional().describe("Optional MCP tool icons; retained for comparison, never fetched."),
+  icons: z.array(z.record(z.string(), z.unknown())).max(8).optional().describe("Optional MCP tool icons; retained for comparison, never fetched."),
   inputSchema: jsonSchemaObject.describe("The tool's complete input JSON Schema."),
   outputSchema: jsonSchemaObject.optional().describe("The tool's complete output JSON Schema, when declared."),
   annotations: z.object({
@@ -162,7 +161,7 @@ const mcpToolSchema = z.object({
   execution: z.object({
     taskSupport: z.enum(["forbidden", "optional", "required"]).optional(),
   }).strict().optional(),
-  _meta: z.record(z.unknown()).optional().describe("Optional MCP extension metadata; bounded again by the semantic validator."),
+  _meta: z.record(z.string(), z.unknown()).optional().describe("Optional MCP extension metadata; bounded again by the semantic validator."),
 }).strict().describe("One complete MCP tools/list tool definition.");
 const mcpSnapshotSchema = z.object({
   protocol_version: z.literal("2025-11-25"),
@@ -252,10 +251,18 @@ function appendPlainPaymentInstruction(result: ToolResult): ToolResult {
 
 export function classifyMcpClientFamily(value: unknown, ownerAutomation = false): McpClientFamily {
   if (ownerAutomation) return "owner_automation";
-  if (!value || typeof value !== "object" || Array.isArray(value) || (value as { method?: unknown }).method !== "initialize") {
-    return "not_applicable";
-  }
-  const name = (value as { params?: { clientInfo?: { name?: unknown } } }).params?.clientInfo?.name;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "not_applicable";
+  const request = value as {
+    method?: unknown;
+    params?: { clientInfo?: { name?: unknown } };
+    _meta?: Record<string, unknown>;
+  };
+  const name = request.method === "initialize"
+    ? request.params?.clientInfo?.name
+    : request.method === "server/discover"
+      ? (request._meta?.[CLIENT_INFO_META_KEY] as { name?: unknown } | undefined)?.name
+      : undefined;
+  if (request.method !== "initialize" && request.method !== "server/discover") return "not_applicable";
   if (typeof name !== "string" || !name.trim()) return "missing";
   if (/claude/i.test(name)) return "claude";
   if (/codex/i.test(name)) return "codex";
@@ -319,9 +326,18 @@ async function getPaymentContext(env: McpEnvironment): Promise<PaymentContext> {
   return pending;
 }
 
+function requestMeta(extra: unknown): Record<string, unknown> | undefined {
+  if (!extra || typeof extra !== "object") return undefined;
+  const direct = (extra as { _meta?: unknown })._meta;
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct as Record<string, unknown>;
+  const lifted = (extra as { mcpReq?: { _meta?: unknown } }).mcpReq?._meta;
+  return lifted && typeof lifted === "object" && !Array.isArray(lifted)
+    ? lifted as Record<string, unknown>
+    : undefined;
+}
+
 function hasPayment(extra: unknown): boolean {
-  if (!extra || typeof extra !== "object") return false;
-  const payment = (extra as { _meta?: Record<string, unknown> })._meta?.["x402/payment"];
+  const payment = requestMeta(extra)?.["x402/payment"];
   return Boolean(payment && typeof payment === "object" && !Array.isArray(payment));
 }
 
@@ -359,7 +375,7 @@ async function paidCall(
     },
   })(async () => execute());
   try {
-    const result = await wrapped(normalizedArgs, extra as never) as ToolResult;
+    const result = await wrapped(normalizedArgs, { _meta: requestMeta(extra) } as never) as ToolResult;
     if (paymentPresent) {
       const settled = Boolean(result._meta?.["x402/payment-response"]);
       emitMcpEvent(settled && !result.isError ? "paid_success" : "paid_error", product, request);
@@ -549,6 +565,17 @@ function unknownToolError(id: string | number): Response {
   }), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
+async function normalizeLegacyJsonResponse(response: Response): Promise<Response> {
+  if (!/^text\/event-stream(?:\s*;|$)/i.test(response.headers.get("Content-Type") || "")) return response;
+  const body = await response.text();
+  const match = /^event: message\r?\ndata: (.+)\r?\n\r?\n$/.exec(body);
+  if (!match) return new Response(body, response);
+  try { JSON.parse(match[1]); } catch { return new Response(body, response); }
+  const headers = new Headers(response.headers);
+  headers.set("Content-Type", "application/json");
+  return new Response(match[1], { status: response.status, statusText: response.statusText, headers });
+}
+
 export async function handleMcpRequest(request: Request, env: McpEnvironment): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -598,7 +625,7 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   const requestedProtocol = request.headers.get("MCP-Protocol-Version");
   const unsupportedProtocol = method !== "initialize" && requestedProtocol !== null &&
     !(SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(requestedProtocol);
-  if (method === "initialize") emitMcpEvent("initialize", null, classification);
+  if (method === "initialize" || method === "server/discover") emitMcpEvent("initialize", null, classification);
   if (method === "tools/list") emitMcpEvent("tools_list", null, classification);
 
   const validatedRpc = JSONRPCRequestSchema.safeParse(parsedBody);
@@ -611,10 +638,18 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
   }
 
   try {
-    const server = await createMcpServer(env, url.origin, classification);
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await server.connect(transport);
-    const response = await transport.handleRequest(request, parsedBody === undefined ? undefined : { parsedBody });
+    const handler = createMcpHandler(
+      () => createMcpServer(env, url.origin, classification),
+      { legacy: "stateless" },
+    );
+    let response: Response;
+    try {
+      response = await normalizeLegacyJsonResponse(
+        await handler.fetch(request, parsedBody === undefined ? undefined : { parsedBody }),
+      );
+    } finally {
+      await handler.close();
+    }
     if (unsupportedProtocol && response.status >= 400) {
       emitMcpEvent(
         "protocol_error",

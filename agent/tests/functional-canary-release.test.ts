@@ -8,7 +8,7 @@ import {
 const productionApi = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const manifest = {
   status: "active",
-  release_version: "1.1.19",
+  release_version: "1.1.20",
   worker_version_id: "12345678-1234-1234-1234-123456789abc",
   production_api: productionApi,
   updated_at: "2026-07-31T15:14:50.734Z",
@@ -17,9 +17,9 @@ const canary = {
   checked_at: "2026-07-31T15:20:00.000Z",
   release: {
     verified: true,
-    release_version: "1.1.19",
+    release_version: "1.1.20",
     worker_version_id: "12345678-1234-1234-1234-123456789abc",
-    mcp_server_version: "1.1.19",
+    mcp_server_version: "1.1.20",
     mcp_worker_version_id: "12345678-1234-1234-1234-123456789abc",
     manifest_updated_at: "2026-07-31T15:14:50.734Z",
   },
@@ -27,13 +27,13 @@ const canary = {
 
 test("binds functional evidence to the active manifest and live MCP version", () => {
   assert.deepEqual(activeReleaseIdentity(manifest, productionApi), {
-    release_version: "1.1.19",
+    release_version: "1.1.20",
     worker_version_id: "12345678-1234-1234-1234-123456789abc",
     updated_at: "2026-07-31T15:14:50.734Z",
     production_api: productionApi,
   });
   assert.deepEqual(validateFunctionalCanaryRelease(canary, manifest, productionApi), {
-    release_version: "1.1.19",
+    release_version: "1.1.20",
     worker_version_id: "12345678-1234-1234-1234-123456789abc",
     updated_at: "2026-07-31T15:14:50.734Z",
     production_api: productionApi,

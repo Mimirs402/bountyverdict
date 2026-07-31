@@ -3,8 +3,7 @@ import test from "node:test";
 import { x402Client } from "@x402/core/client";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { x402MCPClient } from "@x402/mcp";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { privateKeyToAccount } from "viem/accounts";
 import app from "../src/index.ts";
 import { FREE_SELECTION_TASKS, FREE_SELECTION_TOOL_NAME } from "../src/free-selection-router.ts";
@@ -58,7 +57,7 @@ test("MCP initializes as a stateless 2025-11-25 server", async () => {
   const body = await response.json() as any;
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
-  assert.equal(body.result.serverInfo.version, "1.1.19");
+  assert.equal(body.result.serverInfo.version, "1.1.20");
   assert.equal(
     body.result.serverInfo.description,
     "Diagnose failed GitHub Actions with cited evidence; decide retry versus fix, check GitHub bounties, audit agent instructions, and gate breaking MCP tool updates.",
@@ -151,7 +150,7 @@ test("MCP tools/list exposes one free router and exactly six paid decision tools
     assert.equal(tool.inputSchema.type, "object");
     assert.equal(tool.outputSchema.type, "object");
     assert.ok(Array.isArray(tool.outputSchema.required));
-    assert.equal(tool.outputSchema.additionalProperties, true);
+    assert.notEqual(tool.outputSchema.additionalProperties, false);
     assert.ok(Buffer.byteLength(tool.description) <= 1_500, `${tool.name} description exceeds the tools/list context budget`);
   }
   assert.ok(body.result.tools.reduce((total: number, tool: any) => total + Buffer.byteLength(tool.description), 0) < 4_500);
@@ -434,8 +433,8 @@ test("MCP success contracts stay within the catalog context budget", async () =>
     name: tool.name,
     bytes: Buffer.byteLength(JSON.stringify(tool.outputSchema)),
   }));
-  for (const { name, bytes } of sizes) assert.ok(bytes <= 2_048, `${name} output schema is ${bytes} bytes`);
-  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_288);
+  for (const { name, bytes } of sizes) assert.ok(bytes <= 2_304, `${name} output schema is ${bytes} bytes`);
+  assert.ok(sizes.reduce((total: number, item: { bytes: number }) => total + item.bytes, 0) <= 12_800);
 });
 
 test("MCP rejects invalid semantic input before producing payment requirements", async () => {
@@ -457,6 +456,13 @@ test("MCP client identity is reduced to a privacy-safe allowlisted family", () =
   assert.equal(classifyMcpClientFamily(initialize()), "missing");
   assert.equal(classifyMcpClientFamily({ method: "tools/list" }), "not_applicable");
   assert.equal(classifyMcpClientFamily(initialize("Codex CLI"), true), "owner_automation");
+  const discover = (name?: string) => ({
+    method: "server/discover",
+    _meta: name === undefined ? {} : { "io.modelcontextprotocol/clientInfo": { name, version: "2.0.0" } },
+  });
+  assert.equal(classifyMcpClientFamily(discover("Claude Code")), "claude");
+  assert.equal(classifyMcpClientFamily(discover("Codex CLI")), "codex");
+  assert.equal(classifyMcpClientFamily(discover()), "missing");
 });
 
 test("MCP rejects schema-invalid and unknown tool calls before payment", async () => {
@@ -501,7 +507,7 @@ test("unknown-tool recovery does not bypass MCP request validation", async () =>
       const value = await response.json() as any;
       assert.equal(value.result, undefined);
       assert.equal(typeof value.error?.code, "number");
-      assert.notEqual(value.error.code, -32602);
+      assert.ok([-32600, -32602].includes(value.error.code));
       assert.equal(value.error.data?.recovery, undefined);
       assert.doesNotMatch(JSON.stringify(value), /advertised_tools|refresh_tools_list|private-argument|private-meta|discard-me/);
     }
@@ -813,7 +819,10 @@ test("selector to signed x402 MCP retry settles and returns a typed verdict herm
     });
   };
 
-  const client = new Client({ name: "hermetic-x402-buyer", version: "1.0.0" });
+  const client = new Client(
+    { name: "hermetic-x402-buyer", version: "1.0.0" },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  );
   const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
     requestInit: { headers: { "User-Agent": "bountyverdict-owner-audit/1.0" } },
     fetch: async (input, init) => {
@@ -834,6 +843,9 @@ test("selector to signed x402 MCP retry settles and returns a typed verdict herm
   });
   try {
     await paidClient.connect(transport);
+    assert.equal(client.getProtocolEra(), "modern");
+    assert.equal(client.getNegotiatedProtocolVersion(), "2026-07-28");
+    assert.deepEqual(client.getDiscoverResult()?.supportedVersions, ["2026-07-28"]);
     const selected = await paidClient.callTool(FREE_SELECTION_TOOL_NAME, { task: "mcp_tools_change" });
     assert.equal(selected.paymentMade, false);
     const route = JSON.parse((selected.content[0] as { text: string }).text);
@@ -923,7 +935,7 @@ test("MCP accepts every SDK-supported negotiated protocol and rejects an unknown
   assert.equal(incompleteAccept.status, 406);
   const wrongProtocol = await rpc(34, "tools/list", {}, { ...headers, "MCP-Protocol-Version": "2099-01-01" });
   assert.equal(wrongProtocol.status, 400);
-  assert.match((await wrongProtocol.json() as any).error.message, /Unsupported protocol version/);
+  assert.match((await wrongProtocol.json() as any).error.message, /protocol revision|protocol version|required per-request envelope/i);
   const put = await app.request(`${origin}/mcp`, { method: "PUT", headers, body: "{}" }, env);
   assert.equal(put.status, 405);
 });

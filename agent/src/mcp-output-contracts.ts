@@ -160,7 +160,7 @@ const freeSelectionNextCallSchema = z.object({
   tool_name: z.string(),
   call_strategy: z.enum(["single_call", "repeat_for_each_issue"]),
   required_fields: z.array(z.string()),
-  arguments_template: z.record(z.unknown()),
+  arguments_template: z.record(z.string(), z.unknown()),
   payment_required: z.literal(true),
   authorization_required_before_settlement: z.literal(true),
   unsigned_call_action: z.literal("inspect_quote_then_authorize_or_stop"),

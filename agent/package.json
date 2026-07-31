@@ -1,6 +1,6 @@
 {
   "name": "bountyverdict-agent-api",
-  "version": "1.1.19",
+  "version": "1.1.20",
   "private": true,
   "type": "module",
   "scripts": {
@@ -58,7 +58,9 @@
     "@coinbase/cdp-sdk": "1.53.0",
     "@coinbase/x402": "2.1.0",
     "@lucid-agents/taskmarket": "1.4.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@x402/core": "2.19.0",
     "@x402/evm": "2.19.0",
     "@x402/extensions": "2.19.0",
@@ -68,7 +70,7 @@
     "@x402/svm": "2.19.0",
     "hono": "4.12.31",
     "viem": "2.55.4",
-    "zod": "3.25.76"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260721.1",

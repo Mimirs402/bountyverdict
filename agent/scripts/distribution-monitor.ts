@@ -2582,6 +2582,10 @@ function renderMonitorNote(report: Record<string, any>): string {
   const dedicatedSkillsSh = report.acquisition?.skills_sh_dedicated || {};
   const dedicatedSkillsShSearch = dedicatedSkillsSh.search_index || {};
   const awesomeSkills = report.acquisition?.awesome_skills || {};
+  const agentPluginsCatalog = report.acquisition?.agent_plugins_catalog || {};
+  const agentPluginsCatalogSummary = agentPluginsCatalog.stale === true
+    ? `${agentPluginsCatalog.status || "unavailable"}; last-known ${agentPluginsCatalog.listed_skills ?? "unavailable"} / ${agentPluginsCatalog.expected_skills ?? 7} skills`
+    : `${agentPluginsCatalog.listed_skills ?? "unavailable"} / ${agentPluginsCatalog.expected_skills ?? 7} skills listed`;
   const experiment = report.acquisition?.experiment || {};
   const experimentInstallProvenance = experiment.measurement_provenance?.install_counters || {};
   const publicDemand = report.acquisition?.public_demand_watch || {};
@@ -2796,7 +2800,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **402 Index:** ${report.acquisition?.index_402?.active_resources ?? 0} / ${report.acquisition?.index_402?.expected_resources ?? 6} endpoints live (${report.acquisition?.index_402?.status || "unavailable"}; registry presence is never a purchase)
 - **skills.sh anonymous CLI installs:** ${Number.isFinite(Number(totalSkillInstalls)) ? Number(totalSkillInstalls) : "unavailable"} (acquisition signal only; 8-install baseline on 2026-07-20)
 - **skills.sh global search:** ${Number(skillsShSearch.exact_found || 0)} / ${Number(skillsShSearch.exact_expected || 7)} exact names; ${Number(skillsShSearch.natural_found || 0)} / ${Number(skillsShSearch.natural_expected || 7)} natural buyer queries (owner-run corpus check, not impressions)
-- **Agent Plugins catalog:** ${report.acquisition?.agent_plugins_catalog?.listed_skills ?? 0} / 7 skills listed; provider PR ${report.acquisition?.agent_plugins_pr?.status || "unavailable"} (${report.acquisition?.agent_plugins_pr?.url || "submission not recorded"})
+- **Agent Plugins catalog:** ${agentPluginsCatalogSummary}; provider PR ${report.acquisition?.agent_plugins_pr?.status || "unavailable"} (${report.acquisition?.agent_plugins_pr?.url || "submission not recorded"})
 - **Awesome Copilot default marketplace:** ${report.acquisition?.awesome_copilot?.listed ? `listed at version ${report.acquisition.awesome_copilot.listed_version}` : report.acquisition?.awesome_copilot?.review_status || "unavailable"} (${report.acquisition?.awesome_copilot?.url || "submission not recorded"}; no install/impression telemetry exposed)
 - **LobeHub MCP marketplace:** ${report.acquisition?.lobehub?.status || "pending_review"} (${report.acquisition?.lobehub?.url || "https://github.com/lobehub/lobehub/issues/17401"}; submission or catalog presence is never an impression, tool call, purchase, or revenue)
 - **Awesome MCP Servers:** ${report.acquisition?.awesome_mcp_servers?.status || "unavailable"} (${report.acquisition?.awesome_mcp_servers?.url || "https://github.com/punkpeye/awesome-mcp-servers/pull/10554"}; placement only, never an impression, tool call, purchase, or revenue)
@@ -2908,7 +2912,7 @@ ${EXPECTED_PRODUCTS.map((product) => {
 - GitHub Skill release: ${report.acquisition?.github_skill?.release_verified ? report.acquisition.github_skill.release_tag : "unavailable"}; exact public discovery ${report.acquisition?.github_skill?.listed_skills ?? 0} / 7 (${report.acquisition?.github_skill?.status || "unavailable"}; owner-run retrieval, not impressions)
 - Agent security directory PR: ${report.acquisition?.security_directory_pr?.status || "unavailable"} (${report.acquisition?.security_directory_pr?.url || "not recorded"})
 - x402 ecosystem directory PR: canonical business PR ${report.acquisition?.x402_directory_pr?.status || "unavailable"} (${report.acquisition?.x402_directory_pr?.url || "https://github.com/xpaysh/awesome-x402/pull/959"}); superseded personal PR #934 excluded
-- Agent Plugins: ${report.acquisition?.agent_plugins_catalog?.listed_skills ?? 0} / 7 skills in the daily catalog; provider PR ${report.acquisition?.agent_plugins_pr?.status || "unavailable"} (${report.acquisition?.agent_plugins_pr?.url || "not recorded"}; catalog placement and quality metadata are not purchases)
+- Agent Plugins: ${agentPluginsCatalogSummary}; provider PR ${report.acquisition?.agent_plugins_pr?.status || "unavailable"} (${report.acquisition?.agent_plugins_pr?.url || "not recorded"}; catalog placement and quality metadata are not purchases)
 - Awesome Copilot: ${report.acquisition?.awesome_copilot?.listed ? `listed at version ${report.acquisition.awesome_copilot.listed_version}` : report.acquisition?.awesome_copilot?.review_status || "unavailable"} (${report.acquisition?.awesome_copilot?.url || "not recorded"}; default-marketplace presence is not an impression, install, or purchase)
 - LobeHub MCP marketplace: ${report.acquisition?.lobehub?.status || "pending_review"} (${report.acquisition?.lobehub?.url || "https://github.com/lobehub/lobehub/issues/17401"}; review and catalog presence are not impressions, tool calls, purchases, or revenue)
 - Awesome MCP Servers: ${report.acquisition?.awesome_mcp_servers?.status || "unavailable"}; PR ${report.acquisition?.awesome_mcp_servers?.pr_status || "unknown"}; exact catalog contract ${report.acquisition?.awesome_mcp_servers?.contract_verified ? "verified" : "pending"} (${report.acquisition?.awesome_mcp_servers?.url || "https://github.com/punkpeye/awesome-mcp-servers/pull/10554"}; placement only, never an impression, tool call, purchase, or revenue)
@@ -3392,6 +3396,10 @@ try {
 const agentToolsCloud = acquisition.agent_tools_cloud as Record<string, unknown> | null;
 if (agentToolsCloud?.status === "contract_drift") {
   errors.push(`Agent Tools Cloud contract drift: ${String(agentToolsCloud.error || "identity, route, health, or payment metadata changed")}`);
+}
+const agentPluginsCatalog = acquisition.agent_plugins_catalog as Record<string, unknown> | null;
+if (agentPluginsCatalog?.status === "contract_drift") {
+  errors.push(`Agent Plugins catalog contract drift: ${String(agentPluginsCatalog.error || "catalog schema or identity changed")}`);
 }
 
 // the402 is an independent distribution channel. Its availability affects the

@@ -187,6 +187,23 @@ test("directory monitoring verifies the account-free Awesome Skills listing with
   assert.match(distribution, /submission and listing presence are never demand or revenue/);
 });
 
+test("directory monitoring delegates Agent Plugins failures and renders stale state honestly", async () => {
+  const [directory, distribution] = await Promise.all([
+    readFile(directoryMonitorUrl, "utf8"),
+    readFile(distributionUrl, "utf8"),
+  ]);
+  const start = directory.indexOf("async function agentPluginsCatalogStatus");
+  const end = directory.indexOf("async function awesomeCopilotStatus", start);
+  assert.ok(start >= 0 && end > start);
+  const adapter = directory.slice(start, end);
+  assert.match(adapter, /readAgentPluginsCatalogStatus/);
+  assert.match(directory, /agentPluginsCatalogStatus\(previous\.agent_plugins_catalog \|\| \{\}\)/);
+  assert.match(distribution, /agentPluginsCatalog\.stale === true/);
+  assert.match(distribution, /last-known/);
+  assert.match(distribution, /Agent Plugins catalog contract drift/);
+  assert.doesNotMatch(distribution, /agent_plugins_catalog\?\.listed_skills \?\? 0/);
+});
+
 test("directory monitoring tracks the exact AgentSkills.in adapter and source cohort without claiming demand", async () => {
   const [directory, distribution, parser] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),

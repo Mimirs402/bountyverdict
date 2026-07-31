@@ -10,6 +10,8 @@ import {
   TASKMARKET_OWNER_IDENTITIES,
   TASKMARKET_DIAMOND,
   TASKMARKET_FORWARDER,
+  TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS,
+  TASKMARKET_OPPORTUNITY_MINIMUM_NET_ATOMIC,
   TASKMARKET_WORKER_ADDRESS,
   taskmarketTaskSnapshotSha256,
   verifyTaskmarketFundingReceipt,
@@ -258,7 +260,9 @@ export async function admitTaskmarketSubmission(input: {
   }
   const excluded = new Set([TASKMARKET_WORKER_ADDRESS, ...TASKMARKET_OWNER_IDENTITIES].map((value) => value.toLowerCase()));
   if (task.status !== "open" || !task.submissionWindowOpen || task.claimedBy !== null ||
-    task.submissionCount > 3 || excluded.has(task.requester.toLowerCase()) ||
+    task.submissionCount > TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS ||
+    BigInt(task.netRewardAtomic) < TASKMARKET_OPPORTUNITY_MINIMUM_NET_ATOMIC ||
+    excluded.has(task.requester.toLowerCase()) ||
     task.taskVisibility !== "public" || task.hooks === null || task.hooks.length !== 0 || task.evaluator !== null ||
     Date.parse(task.expiryTime) - nowMs < minimumDeadlineRemainingMs) {
     throw new Error("Taskmarket task is no longer an open, low-competition, non-owner bounty.");
@@ -386,9 +390,11 @@ export function validateTaskmarketIntentAgainstFreshTask(
     task.netRewardAtomic !== decimalToAtomic(intent.net_reward_usdc) ||
     task.expiryTime !== intent.deadline_at || taskmarketTaskSnapshotSha256(task) !== intent.task_snapshot_sha256 ||
     task.mode !== "bounty" || task.status !== "open" || !task.submissionWindowOpen || task.claimedBy !== null ||
-    task.submissionVisibility !== "public" || task.taskVisibility !== "public" || task.submissionCount > 3 ||
+    task.submissionVisibility !== "public" || task.taskVisibility !== "public" ||
+    task.submissionCount > TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS ||
     task.hooks === null || task.hooks.length !== 0 || task.evaluator !== null ||
-    excluded.has(task.requester.toLowerCase()) || BigInt(task.netRewardAtomic) < 5_000_000n ||
+    excluded.has(task.requester.toLowerCase()) ||
+    BigInt(task.netRewardAtomic) < TASKMARKET_OPPORTUNITY_MINIMUM_NET_ATOMIC ||
     !Number.isFinite(createdAtMs) || nowMs < createdAtMs || nowMs - createdAtMs > maximumIntentAgeMs ||
     !Number.isFinite(taskCreatedAtMs) || nowMs < taskCreatedAtMs || nowMs - taskCreatedAtMs > maximumTaskAgeMs ||
     Date.parse(task.expiryTime) - nowMs < minimumDeadlineRemainingMs ||

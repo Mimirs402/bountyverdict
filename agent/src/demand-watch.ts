@@ -16,8 +16,8 @@ const maximumRecords = 200;
 const maximumTextBytes = 20_000;
 const freshOpportunityMaximumAgeMs = 12 * 60 * 60 * 1_000;
 const freshOpportunityMinimumRemainingMs = 2 * 60 * 60 * 1_000;
-const freshOpportunityMaximumCompetition = 3;
-const freshOpportunityMinimumNetAtomic = 5_000_000n;
+const freshOpportunityMaximumCompetition = 2;
+const freshOpportunityMinimumNetAtomic = 100_000_000n;
 const moltJobsConservativeWorkerShareNumerator = 95n;
 const moltJobsConservativeWorkerShareDenominator = 100n;
 const baseUsdcAddress = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
@@ -410,7 +410,7 @@ function moltOpportunityCandidate(
     opportunity_score_usdc_per_current_entry: atomicToDecimal(scoreAtomic),
     requires_agent_fit_review: true,
     selection_basis:
-      "official funded filter plus paired escrow identifiers plus agreeing public escrow flag plus successful Base receipt binding exact USDC and escrowJobId; non-owner poster; <=3 public bids; conservative 95% net >=5 USDC; <=12h old; >=2h remaining",
+      "official funded filter plus paired escrow identifiers plus agreeing public escrow flag plus successful Base receipt binding exact USDC and escrowJobId; non-owner poster; <=2 public bids; conservative 95% net >=100 USDC; <=12h old; >=2h remaining",
   };
 }
 
@@ -569,7 +569,7 @@ export function analyzeMoltJobs(input: {
     rejected_funded_non_matches: fundedIds.size - expiredOrAssignedFunded - candidates.length,
     funding_rule: "server_funded_filter_plus_matching_onchain_escrow_identifiers_and_future_deadline",
     fresh_low_competition_rule:
-      "funded_and_open_feeds_agree_plus_paired_escrow_identifiers_plus_public_escrow_flag_and_competition_agree_plus_successful_base_receipt_with_exact_usdc_transfer_and_escrow_job_event_plus_non_owner_poster_plus_max_3_bids_plus_conservative_95_percent_net_min_5_usdc_plus_max_12h_age_plus_min_2h_remaining",
+      "funded_and_open_feeds_agree_plus_paired_escrow_identifiers_plus_public_escrow_flag_and_competition_agree_plus_successful_base_receipt_with_exact_usdc_transfer_and_escrow_job_event_plus_non_owner_poster_plus_max_2_bids_plus_conservative_95_percent_net_min_100_usdc_plus_max_12h_age_plus_min_2h_remaining",
   };
 }
 

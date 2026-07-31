@@ -5,7 +5,6 @@ import {
   hasIssueHuntReference,
   issueHuntReferenceRoutes,
 } from "./issuehunt.ts";
-import { fetchAlgoraEvidence } from "./algora.ts";
 import { fetchLightningBountiesEvidence } from "./lightning-bounties.ts";
 import { fetchOpireEvidence } from "./opire.ts";
 import { SERVICE_REUSE, type ServiceReuseGuidance } from "./reuse.ts";
@@ -748,7 +747,7 @@ async function checkGithubIssueInternal(
   }
   const comments = deduplicateEvidence(commentResponses.flatMap((page) => page.data));
   const timeline = deduplicateEvidence(timelineResponses.flatMap((page) => page.data));
-  const [bountyHubEvidence, issueHuntEvidence, algoraEvidence, lightningEvidence, opireEvidence] = await Promise.all([
+  const [bountyHubEvidence, issueHuntEvidence, lightningEvidence, opireEvidence] = await Promise.all([
     fetchCanonicalBountyHubEvidence(canonical, submitted, fetchImpl),
     fetchCanonicalIssueHuntEvidence(
       issueResponse.data,
@@ -758,7 +757,6 @@ async function checkGithubIssueInternal(
       repoResponse.data?.id,
       fetchImpl,
     ),
-    fetchAlgoraEvidence(comments, canonical, submitted, fetchImpl),
     Number.isSafeInteger(issueResponse.data?.id) && Number(issueResponse.data.id) > 0
       ? fetchLightningBountiesEvidence(
           Number(issueResponse.data.id),
@@ -795,11 +793,9 @@ async function checkGithubIssueInternal(
       ? bountyHubEvidence
       : opireEvidence?.claim_count
         ? opireEvidence
-      : algoraEvidence?.state === "CLAIMED"
-        ? algoraEvidence
-        : issueHuntEvidence?.submitted_pull_requests.length
-          ? issueHuntEvidence
-          : bountyHubEvidence || algoraEvidence || opireEvidence || lightningEvidence || issueHuntEvidence;
+      : issueHuntEvidence?.submitted_pull_requests.length
+        ? issueHuntEvidence
+        : bountyHubEvidence || opireEvidence || lightningEvidence || issueHuntEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = deduplicatePolicyDocuments(policyResponses
     .map((result) => result.document)

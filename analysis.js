@@ -862,7 +862,7 @@ function platformClaimState(comments, openPulls, opire, reward, platformEvidence
   if (current && !/bounty is (?:now )?up for grabs/i.test(current.body ?? "") && /(?:^|\n)\|\s*🟢\s+@[^|]+\|/m.test(current.body ?? "")) {
     return {
       label: "Bounty platform reports active competition",
-      detail: "The current Algora status table lists at least one active attempt or submitted solution.",
+      detail: "An authenticated Algora GitHub App status comment lists at least one active attempt or submitted solution.",
       evidenceUrl: current.html_url ?? null,
     };
   }

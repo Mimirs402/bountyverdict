@@ -6,7 +6,7 @@ export const ALGORA_SCOUT_COMMENTERS = ["algora-pbc[bot]", "algora-pbc"] as cons
 export const ALGORA_SCOUT_MAX_INVENTORY = 100;
 export const ALGORA_SCOUT_MAX_EVALUATIONS = 15;
 export const ALGORA_SCOUT_LOOKBACK_MS = 48 * 60 * 60 * 1_000;
-export const ALGORA_SCOUT_MINIMUM_REWARD_USD = 25;
+export const ALGORA_SCOUT_MINIMUM_REWARD_USD = 100;
 
 export type AlgoraSearchIssue = {
   html_url: string;

@@ -72,7 +72,7 @@ function rawMoltPublicSummary(overrides: Record<string, unknown> = {}): Record<s
       id: "11111111-1111-4111-8111-111111111111",
       title: "Research request",
       status: "OPEN",
-      budgetUsdc: "6",
+      budgetUsdc: "110",
       deadlineAt: "2026-07-21T18:00:00.000Z",
       createdAt: "2026-07-21T06:00:00.000Z",
       assignedAgent: null,
@@ -93,8 +93,9 @@ function moltFundingReceipt(job: MoltJob, overrides: Record<string, unknown> = {
   const jobId = `0x${Array.from({ length: 32 }, (_, index) =>
     job.escrowJobId?.[String(index)].toString(16).padStart(2, "0")
   ).join("")}`;
-  const budgetAtomic = 6_000_000n;
-  const feeAtomic = 150_000n;
+  const [whole, fraction = ""] = job.budgetUsdc.split(".");
+  const budgetAtomic = BigInt(whole) * 1_000_000n + BigInt((fraction + "000000").slice(0, 6));
+  const feeAtomic = budgetAtomic / 40n;
   return {
     transaction_hash: job.escrowTxHash!,
     receipt: {
@@ -169,7 +170,7 @@ test("MoltJobs surfaces only a funded exact structured existing-product contract
 
 test("MoltJobs emits a guarded assessment marker only after independent public funding and competition agree", () => {
   const funded = molt(rawMolt({
-    budgetUsdc: "6",
+    budgetUsdc: "110",
     createdAt: "2026-07-21T06:00:00.000Z",
     updatedAt: "2026-07-21T06:00:00.000Z",
     deadlineAt: "2026-07-21T18:00:00.000Z",
@@ -195,8 +196,8 @@ test("MoltJobs emits a guarded assessment marker only after independent public f
     task_id: funded.id,
     title: funded.title,
     mode: "competitive_job",
-    gross_reward_usdc: "6",
-    net_reward_usdc: "5.7",
+    gross_reward_usdc: "110",
+    net_reward_usdc: "104.5",
     submission_count: 2,
     created_at: "2026-07-21T06:00:00.000Z",
     deadline_at: "2026-07-21T18:00:00.000Z",
@@ -204,10 +205,10 @@ test("MoltJobs emits a guarded assessment marker only after independent public f
     escrow_tx_hash: funded.escrowTxHash,
     requester: funded.posterId,
     task_snapshot_sha256: null,
-    opportunity_score_usdc_per_current_entry: "1.9",
+    opportunity_score_usdc_per_current_entry: "34.833333",
     requires_agent_fit_review: true,
     selection_basis:
-      "official funded filter plus paired escrow identifiers plus agreeing public escrow flag plus successful Base receipt binding exact USDC and escrowJobId; non-owner poster; <=3 public bids; conservative 95% net >=5 USDC; <=12h old; >=2h remaining",
+      "official funded filter plus paired escrow identifiers plus agreeing public escrow flag plus successful Base receipt binding exact USDC and escrowJobId; non-owner poster; <=2 public bids; conservative 95% net >=100 USDC; <=12h old; >=2h remaining",
   }]);
 
   const disabled = analyzeMoltJobs({
@@ -235,13 +236,13 @@ test("MoltJobs emits a guarded assessment marker only after independent public f
 
 test("MoltJobs high-confidence markers reject owner posters, saturated bids, and false escrow flags", () => {
   const funded = molt(rawMolt({
-    budgetUsdc: "6",
+    budgetUsdc: "110",
     createdAt: "2026-07-21T06:00:00.000Z",
     updatedAt: "2026-07-21T06:00:00.000Z",
     deadlineAt: "2026-07-21T18:00:00.000Z",
   }));
   for (const summary of [
-    parseMoltJobPublicSummary(rawMoltPublicSummary({ bidCount: 4 })),
+    parseMoltJobPublicSummary(rawMoltPublicSummary({ bidCount: 3 })),
     parseMoltJobPublicSummary(rawMoltPublicSummary({ escrowFunded: false })),
   ]) {
     const result = analyzeMoltJobs({

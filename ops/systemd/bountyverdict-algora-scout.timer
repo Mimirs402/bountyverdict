@@ -1,0 +1,12 @@
+[Unit]
+Description=Scout changed Algora GitHub bounties every three hours
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=3h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=bountyverdict-algora-scout.service
+
+[Install]
+WantedBy=timers.target

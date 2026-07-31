@@ -366,36 +366,119 @@ function repositoryBountyPolicyDocuments(
   });
 }
 
-function repositoryPolicyPagePlan(response: GithubResponse): {
+function repositoryIssueLinkPages(
+  link: string | null,
+  direction: "asc" | "desc",
+  canonical: { owner: string; repo: string },
+  repositoryId: unknown,
+): Partial<Record<"next" | "prev" | "first" | "last", number>> {
+  if (link === null) return {};
+  const pages: Partial<Record<"next" | "prev" | "first" | "last", number>> = {};
+  for (const part of link.split(",")) {
+    const target = part.match(/^\s*<([^>]+)>/i)?.[1];
+    const relations = part.match(/;\s*rel="([^"]+)"/i)?.[1]?.split(/\s+/).filter(Boolean);
+    if (!target || !relations?.length) {
+      throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    let url: URL;
+    try {
+      url = new URL(target);
+    } catch {
+      throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    const canonicalPath = `/repos/${encodeURIComponent(canonical.owner)}/${encodeURIComponent(canonical.repo)}/issues`;
+    const numericRepositoryId = Number(repositoryId);
+    const repositoryIdPath = Number.isSafeInteger(numericRepositoryId) && numericRepositoryId > 0
+      ? `/repositories/${numericRepositoryId}/issues`
+      : null;
+    const allowedPath = url.pathname.toLowerCase() === canonicalPath.toLowerCase() ||
+      (repositoryIdPath !== null && url.pathname === repositoryIdPath);
+    const allowedParameters = new Set(["state", "sort", "direction", "per_page", "page", "after", "before"]);
+    const safeParameters = [...url.searchParams.keys()].every((key) =>
+      allowedParameters.has(key) && url.searchParams.getAll(key).length === 1
+    );
+    const cursorValues = [url.searchParams.get("after"), url.searchParams.get("before")]
+      .filter((value): value is string => value !== null);
+    const page = Number(url.searchParams.get("page"));
+    if (url.origin !== "https://api.github.com" || !allowedPath || !safeParameters ||
+        url.searchParams.get("state") !== "all" || url.searchParams.get("sort") !== "created" ||
+        url.searchParams.get("direction") !== direction || url.searchParams.get("per_page") !== "100" ||
+        !Number.isSafeInteger(page) || page < 1 || page > 10_000 ||
+        cursorValues.some((value) => value.length < 1 || value.length > 1_024)) {
+      throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    for (const relation of relations) {
+      if (!["next", "prev", "first", "last"].includes(relation) || relation in pages) {
+        throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+      }
+      pages[relation as keyof typeof pages] = page;
+    }
+  }
+  return pages;
+}
+
+function repositoryPolicyPagePlan(
+  response: GithubResponse,
+  canonical: { owner: string; repo: string },
+  repositoryId: unknown,
+): {
+  mode: "numbered" | "cursor";
   pages: number[];
   total_pages: number | null;
   truncated: boolean;
 } {
   if (response.data === null) {
-    return { pages: [], total_pages: null, truncated: true };
+    return { mode: "numbered", pages: [], total_pages: null, truncated: true };
   }
   if (!Array.isArray(response.data) || response.data.length > 100) {
     throw new CheckError("GitHub returned an invalid repository issue policy page.", 502, "GITHUB_RESPONSE_INVALID");
   }
   if (response.link === null) {
     return {
+      mode: "numbered",
       pages: [1],
       total_pages: response.data.length === 100 ? null : 1,
       truncated: response.data.length === 100,
     };
   }
-  const last = response.link.split(",").find((part) => /rel="last"/.test(part));
-  const match = last?.match(/[?&]page=(\d+)/);
-  const totalPages = match ? Number(match[1]) : Number.NaN;
+  const links = repositoryIssueLinkPages(response.link, "asc", canonical, repositoryId);
+  if (links.last === undefined) {
+    if (links.next === undefined) {
+      throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+    return {
+      mode: "cursor",
+      pages: Array.from({ length: maximumRepositoryPolicyPages - 1 }, (_, index) => index + 1),
+      total_pages: null,
+      truncated: true,
+    };
+  }
+  const totalPages = links.last;
   if (!Number.isSafeInteger(totalPages) || totalPages < 1 || totalPages > 10_000) {
     throw new CheckError("GitHub returned invalid repository policy pagination.", 502, "GITHUB_RESPONSE_INVALID");
   }
   const pages = boundedEvidencePages(totalPages, maximumRepositoryPolicyPages);
   return {
+    mode: "numbered",
     pages,
     total_pages: totalPages,
     truncated: totalPages > pages.length,
   };
+}
+
+function deduplicatePolicyDocuments(documents: PolicyDocument[]): PolicyDocument[] {
+  const unique = new Map<string, PolicyDocument>();
+  for (const document of documents) {
+    const existing = unique.get(document.path);
+    if (!existing) {
+      unique.set(document.path, document);
+      continue;
+    }
+    if (existing.body !== document.body || existing.html_url !== document.html_url) {
+      throw new CheckError("GitHub returned conflicting repository policy evidence.", 502, "GITHUB_RESPONSE_INVALID");
+    }
+  }
+  return [...unique.values()];
 }
 
 function lastPageFromLink(link: string | null): number {
@@ -633,11 +716,15 @@ async function checkGithubIssueInternal(
     ),
   );
   const timelineResponses = [firstTimeline, ...additionalTimelineResponses];
-  const repositoryPolicyPlan = repositoryPolicyPagePlan(firstRepositoryIssuePolicyResponse);
+  const repositoryPolicyPlan = repositoryPolicyPagePlan(
+    firstRepositoryIssuePolicyResponse,
+    canonical,
+    repoResponse.data?.id,
+  );
   const additionalRepositoryIssuePolicyResponses = await Promise.all(
-    repositoryPolicyPlan.pages.filter((page) => page !== 1).map((page) =>
+    repositoryPolicyPlan.pages.filter((page) => repositoryPolicyPlan.mode === "cursor" || page !== 1).map((page) =>
       githubJson(
-        `${base}/issues?state=all&sort=created&direction=asc&per_page=100&page=${page}`,
+        `${base}/issues?state=all&sort=created&direction=${repositoryPolicyPlan.mode === "cursor" ? "desc" : "asc"}&per_page=100&page=${page}`,
         env,
         fetchImpl,
       )
@@ -647,6 +734,14 @@ async function checkGithubIssueInternal(
     firstRepositoryIssuePolicyResponse,
     ...additionalRepositoryIssuePolicyResponses,
   ];
+  const policyIssuesTruncated = repositoryPolicyPlan.mode === "cursor"
+    ? repositoryIssueLinkPages(
+      additionalRepositoryIssuePolicyResponses.at(-1)?.link ?? null,
+      "desc",
+      canonical,
+      repoResponse.data?.id,
+    ).next !== undefined
+    : repositoryPolicyPlan.truncated;
   if (commentResponses.some((response) => !isCommentEvidencePage(response.data)) ||
       timelineResponses.some((response) => !isTimelineEvidencePage(response.data))) {
     throw new CheckError("GitHub returned invalid issue evidence pages.", 502, "GITHUB_RESPONSE_INVALID");
@@ -706,12 +801,12 @@ async function checkGithubIssueInternal(
           ? issueHuntEvidence
           : bountyHubEvidence || algoraEvidence || opireEvidence || lightningEvidence || issueHuntEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
-  const policyDocuments = policyResponses
+  const policyDocuments = deduplicatePolicyDocuments(policyResponses
     .map((result) => result.document)
     .filter((document): document is PolicyDocument => document !== null)
     .concat(repositoryIssuePolicyResponses.flatMap((response) =>
       repositoryBountyPolicyDocuments(response.data, canonical.number, canonical)
-    ));
+    )));
   const responses = [
     issueResponse,
     repoResponse,
@@ -734,7 +829,7 @@ async function checkGithubIssueInternal(
     coverage: {
       commentsTruncated,
       timelineTruncated: timelineLastPage > timelinePages.length,
-      policyTruncated: repositoryPolicyPlan.truncated,
+      policyTruncated: policyIssuesTruncated,
     },
     now,
   });
@@ -871,7 +966,7 @@ async function checkGithubIssueInternal(
       timeline_truncated: timelineLastPage > timelinePages.length,
       linked_pull_requests_found: analysis.pullRequests.length,
       policy_documents_scanned: policyDocuments.length,
-      policy_issues_truncated: repositoryPolicyPlan.truncated,
+      policy_issues_truncated: policyIssuesTruncated,
       github_rate_limit_remaining: remainingValues.length
         ? Math.min(...remainingValues)
         : null,

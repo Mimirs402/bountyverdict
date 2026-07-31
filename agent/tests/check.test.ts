@@ -67,6 +67,35 @@ function githubMock(
   };
 }
 
+function withCursorRepositoryIssues(
+  base: typeof fetch,
+  oldest: unknown[],
+  newest: unknown[],
+  finalPageHasNext = false,
+): typeof fetch {
+  const cursorLink = (direction: "asc" | "desc", page: number, relation: "next" | "prev") =>
+    `<https://api.github.com/repositories/123456/issues?state=all&sort=created&direction=${direction}&per_page=100&page=${page}&${relation === "next" ? "after" : "before"}=bounded-cursor>; rel="${relation}"`;
+  return (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/repos/acme/widget/issues") {
+      if (url.searchParams.get("direction") === "asc") {
+        return Response.json(oldest, {
+          headers: { "x-ratelimit-remaining": "4990", link: cursorLink("asc", 2, "next") },
+        });
+      }
+      const page = Number(url.searchParams.get("page"));
+      if (page === 1) return Response.json(newest, {
+        headers: { "x-ratelimit-remaining": "4989", link: cursorLink("desc", 2, "next") },
+      });
+      if (page === 4 && finalPageHasNext) return Response.json([], {
+        headers: { "x-ratelimit-remaining": "4986", link: cursorLink("desc", 5, "next") },
+      });
+      return Response.json([], { headers: { "x-ratelimit-remaining": "4988" } });
+    }
+    return base(input, init);
+  }) as typeof fetch;
+}
+
 test("retries one invalid GitHub JSON response before validating evidence", async () => {
   const base = githubMock();
   let issueReads = 0;
@@ -720,7 +749,7 @@ test("repository bounty policy discovery retains the newest bounded issue page",
       return Response.json([], {
         headers: {
           "x-ratelimit-remaining": "4990",
-          link: '<https://api.github.com/repos/acme/widget/issues?state=open&sort=created&direction=asc&per_page=100&page=10>; rel="last"',
+          link: '<https://api.github.com/repos/acme/widget/issues?state=all&sort=created&direction=asc&per_page=100&page=10>; rel="last"',
         },
       });
     }
@@ -780,6 +809,107 @@ test("repository bounty policy discovery scans bounded middle pages", async () =
   assert.equal(result.coverage.policy_issues_truncated, false);
 });
 
+test("repository bounty policy discovery accepts cursor pagination and scans newest bounded pages", async () => {
+  const base = githubMock([], null, issue, 0);
+  const policy = {
+    number: 901,
+    title: "Repository bounty rules",
+    body: "Bounty payments for this repository are fake and an experiment; no money will be paid.",
+    html_url: "https://github.com/acme/widget/issues/901",
+    author_association: "OWNER",
+  };
+  const requested: string[] = [];
+  const cursorLink = (direction: "asc" | "desc", page: number, relation: "next" | "prev") =>
+    `<https://api.github.com/repositories/123456/issues?state=all&sort=created&direction=${direction}&per_page=100&page=${page}&${relation === "next" ? "after" : "before"}=bounded-cursor>; rel="${relation}"`;
+  const mock = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/repos/acme/widget/issues") {
+      requested.push(`${url.searchParams.get("direction")}:${url.searchParams.get("page")}`);
+      if (url.searchParams.get("direction") === "asc") {
+        return Response.json(Array.from({ length: 100 }, (_, index) => ({ number: index + 1 })), {
+          headers: { "x-ratelimit-remaining": "4990", link: cursorLink("asc", 2, "next") },
+        });
+      }
+      const page = Number(url.searchParams.get("page"));
+      if (page === 1) return Response.json([policy], {
+        headers: { "x-ratelimit-remaining": "4989", link: cursorLink("desc", 2, "next") },
+      });
+      if (page < 4) return Response.json([], {
+        headers: { "x-ratelimit-remaining": "4988", link: cursorLink("desc", page - 1, "prev") },
+      });
+      return Response.json([], { headers: { "x-ratelimit-remaining": "4987" } });
+    }
+    return base(input, init);
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    mock,
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.coverage.policy_issues_truncated, false);
+  assert.deepEqual(requested, ["asc:1", "desc:1", "desc:2", "desc:3", "desc:4"]);
+  assert.ok(result.signals.some((signal) => signal.evidence_url === policy.html_url));
+});
+
+test("cursor pagination remains truncated when the newest page bound has a continuation", async () => {
+  const oldest = Array.from({ length: 100 }, (_, index) => ({ number: index + 1 }));
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withCursorRepositoryIssues(githubMock([], null, issue, 0), oldest, [], true),
+  );
+
+  assert.equal(result.coverage.policy_issues_truncated, true);
+  assert.equal(result.verdict, "CAUTION");
+});
+
+test("identical overlapping cursor policy evidence is counted once", async () => {
+  const policy = {
+    number: 1,
+    title: "Repository bounty policy",
+    body: "Bounty payments for this repository are fake; no money will be paid.",
+    html_url: "https://github.com/acme/widget/issues/1",
+    author_association: "OWNER",
+  };
+  const oldest = [policy, ...Array.from({ length: 99 }, (_, index) => ({ number: index + 100 }))];
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withCursorRepositoryIssues(githubMock([], null, issue, 0), oldest, [policy]),
+  );
+
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.coverage.policy_documents_scanned, 1);
+});
+
+test("conflicting overlapping cursor policy evidence fails closed", async () => {
+  const policy = {
+    number: 1,
+    title: "Repository bounty policy",
+    body: "Bounty payments for this repository are available for accepted contributions.",
+    html_url: "https://github.com/acme/widget/issues/1",
+    author_association: "OWNER",
+  };
+  const changedPolicy = {
+    ...policy,
+    body: "Bounty payments for this repository are fake; no money will be paid.",
+  };
+  const oldest = [policy, ...Array.from({ length: 99 }, (_, index) => ({ number: index + 100 }))];
+
+  await assert.rejects(
+    () => checkGithubIssue(
+      "https://github.com/acme/widget/issues/4",
+      {},
+      withCursorRepositoryIssues(githubMock([], null, issue, 0), oldest, [changedPolicy]),
+    ),
+    (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+  );
+});
+
 test("missing repository policy inventory cannot permit a VIABLE verdict", async () => {
   const base = githubMock([], null, issue, 0);
   const mock = (async (input: URL | RequestInfo, init?: RequestInit) => {
@@ -834,6 +964,12 @@ test("malformed or oversized repository policy inventory fails closed", async ()
     }),
     () => Response.json(Array.from({ length: 101 }, (_, index) => ({ number: index + 1 })), {
       headers: { "x-ratelimit-remaining": "4990" },
+    }),
+    () => Response.json(Array.from({ length: 100 }, (_, index) => ({ number: index + 1 })), {
+      headers: {
+        "x-ratelimit-remaining": "4990",
+        link: '<https://api.github.com/repos/other/repository/issues?state=all&sort=created&direction=asc&per_page=100&page=1>; rel="last"',
+      },
     }),
   ]) {
     const mock = (async (input: URL | RequestInfo, init?: RequestInit) => {

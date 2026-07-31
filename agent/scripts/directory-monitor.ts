@@ -2429,9 +2429,9 @@ async function agentToolsCloudStatus(): Promise<Record<string, unknown>> {
       }),
       mcp: parseAgentToolsCloudMcpListing(mcpSearch, mcpDetail, {
         endpointUrl: `${productionOrigin}/mcp?source=mcp-registry`,
-        // Agent Tools Cloud derives homepage_url from the submitted MCP URL;
-        // its submission contract does not expose a separate homepage field.
-        homepageUrl: `${productionOrigin}/mcp?source=mcp-registry`,
+        // The directory now resolves the canonical homepage published by the
+        // MCP server instead of mirroring the submitted endpoint URL.
+        homepageUrl: "https://mimirs402.github.io/bountyverdict/",
         name: "BountyVerdict Agent Decision Tools",
         slug: agentToolsCloudMcpSlug,
         expectedTools: agentToolsCloudMcpTools,

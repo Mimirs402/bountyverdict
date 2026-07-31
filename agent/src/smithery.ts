@@ -1,4 +1,6 @@
 export const SMITHERY_QUALIFIED_NAME = "mimirs402/bountyverdict";
+export const SMITHERY_DISPLAY_NAME = "BountyVerdict — GitHub & CI Preflight";
+export const SMITHERY_DESCRIPTION = "Choose the right GitHub or CI decision tool for free, then diagnose failed GitHub Actions from a run URL, decide retry versus fix, audit AGENTS.md and CLAUDE.md, check or rank GitHub bounty issues, and detect breaking MCP tools/list changes. Six paid read-only checks plus a free selector; a first unsigned call returns the exact quote and successful authorized calls cost $0.02-$0.40 USDC via x402 on Base. No buyer API key, repository clone, code execution, or CI mutation.";
 
 export const SMITHERY_BUYER_QUERIES = Object.freeze([
   "GitHub Actions failed workflow run URL root cause analysis",
@@ -14,6 +16,7 @@ export const SMITHERY_BUYER_QUERIES = Object.freeze([
 ] as const);
 
 export const SMITHERY_TOOL_NAMES = Object.freeze([
+  "choose_github_agent_decision",
   "check_github_bounty",
   "rank_github_bounties",
   "audit_agent_harness",
@@ -28,8 +31,8 @@ export function normalizeSmitheryServer(value: unknown): Record<string, unknown>
   }
   const server = value as Record<string, any>;
   if (server.qualifiedName !== SMITHERY_QUALIFIED_NAME || server.remote !== true ||
-    typeof server.displayName !== "string" || !server.displayName.trim() ||
-    typeof server.description !== "string" || !server.description.trim() ||
+    server.displayName !== SMITHERY_DISPLAY_NAME ||
+    server.description !== SMITHERY_DESCRIPTION ||
     !Array.isArray(server.tools) || !Array.isArray(server.connections)) {
     throw new Error("Smithery server identity or deployment contract drifted.");
   }

@@ -232,49 +232,58 @@ async function githubJson(
   fetchImpl: FetchLike,
   allowNotFound = false,
 ): Promise<GithubResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), githubRequestTimeoutMs);
-  try {
-    const response = await fetchImpl(`https://api.github.com${path}`, {
-      headers: githubHeaders(env),
-      signal: controller.signal,
-    });
-    const remainingValue = Number(response.headers.get("x-ratelimit-remaining"));
-    const remaining = Number.isFinite(remainingValue) ? remainingValue : null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), githubRequestTimeoutMs);
+    try {
+      const response = await fetchImpl(`https://api.github.com${path}`, {
+        headers: githubHeaders(env),
+        signal: controller.signal,
+      });
+      const remainingValue = Number(response.headers.get("x-ratelimit-remaining"));
+      const remaining = Number.isFinite(remainingValue) ? remainingValue : null;
 
-    if (!response.ok) {
-      if (response.status === 404 && allowNotFound) {
-        return { data: null, remaining, link: response.headers.get("link") };
+      if (!response.ok) {
+        if (response.status === 404 && allowNotFound) {
+          return { data: null, remaining, link: response.headers.get("link") };
+        }
+        if (response.status === 404) {
+          throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
+        }
+        if (response.status === 410) {
+          throw new CheckError(
+            "GitHub reports that this issue was deleted; any marketplace listing for it is stale.",
+            410,
+            "ISSUE_DELETED",
+          );
+        }
+        if (response.status === 403 && remaining === 0) {
+          throw new CheckError("GitHub API capacity is temporarily exhausted.", 503, "GITHUB_RATE_LIMITED");
+        }
+        throw new CheckError(`GitHub returned HTTP ${response.status}.`, 502, "GITHUB_UPSTREAM_ERROR");
       }
-      if (response.status === 404) {
-        throw new CheckError("GitHub could not find that public issue.", 404, "ISSUE_NOT_FOUND");
-      }
-      if (response.status === 410) {
-        throw new CheckError(
-          "GitHub reports that this issue was deleted; any marketplace listing for it is stale.",
-          410,
-          "ISSUE_DELETED",
-        );
-      }
-      if (response.status === 403 && remaining === 0) {
-        throw new CheckError("GitHub API capacity is temporarily exhausted.", 503, "GITHUB_RATE_LIMITED");
-      }
-      throw new CheckError(`GitHub returned HTTP ${response.status}.`, 502, "GITHUB_UPSTREAM_ERROR");
-    }
 
-    return {
-      data: await boundedGithubJson(response),
-      remaining,
-      link: response.headers.get("link"),
-    };
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new CheckError("GitHub did not respond within the bounded request window.", 504, "GITHUB_UPSTREAM_TIMEOUT");
+      return {
+        data: await boundedGithubJson(response),
+        remaining,
+        link: response.headers.get("link"),
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new CheckError("GitHub did not respond within the bounded request window.", 504, "GITHUB_UPSTREAM_TIMEOUT");
+      }
+      // A successful HTTP response with broken JSON framing is safe to read once
+      // more. Semantic evidence validation happens after this function returns,
+      // so malformed GitHub objects still fail closed without a retry.
+      if (attempt === 0 && error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID") {
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+  throw new CheckError("GitHub returned invalid JSON.", 502, "GITHUB_RESPONSE_INVALID");
 }
 
 function decodeBase64Utf8(value: string): string {

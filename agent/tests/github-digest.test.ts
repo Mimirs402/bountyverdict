@@ -56,7 +56,7 @@ test("GitHub digest rejects unbounded input and drops malformed notifications", 
   assert.ok(digest.events.length <= GITHUB_DIGEST_MAX_EVENTS);
 });
 
-test("an empty poll retains the latest non-empty digest without changing its fingerprint", () => {
+test("an empty poll retains prior context without repeating an already-seen action", () => {
   const previous = buildGithubDigest([{
     id: "123",
     reason: "comment",
@@ -69,6 +69,23 @@ test("an empty poll retains the latest non-empty digest without changing its fin
   assert.equal(retained.event_count, 1);
   assert.equal(retained.digest_fingerprint, previous.digest_fingerprint);
   assert.equal(retained.checked_at, "2026-07-29T08:00:00.000Z");
+  assert.equal(retained.actionable_count, 0);
+  assert.equal(retained.events[0].actionable, false);
+});
+
+test("retained digest validation rejects inconsistent actionable accounting", () => {
+  const empty = buildGithubDigest([], new Map(), checkedAt, "2026-07-29T08:00:00.000Z");
+  const previous = buildGithubDigest([{
+    id: "123",
+    reason: "comment",
+    updated_at: "2026-07-28T07:30:00Z",
+    repository: { full_name: "aaif-goose/goose" },
+    subject: { title: "docs", type: "PullRequest" },
+  }], new Map(), since, checkedAt);
+  assert.equal(preserveLatestNonEmptyGithubDigest(empty, {
+    ...previous,
+    actionable_count: 0,
+  }), empty);
 });
 
 test("GitHub digest parses only complete open PR searches authored by the business account", () => {

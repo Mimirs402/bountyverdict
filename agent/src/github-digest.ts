@@ -55,11 +55,19 @@ export function preserveLatestNonEmptyGithubDigest(
       !Number.isSafeInteger(prior.event_count) || prior.event_count < 1 ||
       !Number.isSafeInteger(prior.actionable_count) ||
       !Array.isArray(prior.events) || prior.events.length !== prior.event_count ||
-      prior.events.length > GITHUB_DIGEST_MAX_EVENTS) return current;
+      prior.events.length > GITHUB_DIGEST_MAX_EVENTS ||
+      !prior.events.every(validEvent) ||
+      prior.events.filter((event: GithubDigestEvent) => event.actionable).length !== prior.actionable_count) return current;
+  const retainedEvents = (prior.events as GithubDigestEvent[]).map((event) => ({
+    ...event,
+    actionable: false,
+  }));
   return {
     ...(prior as GithubDigest),
     checked_at: current.checked_at,
     since: current.since,
+    actionable_count: 0,
+    events: retainedEvents,
   };
 }
 

@@ -67,6 +67,56 @@ function githubMock(
   };
 }
 
+test("retries one invalid GitHub JSON response before validating evidence", async () => {
+  const base = githubMock();
+  let issueReads = 0;
+  const mock = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    if (/\/issues\/4$/.test(String(input))) {
+      issueReads += 1;
+      if (issueReads === 1) {
+        return new Response("temporary edge response", {
+          headers: { "x-ratelimit-remaining": "4990" },
+        });
+      }
+    }
+    return base(input, init);
+  }) as typeof fetch;
+
+  const result = await checkGithubIssue("https://github.com/acme/widget/issues/4", {}, mock);
+  assert.equal(result.product, "BountyVerdict");
+  assert.equal(issueReads, 2);
+});
+
+test("fails closed after two invalid GitHub JSON responses", async () => {
+  let issueReads = 0;
+  const mock = (async () => {
+    issueReads += 1;
+    return new Response("temporary edge response", {
+      headers: { "x-ratelimit-remaining": "4990" },
+    });
+  }) as typeof fetch;
+
+  await assert.rejects(
+    () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, mock),
+    (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+  );
+  assert.equal(issueReads, 2);
+});
+
+test("does not retry semantically invalid GitHub evidence", async () => {
+  let issueReads = 0;
+  const mock = (async () => {
+    issueReads += 1;
+    return Response.json(null, { headers: { "x-ratelimit-remaining": "4990" } });
+  }) as typeof fetch;
+
+  await assert.rejects(
+    () => checkGithubIssue("https://github.com/acme/widget/issues/4", {}, mock),
+    (error: unknown) => error instanceof CheckError && error.code === "GITHUB_RESPONSE_INVALID",
+  );
+  assert.equal(issueReads, 1);
+});
+
 function withLinkedSource(
   base: typeof fetch,
   sourceIssue: Record<string, unknown>,

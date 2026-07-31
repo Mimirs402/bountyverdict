@@ -3,9 +3,9 @@
   "product": "BountyVerdict",
   "release_version": "1.1.20",
   "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.20",
-  "status": "awaiting_production",
-  "production_api": null,
-  "worker_version_id": null,
+  "status": "active",
+  "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
+  "worker_version_id": "f8c72862-50c0-4938-8028-e7cba36f2918",
   "test_api": "https://bountyverdict-agent.mimirslab.workers.dev",
   "test_network": "eip155:84532",
   "test_verification": {
@@ -212,7 +212,7 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-07-31T18:17:24.000Z",
+  "updated_at": "2026-07-31T18:27:54.222Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",

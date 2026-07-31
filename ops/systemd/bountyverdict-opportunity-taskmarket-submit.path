@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the admitted Taskmarket submitter on a new immutable intent
+
+[Path]
+PathChanged=%h/.local/state/bountyverdict/opportunity-submission-intents
+Unit=bountyverdict-opportunity-taskmarket-submit.service
+
+[Install]
+WantedBy=paths.target

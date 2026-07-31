@@ -1,0 +1,31 @@
+[Unit]
+Description=Submit an admitted Taskmarket bounty artifact with the project agent
+After=network-online.target
+Wants=network-online.target
+ConditionDirectoryNotEmpty=%h/.local/state/bountyverdict/opportunity-submission-intents
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/opportunity-taskmarket-submit.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+StateDirectory=bountyverdict
+StateDirectoryMode=0700
+BindReadOnlyPaths=%h/Projects/sandbox/bountyverdict:%h/Projects/sandbox/bountyverdict %h/.taskmarket:%h/.taskmarket
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+Nice=10
+TimeoutStartSec=10min

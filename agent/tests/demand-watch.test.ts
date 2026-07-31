@@ -203,6 +203,7 @@ test("MoltJobs emits a guarded assessment marker only after independent public f
     hours_remaining: 6,
     escrow_tx_hash: funded.escrowTxHash,
     requester: funded.posterId,
+    task_snapshot_sha256: null,
     opportunity_score_usdc_per_current_entry: "1.9",
     requires_agent_fit_review: true,
     selection_basis:

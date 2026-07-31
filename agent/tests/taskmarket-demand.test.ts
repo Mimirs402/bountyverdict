@@ -5,9 +5,12 @@ import {
   parseTaskmarketPage,
   reconcileTaskmarketTracked,
   taskmarketAwardSettlementHashes,
+  taskmarketTaskSnapshotSha256,
   TASKMARKET_TRACKED_SUBMISSIONS,
   TASKMARKET_WORKER_ADDRESS,
   verifyTaskmarketSettlementReceipt,
+  verifyTaskmarketFundingReceipt,
+  type TaskmarketTask,
   type TaskmarketTrackedSpecification,
 } from "../src/taskmarket-demand.ts";
 
@@ -22,6 +25,77 @@ const now = Date.parse("2026-07-21T12:00:00.000Z");
 const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 const taskmarketDiamond = "0xDDc6cC3e4D11c1f3527B867C7DAD4ED9869C33f7";
 const taskCompletedTopic = "0x0c01e82f21f6dc480e3553e62cba7e6511685aa15d312f971ea64663bef07ecb";
+const taskCreatedTopic = "0xe0dc4072f8420c56e984e9c6eec7bad2e5616825f0d1ca581bd96ff3e8eec948";
+const taskmarketForwarder = "0x8884f95B69dd1581565633aEA85f9a9F7067144D";
+const baseUsdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const fundingPayer = "0x2222222222222222222222222222222222222222";
+
+function word(value: bigint): string {
+  return value.toString(16).padStart(64, "0");
+}
+
+function successfulFundingReceipt(task: TaskmarketTask, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const reward = BigInt(task.rewardAtomic);
+  const expiry = BigInt(Math.floor(Date.parse(task.expiryTime) / 1_000));
+  return {
+    status: "0x1",
+    transactionHash: task.escrowTxHash,
+    to: taskmarketForwarder,
+    from: fundingPayer,
+    logs: [
+      {
+        address: baseUsdc,
+        topics: [
+          transferTopic,
+          `0x${"0".repeat(24)}${fundingPayer.slice(2)}`,
+          `0x${"0".repeat(24)}${taskmarketDiamond.slice(2).toLowerCase()}`,
+        ],
+        data: `0x${word(reward)}`,
+      },
+      {
+        address: taskmarketDiamond,
+        topics: [
+          taskCreatedTopic,
+          task.id,
+          `0x${"0".repeat(24)}${task.requester.slice(2).toLowerCase()}`,
+          `0xa81913a5${"0".repeat(56)}`,
+        ],
+        data: `0x${word(reward)}${word(expiry)}${word(0n)}${word(0n)}`,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function liveConfigProof(task: TaskmarketTask) {
+  const createdAt = BigInt(Math.floor(Date.parse(task.createdAt) / 1_000));
+  return {
+    task_hooks_result: `0x${word(32n)}${word(0n)}`,
+    task_evaluator_result: `0x${word(0n)}`,
+    task_metadata_result: `0x${word(32n)}${word(createdAt)}${word(0n)}${word(0n)}${word(128n)}${word(0n)}`,
+  };
+}
+
+function openTaskResult(task: TaskmarketTask): string {
+  const reward = BigInt(task.rewardAtomic);
+  const expiry = BigInt(Math.floor(Date.parse(task.expiryTime) / 1_000));
+  return `0x${[
+    task.id.slice(2),
+    `${"0".repeat(24)}${task.requester.slice(2).toLowerCase()}`,
+    "0".repeat(64),
+    word(0n),
+    `a81913a5${"0".repeat(56)}`,
+    word(reward),
+    word(expiry),
+    word(0n),
+    word(750n),
+    "0".repeat(64),
+    word(0n),
+    "0".repeat(64),
+    word(0n),
+    word(0n),
+  ].join("")}`;
+}
 
 function rawTask(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -41,6 +115,10 @@ function rawTask(overrides: Record<string, unknown> = {}): Record<string, unknow
     submissionCount: 0,
     pitchCount: 0,
     pitchDeadline: null,
+    submissionVisibility: "public",
+    taskVisibility: "public",
+    hooks: [],
+    evaluator: null,
     awardCount: 0,
     awards: [],
     ...overrides,
@@ -621,7 +699,18 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
     pitchDeadline: "2026-07-21T11:00:00.000Z",
   };
 
-  const result = analyzeTaskmarket([fresh, saturated, owner, stale, lowReward, expiredPitch], now);
+  const fundingReceipt = {
+    transaction_hash: fresh.escrowTxHash,
+    receipt: successfulFundingReceipt(fresh),
+    task_id: fresh.id,
+    task_result: openTaskResult(fresh),
+    ...liveConfigProof(fresh),
+  };
+  assert.equal(verifyTaskmarketFundingReceipt(fresh, fundingReceipt), true);
+  assert.equal(verifyTaskmarketFundingReceipt(fresh, { ...fundingReceipt, task_hooks_result: `0x${word(32n)}${word(1n)}${word(1n)}` }), false);
+  assert.equal(verifyTaskmarketFundingReceipt(fresh, { ...fundingReceipt, task_evaluator_result: `0x${word(1n)}` }), false);
+  assert.equal(verifyTaskmarketFundingReceipt(fresh, { ...fundingReceipt, task_metadata_result: liveConfigProof({ ...fresh, createdAt: "2026-07-21T11:29:58.000Z" }).task_metadata_result }), false);
+  const result = analyzeTaskmarket([fresh, saturated, owner, stale, lowReward, expiredPitch], now, [fundingReceipt]);
   assert.equal(result.fresh_low_competition_candidate_count, 1);
   assert.equal(result.saturated_submission_open_tasks, 1);
   assert.equal(result.expired_pitch_entry_tasks, 1);
@@ -638,11 +727,17 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
     hours_remaining: 6,
     escrow_tx_hash: escrowTx,
     requester,
+    task_snapshot_sha256: taskmarketTaskSnapshotSha256(fresh),
     opportunity_score_usdc_per_current_entry: "2.775",
     requires_agent_fit_review: true,
     selection_basis:
-      "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+      "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
   }]);
+  assert.equal(analyzeTaskmarket([fresh], now).fresh_low_competition_candidate_count, 0);
+  assert.equal(verifyTaskmarketFundingReceipt(fresh, {
+    ...fundingReceipt,
+    receipt: successfulFundingReceipt(fresh, { status: "0x0" }),
+  }), false);
 });
 
 test("Taskmarket submission and submit transaction remain zero revenue without a canonical award", () => {

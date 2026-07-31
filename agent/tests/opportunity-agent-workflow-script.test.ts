@@ -26,6 +26,7 @@ const candidate: OpportunityCandidate = {
   hours_remaining: 6,
   escrow_tx_hash: `0x${"b".repeat(64)}`,
   requester: "0x1111111111111111111111111111111111111111",
+  task_snapshot_sha256: "c".repeat(64),
   opportunity_score_usdc_per_current_entry: "2.775",
   requires_agent_fit_review: true,
   selection_basis:
@@ -76,7 +77,7 @@ const output = assessment
       status: "PREPARED",
       summary: "Prepared and tested locally.",
       artifact_paths: [join(process.cwd(), "solution.txt")],
-      tests: [{ command: "test", result: "passed" }],
+      tests: [{ command: "test", passed: true, result: "passed" }],
       remaining_blockers: ["External submission remains disabled."],
       product_learning: [],
     };

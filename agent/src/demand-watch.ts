@@ -406,6 +406,7 @@ function moltOpportunityCandidate(
     hours_remaining: Math.round((deadlineMs - nowMs) / 36_000) / 100,
     escrow_tx_hash: job.escrowTxHash,
     requester: job.posterId,
+    task_snapshot_sha256: null,
     opportunity_score_usdc_per_current_entry: atomicToDecimal(scoreAtomic),
     requires_agent_fit_review: true,
     selection_basis:

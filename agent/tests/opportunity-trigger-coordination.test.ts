@@ -19,6 +19,7 @@ const candidate: OpportunityCandidate = {
   hours_remaining: 6,
   escrow_tx_hash: `0x${"b".repeat(64)}`,
   requester: "0x1111111111111111111111111111111111111111",
+  task_snapshot_sha256: "c".repeat(64),
   opportunity_score_usdc_per_current_entry: "2.775",
   requires_agent_fit_review: true,
   selection_basis:

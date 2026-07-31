@@ -21,7 +21,7 @@ const publicEvidenceHosts = new Set([
   "api.moltjobs.io",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v2";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v3";
 
 export type OpportunityCandidate = {
   market: "taskmarket" | "moltjobs";
@@ -36,6 +36,7 @@ export type OpportunityCandidate = {
   hours_remaining: number;
   escrow_tx_hash: string;
   requester: string;
+  task_snapshot_sha256: string | null;
   opportunity_score_usdc_per_current_entry: string;
   requires_agent_fit_review: true;
   selection_basis: string;
@@ -97,7 +98,7 @@ export type OpportunityPreparationResult = {
   status: "PREPARED" | "PREPARATION_FAILED";
   summary: string;
   artifact_paths: string[];
-  tests: Array<{ command: string; result: string }>;
+  tests: Array<{ command: string; passed: boolean; result: string }>;
   remaining_blockers: string[];
   product_learning: string[];
 };
@@ -167,9 +168,10 @@ export const OPPORTUNITY_PREPARATION_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["command", "result"],
+        required: ["command", "passed", "result"],
         properties: {
           command: { type: "string" },
+          passed: { type: "boolean" },
           result: { type: "string" },
         },
       },
@@ -248,6 +250,11 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         64,
         market === "taskmarket" ? addressPattern : uuidPattern,
       ),
+      task_snapshot_sha256: market === "taskmarket"
+        ? string(candidate.task_snapshot_sha256, "Opportunity task snapshot", 64, /^[a-f0-9]{64}$/)
+        : candidate.task_snapshot_sha256 === null
+          ? null
+          : (() => { throw new Error("MoltJobs opportunity task snapshot must be null."); })(),
       opportunity_score_usdc_per_current_entry: string(
         candidate.opportunity_score_usdc_per_current_entry,
         "Opportunity score",
@@ -525,6 +532,7 @@ export function parseOpportunityPreparationResult(
     const test = object(item, "Opportunity preparation test");
     return {
       command: string(test.command, "Opportunity preparation test command", 1_000),
+      passed: test.passed === true,
       result: string(test.result, "Opportunity preparation test result", 2_000),
     };
   });
@@ -556,6 +564,7 @@ export function buildOpportunityAgentPrompt(trigger: OpportunityTrigger): string
     deadline_at: candidate.deadline_at,
     escrow_tx_hash: candidate.escrow_tx_hash,
     requester: candidate.requester,
+    task_snapshot_sha256: candidate.task_snapshot_sha256,
   }));
   return `A guarded BountyVerdict opportunity assessment event fired.
 
@@ -599,6 +608,7 @@ export function buildOpportunityPreparationPrompt(
     deadline_at: triggerCandidate.deadline_at,
     escrow_tx_hash: triggerCandidate.escrow_tx_hash,
     requester: triggerCandidate.requester,
+    task_snapshot_sha256: triggerCandidate.task_snapshot_sha256,
   };
   return `A guarded BountyVerdict opportunity assessment approved one candidate for local preparation.
 

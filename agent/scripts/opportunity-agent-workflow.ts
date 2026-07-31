@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,21 @@ import {
   parseOpportunityPreparationResult,
   parseOpportunityTrigger,
 } from "../src/opportunity-agent-workflow.ts";
+import {
+  admitTaskmarketSubmission,
+  parseTaskmarketSubmissionIntent,
+  type TaskmarketSubmissionIntent,
+} from "../src/opportunity-taskmarket-submission.ts";
+import {
+  parseTaskmarketTask,
+  TASKMARKET_API,
+  TASKMARKET_DIAMOND,
+  TASKMARKET_EVALUATOR_FOR_SELECTOR,
+  TASKMARKET_GET_TASK_SELECTOR,
+  TASKMARKET_GET_TASK_HOOKS_SELECTOR,
+  TASKMARKET_GET_TASK_METADATA_SELECTOR,
+  type TaskmarketFundingReceiptPayload,
+} from "../src/taskmarket-demand.ts";
 
 const execFileAsync = promisify(execFile);
 const stateRoot = process.env.BOUNTY_OPPORTUNITY_STATE_ROOT ||
@@ -28,6 +43,8 @@ const workspaceRoot = process.env.BOUNTY_OPPORTUNITY_WORKSPACE_ROOT ||
   stateRoot;
 const outputRoot = process.env.BOUNTY_OPPORTUNITY_OUTPUT_ROOT ||
   join(stateRoot, "opportunity-workflows");
+const submissionIntentRoot = process.env.BOUNTY_OPPORTUNITY_SUBMISSION_INTENT_ROOT ||
+  join(stateRoot, "opportunity-submission-intents");
 const maximumCompletedTriggers = 200;
 const maximumResultBytes = 256 * 1024;
 const opportunityIdPattern =
@@ -50,6 +67,93 @@ async function atomicWrite(path: string, contents: string): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, contents, { mode: 0o600 });
   await rename(temporary, path);
+}
+
+async function createIntent(intent: TaskmarketSubmissionIntent): Promise<string> {
+  await mkdir(submissionIntentRoot, { recursive: true, mode: 0o700 });
+  const path = join(submissionIntentRoot, `${intent.intent_id}.json`);
+  try {
+    const handle = await open(path, "wx", 0o600);
+    try {
+      await handle.writeFile(`${JSON.stringify(intent, null, 2)}\n`);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    const existing = parseTaskmarketSubmissionIntent(await boundedJson(path, "Existing submission intent"));
+    if (JSON.stringify(existing) !== JSON.stringify(intent)) {
+      throw new Error("Existing Taskmarket submission intent disagrees with the deterministic intent.");
+    }
+  }
+  return path;
+}
+
+async function boundedPublicJson(url: URL, label: string): Promise<unknown> {
+  const response = await fetch(url, {
+    redirect: "error",
+    headers: { Accept: "application/json", "User-Agent": "bountyverdict-opportunity-admission/1.0" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+    throw new Error(`${label} returned an invalid HTTP response.`);
+  }
+  const declared = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > 2_000_000) throw new Error(`${label} exceeded the response cap.`);
+  const body = await response.text();
+  if (new TextEncoder().encode(body).length > 2_000_000) throw new Error(`${label} exceeded the response cap.`);
+  return JSON.parse(body) as unknown;
+}
+
+async function taskmarketRpc(method: string, params: unknown[]): Promise<unknown | null> {
+  const response = await fetch("https://mainnet.base.org", {
+    method: "POST",
+    redirect: "error",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "bountyverdict-opportunity-admission/1.0",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+    throw new Error("Base RPC returned an invalid HTTP response.");
+  }
+  const payload = await response.json() as Record<string, unknown>;
+  if (payload.jsonrpc !== "2.0" || payload.id !== 1 || !("result" in payload)) {
+    throw new Error("Base RPC returned a malformed receipt envelope.");
+  }
+  return payload.result ?? null;
+}
+
+async function taskmarketFundingReceipt(transactionHash: string, taskId: string): Promise<TaskmarketFundingReceiptPayload> {
+  const [receipt, taskResult, taskHooksResult, taskEvaluatorResult, taskMetadataResult] = await Promise.all([
+    taskmarketRpc("eth_getTransactionReceipt", [transactionHash]),
+    taskmarketRpc("eth_call", [{
+      to: TASKMARKET_DIAMOND,
+      data: `${TASKMARKET_GET_TASK_SELECTOR}${taskId.slice(2)}`,
+    }, "latest"]),
+    taskmarketRpc("eth_call", [{ to: TASKMARKET_DIAMOND, data: `${TASKMARKET_GET_TASK_HOOKS_SELECTOR}${taskId.slice(2)}` }, "latest"]),
+    taskmarketRpc("eth_call", [{ to: TASKMARKET_DIAMOND, data: `${TASKMARKET_EVALUATOR_FOR_SELECTOR}${taskId.slice(2)}` }, "latest"]),
+    taskmarketRpc("eth_call", [{ to: TASKMARKET_DIAMOND, data: `${TASKMARKET_GET_TASK_METADATA_SELECTOR}${taskId.slice(2)}` }, "latest"]),
+  ]);
+  return {
+    transaction_hash: transactionHash,
+    receipt,
+    task_id: taskId,
+    task_result: taskResult,
+    task_hooks_result: taskHooksResult,
+    task_evaluator_result: taskEvaluatorResult,
+    task_metadata_result: taskMetadataResult,
+    unavailable_reason: receipt === null ? "receipt_not_yet_available" : undefined,
+  };
 }
 
 async function readWorkflowState(): Promise<WorkflowState> {
@@ -191,6 +295,8 @@ try {
 
     const receiptFile = join(outputRoot, `${trigger.trigger_id}.result.json`);
     let preparation: ReturnType<typeof parseOpportunityPreparationResult> | null = null;
+    let submissionIntent: TaskmarketSubmissionIntent | null = null;
+    let submissionIntentFile: string | null = null;
     let outcome: string = assessment.decision;
     const ready = assessment.candidates.find(({ decision }) => decision === "READY_FOR_LOCAL_PREPARATION");
     if (ready) {
@@ -215,6 +321,23 @@ try {
       );
       await validateOpportunityArtifacts(preparationRoot, preparation.artifact_paths);
       outcome = preparation.status;
+      const triggerCandidate = trigger.candidates.find(({ task_id }) => task_id.toLowerCase() === ready.task_id.toLowerCase());
+      if (preparation.status === "PREPARED" && preparation.remaining_blockers.length === 0 &&
+        triggerCandidate?.market === "taskmarket") {
+        const currentTask = parseTaskmarketTask(await boundedPublicJson(
+          new URL(`/api/tasks/${encodeURIComponent(ready.task_id)}`, TASKMARKET_API),
+          "Taskmarket task detail",
+        ));
+        submissionIntent = await admitTaskmarketSubmission({
+          trigger,
+          preparation,
+          preparation_root: preparationRoot,
+          current_task: currentTask,
+          funding_receipt: await taskmarketFundingReceipt(currentTask.escrowTxHash, currentTask.id),
+        });
+        submissionIntentFile = await createIntent(submissionIntent);
+        outcome = "ELIGIBLE_FOR_TASKMARKET_SUBMISSION";
+      }
     }
     await atomicWrite(receiptFile, `${JSON.stringify({
       schema_version: 1,
@@ -222,6 +345,8 @@ try {
       outcome,
       assessment,
       preparation,
+      submission_intent: submissionIntent,
+      submission_intent_file: submissionIntentFile,
     }, null, 2)}\n`);
 
     const completedAt = new Date().toISOString();

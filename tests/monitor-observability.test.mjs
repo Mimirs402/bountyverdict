@@ -16,6 +16,11 @@ const opportunityAgentServiceUrl = new URL("../ops/systemd/bountyverdict-opportu
 const opportunityAgentPathUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.path", import.meta.url);
 const opportunityAgentRetryTimerUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent-retry.timer", import.meta.url);
 const opportunityAgentScriptUrl = new URL("../agent/scripts/opportunity-agent-workflow.ts", import.meta.url);
+const opportunitySubmitServiceUrl = new URL("../ops/systemd/bountyverdict-opportunity-taskmarket-submit.service", import.meta.url);
+const opportunitySubmitPathUrl = new URL("../ops/systemd/bountyverdict-opportunity-taskmarket-submit.path", import.meta.url);
+const opportunitySubmitRetryTimerUrl = new URL("../ops/systemd/bountyverdict-opportunity-taskmarket-submit-retry.timer", import.meta.url);
+const opportunitySubmitScriptUrl = new URL("../agent/scripts/opportunity-taskmarket-submit.ts", import.meta.url);
+const opportunitySubmitAdmissionUrl = new URL("../agent/src/opportunity-taskmarket-submission.ts", import.meta.url);
 const directoryTimerUrl = new URL("../ops/systemd/bountyverdict-directory-monitor.timer", import.meta.url);
 const marketplaceTimerUrl = new URL("../ops/systemd/bountyverdict-marketplace-audit.timer", import.meta.url);
 const functionalCanaryTimerUrl = new URL("../ops/systemd/bountyverdict-functional-canary.timer", import.meta.url);
@@ -1092,7 +1097,48 @@ test("fresh high-confidence marketplace markers launch one deduplicated guarded 
   assert.match(watcher, /pending_opportunity_workflow/);
   assert.doesNotMatch(workflow, /env:\s*process\.env/);
   assert.doesNotMatch(workflow, /\bexec\(|shell:\s*true/);
-  assert.doesNotMatch(workflow, /taskmarket.*(?:submit|claim|pitch)|method:\s*["']POST["']/i);
+  assert.equal((workflow.match(/execFileAsync\(/g) || []).length, 1);
+  assert.doesNotMatch(workflow, /node_modules\/\.bin\/taskmarket|["'](?:submit|claim|pitch)["']/i);
+});
+
+test("only independently funded blocker-free Taskmarket work reaches the isolated no-resubmit adapter", async () => {
+  const [watcher, workflow, admission, submitter, service, path, retryTimer] = await Promise.all([
+    readFile(demandWatchUrl, "utf8"),
+    readFile(opportunityAgentScriptUrl, "utf8"),
+    readFile(opportunitySubmitAdmissionUrl, "utf8"),
+    readFile(opportunitySubmitScriptUrl, "utf8"),
+    readFile(opportunitySubmitServiceUrl, "utf8"),
+    readFile(opportunitySubmitPathUrl, "utf8"),
+    readFile(opportunitySubmitRetryTimerUrl, "utf8"),
+  ]);
+  assert.match(watcher, /taskmarketOpportunityFundingTransactionHashes/);
+  assert.match(watcher, /opportunity-taskmarket-tracked\.json/);
+  assert.match(workflow, /admitTaskmarketSubmission/);
+  assert.match(workflow, /submissionIntentFile = await createIntent/);
+  assert.match(admission, /verifyTaskmarketFundingReceipt/);
+  assert.match(admission, /remaining_blockers\.length !== 0/);
+  assert.match(admission, /credential-like material/);
+  assert.match(admission, /max_payment_usdc: "0"/);
+  assert.match(admission, /legal_acceptance_enabled: false/);
+  assert.match(submitter, /parseTaskmarketCliIdentity/);
+  assert.match(submitter, /verifyTaskmarketSubmissionReceipt/);
+  assert.match(submitter, /readOnlyLegalStatus/);
+  assert.match(submitter, /reserveTaskMutation/);
+  assert.match(submitter, /TASKMARKET_GET_TASK_SELECTOR/);
+  assert.match(submitter, /submission_onchain_receipt_mismatch/);
+  assert.match(submitter, /await writeState\(intent, "SUBMITTING"\)/);
+  assert.match(submitter, /prior_mutation_outcome_remains_unverified_no_resubmit/);
+  assert.match(submitter, /node_modules\/\.bin\/taskmarket/);
+  assert.doesNotMatch(submitter, /\bnpx\b|legal", "accept|identity", "register|wallet.*switch/i);
+  assert.doesNotMatch(submitter, /cliJson\(\["legal", "status"\]\)/);
+  assert.ok(submitter.indexOf("parseTaskmarketCliIdentity(") < submitter.indexOf('await writeState(intent, "SUBMITTING")'));
+  assert.match(service, /NoNewPrivileges=yes/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=tmpfs/);
+  assert.match(service, /BindReadOnlyPaths=.*%h\/\.taskmarket/);
+  assert.doesNotMatch(service, /\.codex\/auth|\.config\/gh|github/i);
+  assert.match(path, /PathChanged=%h\/\.local\/state\/bountyverdict\/opportunity-submission-intents/);
+  assert.match(retryTimer, /^OnUnitInactiveSec=10min$/m);
 });
 
 test("Clawlancer delivery and revenue require exact Base escrow evidence", async () => {

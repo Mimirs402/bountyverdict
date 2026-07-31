@@ -7,6 +7,7 @@ import { coordinateOpportunityTrigger } from "../src/opportunity-trigger-coordin
 import type { OpportunityCandidate } from "../src/opportunity-agent-workflow.ts";
 
 const candidate: OpportunityCandidate = {
+  market: "taskmarket",
   task_id: `0x${"a".repeat(64)}`,
   title: "Implement a bounded parser.",
   mode: "bounty",

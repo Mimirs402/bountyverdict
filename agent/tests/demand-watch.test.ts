@@ -3,8 +3,11 @@ import test from "node:test";
 import {
   analyzeMoltJobs,
   analyzeOpenJobs,
+  moltJobsOpportunityDetailIds,
+  parseMoltJobPublicSummary,
   parseMoltJobsPage,
   parseOpenJobs,
+  verifyMoltJobsFundingReceipt,
   type MoltJob,
 } from "../src/demand-watch.ts";
 
@@ -63,6 +66,64 @@ function rawOpen(overrides: Record<string, unknown> = {}): Record<string, unknow
   };
 }
 
+function rawMoltPublicSummary(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    data: {
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "Research request",
+      status: "OPEN",
+      budgetUsdc: "6",
+      deadlineAt: "2026-07-21T18:00:00.000Z",
+      createdAt: "2026-07-21T06:00:00.000Z",
+      assignedAgent: null,
+      bidCount: 2,
+      escrowFunded: true,
+      ...overrides,
+    },
+  };
+}
+
+function hexWord(value: bigint): string {
+  return value.toString(16).padStart(64, "0");
+}
+
+function moltFundingReceipt(job: MoltJob, overrides: Record<string, unknown> = {}) {
+  const sender = "0x3333333333333333333333333333333333333333";
+  const escrow = "0xa845fba3f4428d4abf76df453f4b57e391328f71";
+  const jobId = `0x${Array.from({ length: 32 }, (_, index) =>
+    job.escrowJobId?.[String(index)].toString(16).padStart(2, "0")
+  ).join("")}`;
+  const budgetAtomic = 6_000_000n;
+  const feeAtomic = 150_000n;
+  return {
+    transaction_hash: job.escrowTxHash!,
+    receipt: {
+      status: "0x1",
+      transactionHash: job.escrowTxHash,
+      from: sender,
+      to: escrow,
+      logs: [{
+        address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        topics: [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          `0x${sender.slice(2).padStart(64, "0")}`,
+          `0x${escrow.slice(2).padStart(64, "0")}`,
+        ],
+        data: `0x${hexWord(budgetAtomic)}`,
+      }, {
+        address: escrow,
+        topics: [
+          "0x2dcdaad87b561ba5a69835009b4c53ef9d3c41ca6cc9574049187659d6c6a715",
+          jobId,
+          `0x${sender.slice(2).padStart(64, "0")}`,
+        ],
+        data: `0x${hexWord(budgetAtomic - feeAtomic)}${hexWord(feeAtomic)}`,
+      }],
+      ...overrides,
+    },
+  };
+}
+
 test("MoltJobs page validates decimal and paired onchain escrow evidence", () => {
   const page = parseMoltJobsPage({ data: [rawMolt()], meta: { nextCursor: "opaque-cursor" } });
   assert.equal(page.data[0].budgetUsdc, "0.5");
@@ -104,6 +165,116 @@ test("MoltJobs surfaces only a funded exact structured existing-product contract
   const result = analyzeMoltJobs({ open_jobs: [exact], funded_jobs: [exact], now_ms: now });
   assert.equal(result.exact_candidate_count, 1);
   assert.deepEqual((result.exact_candidates as Array<Record<string, unknown>>)[0].product, "single");
+});
+
+test("MoltJobs emits a guarded assessment marker only after independent public funding and competition agree", () => {
+  const funded = molt(rawMolt({
+    budgetUsdc: "6",
+    createdAt: "2026-07-21T06:00:00.000Z",
+    updatedAt: "2026-07-21T06:00:00.000Z",
+    deadlineAt: "2026-07-21T18:00:00.000Z",
+  }));
+  assert.deepEqual(moltJobsOpportunityDetailIds([funded], now), [funded.id]);
+  const summary = parseMoltJobPublicSummary(rawMoltPublicSummary());
+  const receipt = moltFundingReceipt(funded);
+  assert.equal(verifyMoltJobsFundingReceipt(funded, receipt), true);
+  const result = analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    public_opportunity_summaries: [summary],
+    funding_receipts: [receipt],
+    excluded_owner_poster_ids: [],
+    opportunity_triggers_enabled: true,
+    now_ms: now,
+  });
+  assert.equal(result.fresh_low_competition_candidate_count, 1);
+  assert.equal(result.chain_receipt_verified_jobs, 1);
+  assert.equal(result.chain_receipt_rejected_jobs, 0);
+  assert.deepEqual(result.fresh_low_competition_candidates, [{
+    market: "moltjobs",
+    task_id: funded.id,
+    title: funded.title,
+    mode: "competitive_job",
+    gross_reward_usdc: "6",
+    net_reward_usdc: "5.7",
+    submission_count: 2,
+    created_at: "2026-07-21T06:00:00.000Z",
+    deadline_at: "2026-07-21T18:00:00.000Z",
+    hours_remaining: 6,
+    escrow_tx_hash: funded.escrowTxHash,
+    requester: funded.posterId,
+    opportunity_score_usdc_per_current_entry: "1.9",
+    requires_agent_fit_review: true,
+    selection_basis:
+      "official funded filter plus paired escrow identifiers plus agreeing public escrow flag plus successful Base receipt binding exact USDC and escrowJobId; non-owner poster; <=3 public bids; conservative 95% net >=5 USDC; <=12h old; >=2h remaining",
+  }]);
+
+  const disabled = analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    now_ms: now,
+  });
+  assert.equal(disabled.fresh_low_competition_candidate_count, 0);
+  assert.equal(disabled.opportunity_triggering_suppressed_reason, "owner_poster_identity_scope_unconfigured");
+  assert.throws(() => analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    opportunity_triggers_enabled: true,
+    now_ms: now,
+  }), /lacks a public summary/);
+  assert.throws(() => analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    public_opportunity_summaries: [parseMoltJobPublicSummary(rawMoltPublicSummary({ budgetUsdc: "7" }))],
+    funding_receipts: [receipt],
+    opportunity_triggers_enabled: true,
+    now_ms: now,
+  }), /summary disagrees/);
+});
+
+test("MoltJobs high-confidence markers reject owner posters, saturated bids, and false escrow flags", () => {
+  const funded = molt(rawMolt({
+    budgetUsdc: "6",
+    createdAt: "2026-07-21T06:00:00.000Z",
+    updatedAt: "2026-07-21T06:00:00.000Z",
+    deadlineAt: "2026-07-21T18:00:00.000Z",
+  }));
+  for (const summary of [
+    parseMoltJobPublicSummary(rawMoltPublicSummary({ bidCount: 4 })),
+    parseMoltJobPublicSummary(rawMoltPublicSummary({ escrowFunded: false })),
+  ]) {
+    const result = analyzeMoltJobs({
+      open_jobs: [funded],
+      funded_jobs: [funded],
+      public_opportunity_summaries: [summary],
+      funding_receipts: [moltFundingReceipt(funded)],
+      opportunity_triggers_enabled: true,
+      now_ms: now,
+    });
+    assert.equal(result.fresh_low_competition_candidate_count, 0);
+  }
+  const owner = analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    public_opportunity_summaries: [parseMoltJobPublicSummary(rawMoltPublicSummary())],
+    funding_receipts: [moltFundingReceipt(funded)],
+    excluded_owner_poster_ids: [funded.posterId],
+    opportunity_triggers_enabled: true,
+    now_ms: now,
+  });
+  assert.equal(owner.fresh_low_competition_candidate_count, 0);
+  assert.equal(verifyMoltJobsFundingReceipt(funded, moltFundingReceipt(funded, { status: "0x0" })), false);
+  const rejectedChain = analyzeMoltJobs({
+    open_jobs: [funded],
+    funded_jobs: [funded],
+    public_opportunity_summaries: [parseMoltJobPublicSummary(rawMoltPublicSummary())],
+    funding_receipts: [moltFundingReceipt(funded, { status: "0x0" })],
+    opportunity_triggers_enabled: true,
+    now_ms: now,
+  });
+  assert.equal(rejectedChain.fresh_low_competition_candidate_count, 0);
+  assert.equal(rejectedChain.chain_receipt_verified_jobs, 0);
+  assert.equal(rejectedChain.chain_receipt_rejected_jobs, 1);
 });
 
 test("OpenJobs accepts live arrays and its documented wrapper without treating WAGE as USDC", () => {

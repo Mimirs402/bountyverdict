@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 const bytes32Pattern = /^0x[a-f0-9]{64}$/i;
 const addressPattern = /^0x[a-f0-9]{40}$/i;
+const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const decimalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/;
 const maximumRememberedTasks = 500;
 const maximumCandidatesPerTrigger = 3;
@@ -17,14 +18,16 @@ const publicEvidenceHosts = new Set([
   "api.basescan.org",
   "base.blockscout.com",
   "base-sepolia.blockscout.com",
+  "api.moltjobs.io",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "taskmarket-fresh-low-competition-v1";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v2";
 
 export type OpportunityCandidate = {
+  market: "taskmarket" | "moltjobs";
   task_id: string;
   title: string;
-  mode: "bounty";
+  mode: "bounty" | "competitive_job";
   gross_reward_usdc: string;
   net_reward_usdc: string;
   submission_count: number;
@@ -39,7 +42,7 @@ export type OpportunityCandidate = {
 };
 
 export type OpportunityTrigger = {
-  schema_version: 1;
+  schema_version: 2;
   kind: "bounty_opportunity";
   marker_version: typeof OPPORTUNITY_MARKER_VERSION;
   trigger_id: string;
@@ -211,17 +214,27 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
   if (!Array.isArray(value) || value.length > 10) throw new Error("Opportunity candidates are malformed.");
   const candidates = value.map((item): OpportunityCandidate => {
     const candidate = object(item, "Opportunity candidate");
-    if (candidate.mode !== "bounty" || candidate.requires_agent_fit_review !== true) {
+    if ((candidate.market !== "taskmarket" && candidate.market !== "moltjobs") ||
+      candidate.requires_agent_fit_review !== true) {
       throw new Error("Opportunity candidate has unsupported workflow flags.");
     }
+    const market = candidate.market;
+    const mode = market === "taskmarket" ? "bounty" : "competitive_job";
+    if (candidate.mode !== mode) throw new Error("Opportunity candidate has an unsupported market mode.");
     const hoursRemaining = Number(candidate.hours_remaining);
     if (!Number.isFinite(hoursRemaining) || hoursRemaining < 0 || hoursRemaining > 24 * 366) {
       throw new Error("Opportunity candidate hours remaining is invalid.");
     }
     return {
-      task_id: string(candidate.task_id, "Opportunity task ID", 66, bytes32Pattern),
+      market,
+      task_id: string(
+        candidate.task_id,
+        "Opportunity task ID",
+        66,
+        market === "taskmarket" ? bytes32Pattern : uuidPattern,
+      ),
       title: string(candidate.title, "Opportunity title", 500),
-      mode: "bounty",
+      mode,
       gross_reward_usdc: string(candidate.gross_reward_usdc, "Opportunity gross reward", 32, decimalPattern),
       net_reward_usdc: string(candidate.net_reward_usdc, "Opportunity net reward", 32, decimalPattern),
       submission_count: safeCount(candidate.submission_count, "Opportunity submission count", 3),
@@ -229,7 +242,12 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
       deadline_at: timestamp(candidate.deadline_at, "Opportunity deadline"),
       hours_remaining: hoursRemaining,
       escrow_tx_hash: string(candidate.escrow_tx_hash, "Opportunity escrow transaction", 66, bytes32Pattern),
-      requester: string(candidate.requester, "Opportunity requester", 42, addressPattern),
+      requester: string(
+        candidate.requester,
+        "Opportunity requester",
+        64,
+        market === "taskmarket" ? addressPattern : uuidPattern,
+      ),
       opportunity_score_usdc_per_current_entry: string(
         candidate.opportunity_score_usdc_per_current_entry,
         "Opportunity score",
@@ -240,7 +258,7 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
       selection_basis: string(candidate.selection_basis, "Opportunity selection basis", 500),
     };
   });
-  if (new Set(candidates.map(({ task_id }) => task_id.toLowerCase())).size !== candidates.length) {
+  if (new Set(candidates.map(({ market, task_id }) => `${market}:${task_id.toLowerCase()}`)).size !== candidates.length) {
     throw new Error("Opportunity candidates contain duplicate task IDs.");
   }
   return candidates;
@@ -251,12 +269,15 @@ export function parseRememberedOpportunityFingerprints(value: unknown): string[]
   if (!Array.isArray(value) || value.length > maximumRememberedTasks) {
     throw new Error("Remembered opportunity fingerprints are malformed.");
   }
-  const fingerprints = value.map((item) => string(
-    item,
-    "Remembered opportunity fingerprint",
-    133,
-    /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i,
-  ).toLowerCase());
+  const legacyPattern = /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i;
+  const crossMarketPattern = /^(?:taskmarket:0x[a-f0-9]{64}|moltjobs:[a-f0-9-]{36}):0x[a-f0-9]{64}$/i;
+  const fingerprints = value.map((item) => {
+    const parsed = string(item, "Remembered opportunity fingerprint", 160);
+    if (!legacyPattern.test(parsed) && !crossMarketPattern.test(parsed)) {
+      throw new Error("Remembered opportunity fingerprint is invalid.");
+    }
+    return parsed.toLowerCase();
+  });
   if (new Set(fingerprints).size !== fingerprints.length) {
     throw new Error("Remembered opportunity fingerprints are duplicated.");
   }
@@ -271,18 +292,24 @@ export function buildOpportunityTrigger(
   const candidates = parseOpportunityCandidates(candidatesValue);
   const remembered = parseRememberedOpportunityFingerprints(rememberedFingerprintsValue);
   const rememberedSet = new Set(remembered);
-  const candidateFingerprint = ({ task_id, escrow_tx_hash }: OpportunityCandidate) =>
-    `${task_id.toLowerCase()}:${escrow_tx_hash.toLowerCase()}`;
+  const candidateFingerprint = ({ market, task_id, escrow_tx_hash }: OpportunityCandidate) =>
+    `${market}:${task_id.toLowerCase()}:${escrow_tx_hash.toLowerCase()}`;
   const migratedRemembered = remembered.map((entry) => {
-    if (entry.includes(":")) return entry;
-    const current = candidates.find(({ task_id }) => task_id.toLowerCase() === entry);
+    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:")) return entry;
+    const [legacyTaskId] = entry.split(":");
+    const current = candidates.find(({ market, task_id }) =>
+      market === "taskmarket" && task_id.toLowerCase() === legacyTaskId
+    );
     return current ? candidateFingerprint(current) : entry;
   });
   const fresh = candidates
-    .filter((candidate) =>
-      !rememberedSet.has(candidateFingerprint(candidate)) &&
-      !rememberedSet.has(candidate.task_id.toLowerCase())
-    )
+    .filter((candidate) => {
+      const legacyTask = candidate.task_id.toLowerCase();
+      const legacyFingerprint = `${legacyTask}:${candidate.escrow_tx_hash.toLowerCase()}`;
+      return !rememberedSet.has(candidateFingerprint(candidate)) &&
+        !(candidate.market === "taskmarket" &&
+          (rememberedSet.has(legacyTask) || rememberedSet.has(legacyFingerprint)));
+    })
     .slice(0, maximumCandidatesPerTrigger);
   if (fresh.length === 0) {
     return { trigger: null, remembered_opportunity_fingerprints: migratedRemembered };
@@ -296,7 +323,7 @@ export function buildOpportunityTrigger(
   ].slice(-maximumRememberedTasks);
   return {
     trigger: {
-      schema_version: 1,
+      schema_version: 2,
       kind: "bounty_opportunity",
       marker_version: OPPORTUNITY_MARKER_VERSION,
       trigger_id: triggerId,
@@ -316,7 +343,9 @@ export function buildOpportunityTrigger(
 
 function opportunityTriggerId(candidates: OpportunityCandidate[]): string {
   const fingerprint = candidates
-    .map(({ task_id, escrow_tx_hash }) => `${task_id.toLowerCase()}:${escrow_tx_hash.toLowerCase()}`)
+    .map(({ market, task_id, escrow_tx_hash }) =>
+      `${market}:${task_id.toLowerCase()}:${escrow_tx_hash.toLowerCase()}`
+    )
     .sort()
     .join("\n");
   return createHash("sha256")
@@ -326,7 +355,7 @@ function opportunityTriggerId(candidates: OpportunityCandidate[]): string {
 
 export function parseOpportunityTrigger(value: unknown): OpportunityTrigger {
   const trigger = object(value, "Opportunity trigger");
-  if (trigger.schema_version !== 1 || trigger.kind !== "bounty_opportunity" ||
+  if (trigger.schema_version !== 2 || trigger.kind !== "bounty_opportunity" ||
     trigger.marker_version !== OPPORTUNITY_MARKER_VERSION) {
     throw new Error("Opportunity trigger contract is unsupported.");
   }
@@ -337,7 +366,7 @@ export function parseOpportunityTrigger(value: unknown): OpportunityTrigger {
     throw new Error("Opportunity trigger guardrails are unsafe.");
   }
   const parsed: OpportunityTrigger = {
-    schema_version: 1,
+    schema_version: 2,
     kind: "bounty_opportunity",
     marker_version: OPPORTUNITY_MARKER_VERSION,
     trigger_id: string(trigger.trigger_id, "Opportunity trigger ID", 64, /^[a-f0-9]{64}$/),
@@ -385,8 +414,19 @@ export function parseOpportunityAssessment(value: unknown, trigger: OpportunityT
   const expectedTaskIds = new Set(trigger.candidates.map(({ task_id }) => task_id.toLowerCase()));
   const candidates = assessment.candidates.map((item) => {
     const candidate = object(item, "Opportunity assessment candidate");
-    const taskId = string(candidate.task_id, "Opportunity assessment task ID", 66, bytes32Pattern);
-    if (!expectedTaskIds.has(taskId.toLowerCase())) throw new Error("Opportunity assessment task identity drifted.");
+    const unvalidatedTaskId = string(candidate.task_id, "Opportunity assessment task ID", 66);
+    const triggerCandidate = trigger.candidates.find(({ task_id }) =>
+      task_id.toLowerCase() === unvalidatedTaskId.toLowerCase()
+    );
+    if (!triggerCandidate || !expectedTaskIds.has(unvalidatedTaskId.toLowerCase())) {
+      throw new Error("Opportunity assessment task identity drifted.");
+    }
+    const taskId = string(
+      unvalidatedTaskId,
+      "Opportunity assessment task ID",
+      66,
+      triggerCandidate.market === "taskmarket" ? bytes32Pattern : uuidPattern,
+    );
     const evidenceUrls = boundedStringArray(candidate.evidence_urls, "Opportunity assessment evidence URL", 20, 1_000);
     if (evidenceUrls.some((url) => {
       try {
@@ -415,9 +455,10 @@ export function parseOpportunityAssessment(value: unknown, trigger: OpportunityT
     if (decision === "READY_FOR_LOCAL_PREPARATION" && capabilityRequirements.length > 0) {
       throw new Error("Ready opportunity candidate still has unresolved capability requirements.");
     }
+    const requiredEvidence = canonicalOpportunityEvidenceUrls(triggerCandidate);
     if (decision === "READY_FOR_LOCAL_PREPARATION" &&
-      !evidenceUrls.includes(`https://api.taskmarket.dev/api/tasks/${taskId}`)) {
-      throw new Error("Ready opportunity candidate lacks canonical Taskmarket evidence.");
+      requiredEvidence.some((url) => !evidenceUrls.includes(url))) {
+      throw new Error("Ready opportunity candidate lacks canonical marketplace evidence.");
     }
     if (decision === "NEEDS_CAPABILITY" && capabilityRequirements.length === 0) {
       throw new Error("Capability-gated opportunity candidate does not name a required capability.");
@@ -462,9 +503,16 @@ export function parseOpportunityPreparationResult(
   taskId: string,
 ): OpportunityPreparationResult {
   const result = object(value, "Opportunity preparation result");
+  const expectedCandidate = trigger.candidates.find(({ task_id: id }) => id.toLowerCase() === taskId.toLowerCase());
+  if (!expectedCandidate) throw new Error("Opportunity preparation task identity is missing.");
   if (result.schema_version !== 1 ||
     string(result.trigger_id, "Opportunity preparation trigger ID", 64, /^[a-f0-9]{64}$/) !== trigger.trigger_id ||
-    string(result.task_id, "Opportunity preparation task ID", 66, bytes32Pattern).toLowerCase() !== taskId.toLowerCase()) {
+    string(
+      result.task_id,
+      "Opportunity preparation task ID",
+      66,
+      expectedCandidate.market === "taskmarket" ? bytes32Pattern : uuidPattern,
+    ).toLowerCase() !== taskId.toLowerCase()) {
     throw new Error("Opportunity preparation result identity is incompatible.");
   }
   if (result.status !== "PREPARED" && result.status !== "PREPARATION_FAILED") {
@@ -499,8 +547,9 @@ export function parseOpportunityPreparationResult(
 
 export function buildOpportunityAgentPrompt(trigger: OpportunityTrigger): string {
   const candidateEnvelope = trigger.candidates.map((candidate) => ({
-    taskmarket_task_id: candidate.task_id,
-    taskmarket_api_url: `https://api.taskmarket.dev/api/tasks/${candidate.task_id}`,
+    market: candidate.market,
+    task_id: candidate.task_id,
+    canonical_evidence_urls: canonicalOpportunityEvidenceUrls(candidate),
     net_reward_usdc: candidate.net_reward_usdc,
     current_submission_count: candidate.submission_count,
     created_at: candidate.created_at,
@@ -542,8 +591,9 @@ export function buildOpportunityPreparationPrompt(
   const triggerCandidate = trigger.candidates.find(({ task_id: id }) => id.toLowerCase() === taskId.toLowerCase());
   if (!triggerCandidate) throw new Error("Opportunity trigger candidate is missing.");
   const canonicalFacts = {
-    taskmarket_task_id: triggerCandidate.task_id,
-    taskmarket_api_url: `https://api.taskmarket.dev/api/tasks/${triggerCandidate.task_id}`,
+    market: triggerCandidate.market,
+    task_id: triggerCandidate.task_id,
+    canonical_evidence_urls: canonicalOpportunityEvidenceUrls(triggerCandidate),
     net_reward_usdc: triggerCandidate.net_reward_usdc,
     current_submission_count: triggerCandidate.submission_count,
     deadline_at: triggerCandidate.deadline_at,
@@ -562,4 +612,15 @@ Schema-validated assessment:
 ${JSON.stringify(candidate, null, 2)}
 
 Return only the schema-conforming preparation JSON. A PREPARED result must list at least one absolute local artifact path inside the preparation workspace.`;
+}
+
+function canonicalOpportunityEvidenceUrls(candidate: OpportunityCandidate): string[] {
+  if (candidate.market === "taskmarket") {
+    return [`https://api.taskmarket.dev/api/tasks/${candidate.task_id}`];
+  }
+  return [
+    `https://api.moltjobs.io/v1/jobs/${candidate.task_id}/public`,
+    `https://api.moltjobs.io/v1/public/jobs/${candidate.task_id}`,
+    `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
+  ];
 }

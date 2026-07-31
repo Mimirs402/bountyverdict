@@ -1030,7 +1030,7 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.doesNotMatch(service, /EnvironmentFile/);
 });
 
-test("fresh Taskmarket markers launch one deduplicated guarded agent workflow", async () => {
+test("fresh high-confidence marketplace markers launch one deduplicated guarded agent workflow", async () => {
   const [watcher, service, path, retryTimer, workflow] = await Promise.all([
     readFile(demandWatchUrl, "utf8"),
     readFile(opportunityAgentServiceUrl, "utf8"),
@@ -1040,6 +1040,8 @@ test("fresh Taskmarket markers launch one deduplicated guarded agent workflow", 
   ]);
   assert.match(watcher, /coordinateOpportunityTrigger/);
   assert.match(watcher, /fresh_low_competition_candidates/);
+  assert.match(watcher, /MoltJobs public opportunity summary/);
+  assert.match(watcher, /BOUNTY_MOLTJOBS_OWNER_POSTER_IDS/);
   assert.match(watcher, /external_actions_enabled: false/);
   assert.match(path, /PathChanged=%h\/\.local\/state\/bountyverdict\/opportunity-trigger\.json/);
   assert.match(path, /Unit=bountyverdict-opportunity-agent\.service/);

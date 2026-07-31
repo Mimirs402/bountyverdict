@@ -12,6 +12,7 @@ import {
 } from "../src/opportunity-agent-workflow.ts";
 
 const candidate: OpportunityCandidate = {
+  market: "taskmarket",
   task_id: `0x${"a".repeat(64)}`,
   title: "Implement a bounded parser.",
   mode: "bounty",
@@ -29,6 +30,17 @@ const candidate: OpportunityCandidate = {
     "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
 };
 
+const moltCandidate: OpportunityCandidate = {
+  ...candidate,
+  market: "moltjobs",
+  task_id: "11111111-1111-4111-8111-111111111111",
+  mode: "competitive_job",
+  gross_reward_usdc: "6",
+  net_reward_usdc: "5.7",
+  submission_count: 2,
+  requester: "22222222-2222-4222-8222-222222222222",
+};
+
 test("opportunity event loop emits a deterministic guarded trigger only once per task", () => {
   const first = buildOpportunityTrigger([candidate], undefined, "2026-07-21T12:00:00.000Z");
   assert.ok(first.trigger);
@@ -37,7 +49,7 @@ test("opportunity event loop emits a deterministic guarded trigger only once per
   assert.equal(first.trigger.guardrails.external_actions_enabled, false);
   assert.equal(first.trigger.guardrails.payments_enabled, false);
   assert.deepEqual(first.remembered_opportunity_fingerprints, [
-    `${candidate.task_id}:${candidate.escrow_tx_hash}`,
+    `taskmarket:${candidate.task_id}:${candidate.escrow_tx_hash}`,
   ]);
 
   const replay = buildOpportunityTrigger(
@@ -62,7 +74,7 @@ test("opportunity event loop emits a deterministic guarded trigger only once per
   );
   assert.equal(legacyMigration.trigger, null);
   assert.deepEqual(legacyMigration.remembered_opportunity_fingerprints, [
-    `${candidate.task_id}:${candidate.escrow_tx_hash}`,
+    `taskmarket:${candidate.task_id}:${candidate.escrow_tx_hash}`,
   ]);
 });
 
@@ -181,7 +193,7 @@ test("structured assessment must cover every candidate and derive a consistent a
         evidence_urls: ["https://github.com/acme/widget/issues/4"],
       }],
     }, trigger),
-    /lacks canonical Taskmarket evidence/,
+    /lacks canonical marketplace evidence/,
   );
   const prompt = buildOpportunityPreparationPrompt(
     trigger,
@@ -216,4 +228,41 @@ test("structured preparation result binds trigger and task identities", () => {
     () => parseOpportunityPreparationResult({ ...result, artifact_paths: [] }, trigger, candidate.task_id),
     /no local artifacts/,
   );
+});
+
+test("MoltJobs candidates require both public detail and public escrow evidence without enabling a bid", () => {
+  const { trigger } = buildOpportunityTrigger([moltCandidate], [], "2026-07-21T12:00:00.000Z");
+  assert.ok(trigger);
+  assert.deepEqual(trigger.candidates, [moltCandidate]);
+  assert.deepEqual(trigger.guardrails, {
+    external_actions_enabled: false,
+    payments_enabled: false,
+    legal_acceptance_enabled: false,
+    personal_identity_use_enabled: false,
+    purpose: "agent_fit_review_and_local_solution_only",
+  });
+  assert.deepEqual(trigger.candidates.map(({ market }) => market), ["moltjobs"]);
+  const detailUrl = `https://api.moltjobs.io/v1/jobs/${moltCandidate.task_id}/public`;
+  const fundingUrl = `https://api.moltjobs.io/v1/public/jobs/${moltCandidate.task_id}`;
+  const chainUrl = `https://basescan.org/tx/${moltCandidate.escrow_tx_hash}`;
+  const assessment = parseOpportunityAssessment({
+    schema_version: 1,
+    trigger_id: trigger.trigger_id,
+    decision: "READY_FOR_LOCAL_PREPARATION",
+    candidates: [{
+      task_id: moltCandidate.task_id,
+      decision: "READY_FOR_LOCAL_PREPARATION",
+      reason: "Both canonical public records agree.",
+      evidence_urls: [detailUrl, fundingUrl, chainUrl],
+      capability_requirements: [],
+    }],
+    product_learning: [],
+  }, trigger);
+  const prompt = buildOpportunityAgentPrompt(trigger);
+  assert.match(prompt, /api\.moltjobs\.io/);
+  assert.match(prompt, /Never claim, pitch, bid, submit/);
+  assert.throws(() => parseOpportunityAssessment({
+    ...assessment,
+    candidates: [{ ...assessment.candidates[0], evidence_urls: [detailUrl] }],
+  }, trigger), /lacks canonical marketplace evidence/);
 });

@@ -80,7 +80,14 @@ test("single canary validates and compacts the real handler contract", async () 
         blockers: [],
         capability_requirements: [],
       },
-      coverage: { comments_scanned: 3, timeline_events_scanned: 4, linked_pull_requests_found: 1, policy_documents_scanned: 2, github_rate_limit_remaining: 4990 },
+      coverage: {
+        comments_scanned: 3,
+        timeline_events_scanned: 4,
+        linked_pull_requests_found: 1,
+        policy_documents_scanned: 2,
+        policy_issues_truncated: false,
+        github_rate_limit_remaining: 4990,
+      },
       checked_at: now.toISOString(), limitations: [],
     }),
   });

@@ -60,7 +60,8 @@ const REWARD_RESTORATION_PATTERNS = [
 const AI_POLICY_BLOCK_PATTERNS = [
   /(?:we\s+)?(?:do not|don['’]?t|must not|may not)\s+(?:accept|allow|use|submit).{0,80}(?:ai|llm|chatgpt|generative)/i,
   /(?:ai|llm|chatgpt|generative ai).{0,80}(?:contributions?|pull requests?|patches?|code).{0,60}(?:not accepted|not allowed|prohibited|forbidden|will be (?:closed|rejected))/i,
-  /(?:contributions?|pull requests?|patches?|code).{0,80}(?:generated|written|assisted) by (?:ai|an? llm|chatgpt).{0,60}(?:not accepted|not allowed|prohibited|forbidden|will be (?:closed|rejected))/i
+  /(?:contributions?|pull requests?|patches?|code).{0,80}(?:generated|written|assisted) by (?:ai|an? llm|chatgpt).{0,60}(?:not accepted|not allowed|prohibited|forbidden|will be (?:closed|rejected))/i,
+  /(?:ai|llm|chatgpt|generative ai).{0,60}(?:slop|agent|generated).{0,80}(?:pull requests?|prs?|contributions?).{0,100}(?:unwanted|unwelcome|spam|not accepted|will be (?:closed|rejected))/i
 ];
 
 const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
@@ -104,13 +105,30 @@ const POLICY_REWARD_DISAVOWAL_PATTERNS = [
   /(?:bount(?:y|ies)|rewards?).{0,100}(?:symbolic|not paid|unpaid|academic study)/i,
   /(?:not|never)\s+(?:paid work|a paid bounty|a payable bounty)/i,
   /(?:paid bounty work|paid contribution work).{0,60}(?:not the right|not intended|not available)/i,
+  /(?:no money will be paid|will not pay|won['’]?t pay)[\s\S]{0,180}(?:not real|fake|experiment)/i,
+  /(?:not real|fake|experiment)[\s\S]{0,180}(?:no money will be paid|will not pay|won['’]?t pay)/i,
 ];
+
+function policyDisavowsPaidBounties(value) {
+  return String(value ?? "")
+    .split(/\r?\n+|(?<=[.!?])\s+/u)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+    .some((clause) =>
+      /\b(?:bount(?:y|ies)|rewards?|payments?|all|any|anyone|everyone|these|those|repository[ -]wide|listed here)\b/i.test(clause) &&
+      POLICY_REWARD_DISAVOWAL_PATTERNS.some((pattern) => pattern.test(clause))
+    );
+}
 
 function policyRequestsSensitiveAgentContext(value) {
   const text = String(value ?? "");
-  return /(?:init_context|initialization (?:text|context)|system prompt)/i.test(text) &&
+  const requestsHiddenContext = /(?:init_context|initialization (?:text|context)|system prompt)/i.test(text) &&
     /(?:tool_access|session_config|tool access|session configuration)/i.test(text) &&
     /(?:do not truncate|exact content|full initialization|populate.{0,40}real values)/i.test(text);
+  const requestsPrivateReasoning =
+    /\b(?:provide|publish|post|paste|include|reveal|disclose|expose|submit|share|show|elucidat\w*)\b/i.test(text) &&
+    /\b(?:full|entire|complete|verbatim|unredacted)\b.{0,60}\b(?:thought process|reasoning|chain[ -]of[ -]thought)\b/i.test(text);
+  return requestsHiddenContext || requestsPrivateReasoning;
 }
 
 const SENSITIVE_DISCLOSURE_ACTION = /\b(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)\b/i;
@@ -1204,8 +1222,18 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     AI_POLICY_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
   );
   const policyRewardDisavowals = policyDocuments.filter((document) =>
-    POLICY_REWARD_DISAVOWAL_PATTERNS.some((pattern) => pattern.test(document.body ?? ""))
+    policyDisavowsPaidBounties(document.body)
   );
+  if (policyRewardDisavowals.length &&
+      !["TRUSTED_PLATFORM_APP", "TRUSTED_PLATFORM_API"].includes(reward.verification) &&
+      !["NOT_FOUND", "WITHDRAWN", "PAID_OR_AWARDED"].includes(reward.state)) {
+    reward.state = "UNVERIFIED";
+    reward.verification = "UNVERIFIED";
+    reward.platform = null;
+    reward.amount = null;
+    reward.currency = null;
+    reward.evidenceUrl = policyRewardDisavowals[0].html_url ?? issue.html_url;
+  }
   const sensitivePolicyRequests = policyDocuments.filter((document) =>
     policyRequestsSensitiveAgentContext(document.body)
   );
@@ -1586,7 +1614,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Repository policy requests sensitive agent context",
       -100,
-      "An official contribution document requests full initialization context together with tool-access or session-configuration details. Do not disclose private agent context.",
+      "An official repository policy requests private agent context, hidden reasoning, or session-configuration details. Do not disclose private agent context.",
       document.html_url,
       true,
     ));
@@ -1634,11 +1662,12 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal("Thin specification", -10, "The issue body is too short to provide strong acceptance criteria.", issue.html_url));
   }
 
-  if (coverage.commentsTruncated || coverage.timelineTruncated) {
+  if (coverage.commentsTruncated || coverage.timelineTruncated || coverage.policyTruncated) {
     score -= 5;
     const truncated = [
       coverage.commentsTruncated ? "comments" : null,
       coverage.timelineTruncated ? "timeline" : null,
+      coverage.policyTruncated ? "repository bounty policies" : null,
     ].filter(Boolean).join(" and ");
     signals.push(signal(
       "Evidence coverage is truncated",
@@ -1650,7 +1679,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
 
   score = Math.max(0, Math.min(100, score));
   const hasHardStop = signals.some((item) => item.hardStop);
-  const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated;
+  const incompleteCoverage = coverage.commentsTruncated || coverage.timelineTruncated || coverage.policyTruncated;
   const verdict = hasHardStop || score < 45
     ? "AVOID"
     : claimantInterest.length ||

@@ -13,9 +13,10 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     mcpdrift: "$0.02",
   });
   assert.match(spec.info.title, /Agent Decision APIs/);
-  assert.equal(spec.info.version, "1.1.20");
+  assert.equal(spec.info.version, "1.1.21");
   assert.match(spec.info.description, /Seven bounded/);
   assert.match(spec.info["x-guidance"], /service_reuse/);
+  assert.match(spec.info["x-catalog-scope"], /exactly seven paid POST/);
   assert.equal(spec.tags.length, 7);
   assert.equal(new Set(spec.tags.map((tag) => tag.name)).size, 7);
   const operation = spec.paths["/api/bounty-preflight"].post;
@@ -30,16 +31,17 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     operation.requestBody.content["application/json"].schema.properties.issue_url.example,
     "https://github.com/typeorm/typeorm/issues/3357",
   );
-  const agenticWalletOperation = spec.paths["/api/bounty-preflight"].get;
-  assert.equal(agenticWalletOperation.operationId, "checkBountyVerdictAgenticWallet");
-  assert.equal(agenticWalletOperation["x-x402"].price, "$0.05");
-  assert.equal(agenticWalletOperation["x-x402"].network, "eip155:8453");
-  assert.equal(agenticWalletOperation.parameters[0].name, "issue_url");
-  assert.equal(agenticWalletOperation.parameters[0].required, true);
-  assert.match(agenticWalletOperation.description, /Agentic Wallet buyers/);
-  assert.equal(spec.paths["/api/verdict"].get.deprecated, true);
-  assert.equal(spec.paths["/api/verdict"].get.operationId, "checkBountyVerdictLegacyGet");
-  assert.ok(spec.paths["/api/verdict"].get.parameters.some((parameter) => parameter.name === "issue_url"));
+  const expectedPaths = [
+    "/api/bounty-preflight",
+    "/api/portfolio",
+    "/api/repository-agent-instructions-audit",
+    "/api/skill",
+    "/api/github-actions-run-diagnosis",
+    "/api/github-actions-flake-retry-gate",
+    "/api/mcp-drift",
+  ] as const;
+  assert.deepEqual(Object.keys(spec.paths), expectedPaths);
+  for (const path of expectedPaths) assert.deepEqual(Object.keys(spec.paths[path]), ["post"]);
   const paidOperations = [
     spec.paths["/api/bounty-preflight"].post,
     spec.paths["/api/portfolio"].post,
@@ -81,7 +83,6 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     harness.requestBody.content["application/json"].schema.properties.repo_url.example,
     "https://github.com/openai/codex",
   );
-  assert.equal(spec.paths["/api/harness"].get.deprecated, true);
   const skill = spec.paths["/api/skill"].post;
   assert.equal(skill["x-x402"].price, "$0.06");
   assert.match(skill.description, /^Is this agent skill safe to install\?/i);
@@ -94,17 +95,6 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     repo_url: "https://github.com/coinbase/agentic-wallet-skills",
     skill_path: "skills/agentic-wallet",
   });
-  assert.equal(spec.paths["/api/skill"].get.deprecated, true);
-  assert.equal(spec.paths["/api/skill"].get.operationId, "checkSkillVerdictLegacy");
-  assert.deepEqual(spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.name), ["repo_url", "skill_path"]);
-  assert.deepEqual(
-    spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.schema.example),
-    ["https://github.com/coinbase/agentic-wallet-skills", "skills/agentic-wallet"],
-  );
-  assert.deepEqual(
-    spec.paths["/api/skill"].get.parameters.map((parameter) => parameter.schema.default),
-    ["https://github.com/coinbase/agentic-wallet-skills", "skills/agentic-wallet"],
-  );
   const run = spec.paths["/api/github-actions-run-diagnosis"].post;
   assert.equal(run["x-x402"].price, "$0.04");
   assert.deepEqual(run.requestBody.content["application/json"].schema.required, ["run_url"]);
@@ -112,7 +102,6 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     run.requestBody.content["application/json"].schema.properties.run_url.example,
     "https://github.com/openai/codex/actions/runs/29728148711",
   );
-  assert.equal(spec.paths["/api/run"].get.deprecated, true);
   const flake = spec.paths["/api/github-actions-flake-retry-gate"].post;
   assert.equal(flake["x-x402"].price, "$0.07");
   assert.deepEqual(Object.keys(flake.requestBody.content["application/json"].schema.properties), ["run_url", "attempt"]);
@@ -121,7 +110,6 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     "https://github.com/actions/runner/actions/runs/29423388605",
   );
   assert.equal(flake.responses["429"].description.includes("not settled"), true);
-  assert.equal(spec.paths["/api/flake"].get.deprecated, true);
   assert.equal(spec.paths["/api/mcp-drift"].post["x-x402"].price, "$0.02");
   assert.match(spec.paths["/api/mcp-drift"].post.summary, /MCP schema drift/i);
   assert.match(spec.paths["/api/mcp-drift"].post.description, /MCP tools\/list compatibility/i);

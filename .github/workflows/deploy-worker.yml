@@ -565,21 +565,28 @@ jobs:
               let body = ""; process.stdin.on("data", (chunk) => body += chunk); process.stdin.on("end", () => {
                 const spec = JSON.parse(body);
                 if (spec.info?.version !== process.env.WORKER_RELEASE_VERSION) process.exit(1);
+                const expectedPaths = [
+                  "/api/bounty-preflight", "/api/portfolio", "/api/repository-agent-instructions-audit",
+                  "/api/skill", "/api/github-actions-run-diagnosis",
+                  "/api/github-actions-flake-retry-gate", "/api/mcp-drift",
+                ];
+                if (JSON.stringify(Object.keys(spec.paths || {})) !== JSON.stringify(expectedPaths) ||
+                  expectedPaths.some((path) => JSON.stringify(Object.keys(spec.paths[path] || {})) !== JSON.stringify(["post"]))) process.exit(1);
+                if (!/exactly seven paid POST/.test(spec.info?.["x-catalog-scope"] || "")) process.exit(1);
                 const paid = spec.paths?.["/api/github-actions-flake-retry-gate"]?.post;
-                const sample = spec.paths?.["/api/flake/sample"]?.get;
-                if (!sample || paid?.["x-x402"]?.price !== "$0.07" || paid?.["x-x402"]?.network !== "eip155:8453") process.exit(1);
+                if (paid?.["x-x402"]?.price !== "$0.07" || paid?.["x-x402"]?.network !== "eip155:8453" ||
+                  paid?.["x-free-sample"] !== `${process.env.PRODUCTION_API_URL}/api/flake/sample`) process.exit(1);
                 const input = paid?.requestBody?.content?.["application/json"]?.schema;
                 if (input?.additionalProperties !== false || JSON.stringify(Object.keys(input?.properties || {})) !== JSON.stringify(["run_url", "attempt"])) process.exit(1);
                 const mcp = spec.paths?.["/api/mcp-drift"]?.post;
-                const mcpSample = spec.paths?.["/api/mcp-drift/sample"]?.get;
-                if (!mcpSample || mcp?.["x-x402"]?.price !== "$0.02" || mcp?.["x-x402"]?.network !== "eip155:8453") process.exit(1);
+                if (mcp?.["x-x402"]?.price !== "$0.02" || mcp?.["x-x402"]?.network !== "eip155:8453" ||
+                  mcp?.["x-free-sample"] !== `${process.env.PRODUCTION_API_URL}/api/mcp-drift/sample`) process.exit(1);
                 if (mcp.requestBody?.content?.["application/json"]?.schema?.additionalProperties !== false) process.exit(1);
                 const skill = spec.paths?.["/api/skill"]?.post;
-                const legacySkill = spec.paths?.["/api/skill"]?.get;
                 const skillInput = skill?.requestBody?.content?.["application/json"]?.schema;
                 if (skill?.["x-x402"]?.price !== "$0.06" || skill?.["x-x402"]?.network !== "eip155:8453") process.exit(1);
                 if (skillInput?.additionalProperties !== false || JSON.stringify(skillInput?.required) !== JSON.stringify(["repo_url", "skill_path"])) process.exit(1);
-                if (legacySkill?.deprecated !== true || legacySkill?.operationId !== "checkSkillVerdictLegacy") process.exit(1);
+                if (skill?.["x-free-sample"] !== `${process.env.PRODUCTION_API_URL}/api/skill/sample`) process.exit(1);
               });
             '; then
               openapi_ready=true

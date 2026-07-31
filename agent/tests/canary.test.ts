@@ -67,6 +67,26 @@ test("internal canary route stays closed without its exact token", async () => {
   assert.equal(limited.headers.get("retry-after"), "60");
 });
 
+test("internal canary binds successful evidence to the immutable Worker version", async () => {
+  const token = "0123456789abcdef0123456789abcdef0123456789abcdef";
+  const workerVersionId = "12345678-1234-1234-1234-123456789abc";
+  const response = await app.request("/_internal/canary/mcpdrift", {
+    headers: { Authorization: `Bearer ${token}` },
+  }, {
+    CANARY_TOKEN: token,
+    CANARY_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    WORKER_VERSION_METADATA: {
+      id: workerVersionId,
+      tag: "",
+      timestamp: "2026-07-31T15:14:00.000Z",
+    },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json() as Record<string, unknown>;
+  assert.equal(body.ok, true);
+  assert.equal(body.worker_version_id, workerVersionId);
+});
+
 test("single canary validates and compacts the real handler contract", async () => {
   const result = await runFunctionalCanary("single", {}, {
     ...base,

@@ -602,7 +602,10 @@ jobs:
           verify_stage external-glama-bridge
           GLAMA_EXPECT_FREE_SELECTOR=YES GLAMA_EXPECT_PAID_PROOF=YES npm run glama:verify
 
-      - name: Verify real production handlers
+      - name: Activate public agent manifest
+        run: npm run manifest:activate
+
+      - name: Verify real production handlers and release identity
         env:
           CANARY_TOKEN: ${{ secrets.CANARY_TOKEN }}
         run: |
@@ -614,6 +617,13 @@ jobs:
             const state = require(process.argv[1]);
             const expected = ["single", "portfolio", "harness", "skill", "run", "flake", "mcpdrift"];
             if (state.healthy !== true || JSON.stringify(state.products_checked) !== JSON.stringify(expected)) process.exit(1);
+            if (state.release?.verified !== true || state.release?.release_version !== process.env.WORKER_RELEASE_VERSION ||
+              state.release?.mcp_server_version !== process.env.WORKER_RELEASE_VERSION ||
+              state.release?.worker_version_id !== process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE ||
+              state.release?.mcp_worker_version_id !== process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE) process.exit(1);
+            const manifest = require("../agent-manifest.json");
+            if (manifest.status !== "active" || manifest.worker_version_id !== process.env.CLOUDFLARE_WORKER_VERSION_OVERRIDE ||
+              state.release?.manifest_updated_at !== manifest.updated_at) process.exit(1);
             if (!state.checks?.some(({ product, ok }) => product === "flake" && ok === true)) process.exit(1);
             if (!state.checks?.some(({ product, ok }) => product === "mcpdrift" && ok === true)) process.exit(1);
           ' "$canary_state"
@@ -685,9 +695,6 @@ jobs:
             echo "Production did not converge to the captured Worker deployment and MCP semantic version" >&2
             exit 1
           fi
-
-      - name: Activate public agent manifest
-        run: npm run manifest:activate
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

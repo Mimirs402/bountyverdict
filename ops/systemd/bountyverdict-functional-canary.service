@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+WorkingDirectory=%h/Projects/sandbox/bountyverdict-production-runtime/agent
 Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
 Environment=PRODUCTION_API_URL=https://bountyverdict-agent-production.mimirslab.workers.dev
 Environment=CANARY_TOKEN_FILE=%h/.config/bountyverdict/canary.token

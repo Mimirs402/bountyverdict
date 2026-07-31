@@ -13,6 +13,7 @@ import {
   type SettlementTransfer,
 } from "../src/revenue.ts";
 import { LEGACY_GET_PATHS, PRODUCT_CATALOG, productForAtomicAmount, productForTransport, type ProductKey } from "../src/product-catalog.ts";
+import { validateFunctionalCanaryRelease } from "../src/functional-canary-release.ts";
 import { mcpDriftExampleInput } from "../src/mcp-drift-discovery.ts";
 import { evaluateEarnedPlacementExperiment } from "../src/acquisition.ts";
 import {
@@ -173,6 +174,7 @@ const stateFile = process.env.STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/distribution-status.json`;
 const canaryStateFile = process.env.CANARY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/functional-canary.json`;
+const manifestFile = new URL("../../agent-manifest.json", import.meta.url);
 const directoryStateFile = process.env.DIRECTORY_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/directories.json`;
 const experimentStateFile = process.env.EXPERIMENT_STATE_FILE ||
@@ -1883,15 +1885,21 @@ async function marketplaceSearchStatus(): Promise<Record<string, unknown>> {
 }
 
 async function functionalStatus(): Promise<Record<string, unknown>> {
-  const raw = await readFile(canaryStateFile, "utf8");
+  const [raw, manifestRaw] = await Promise.all([
+    readFile(canaryStateFile, "utf8"),
+    readFile(manifestFile, "utf8"),
+  ]);
   const state = JSON.parse(raw) as {
     checked_at?: unknown;
     healthy?: unknown;
     production_api?: unknown;
     products_checked?: unknown;
     checks?: unknown;
+    release?: unknown;
     mcp_contract?: unknown;
   };
+  const manifest = JSON.parse(manifestRaw) as unknown;
+  const releaseIdentity = validateFunctionalCanaryRelease(state, manifest, api);
   if (typeof state.checked_at !== "string" || !Number.isFinite(Date.parse(state.checked_at))) {
     throw new Error("Functional canary state has no valid checked_at timestamp.");
   }
@@ -1945,6 +1953,8 @@ async function functionalStatus(): Promise<Record<string, unknown>> {
     healthy: true,
     checked_at: state.checked_at,
     age_seconds: Math.round(ageMs / 1000),
+    release: state.release,
+    active_release: releaseIdentity,
     products_checked: checked,
     checks,
     mcp_contract: mcpContract,

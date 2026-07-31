@@ -7,17 +7,21 @@ const manifest = {
   product: "BountyVerdict",
   status: "awaiting_production" as const,
   production_api: null,
+  worker_version_id: null,
   updated_at: "2026-07-20T00:00:00.000Z",
 };
+const workerVersionId = "12345678-1234-1234-1234-123456789abc";
 
 test("manifest activation records a verified HTTPS production origin", () => {
   const result = activateManifest(
     manifest,
     "https://bountyverdict-agent.example.workers.dev",
+    workerVersionId,
     new Date("2026-07-20T12:00:00Z"),
   );
   assert.equal(result.status, "active");
   assert.equal(result.production_api, "https://bountyverdict-agent.example.workers.dev");
+  assert.equal(result.worker_version_id, workerVersionId);
   assert.equal(result.updated_at, "2026-07-20T12:00:00.000Z");
   const marketplaces = result.marketplaces as Record<string, any>;
   assert.equal(marketplaces.the402.provider_id, "p_d4b4ece39162409b");
@@ -34,7 +38,8 @@ test("manifest activation records a verified HTTPS production origin", () => {
 });
 
 test("manifest activation rejects non-origin and non-HTTPS URLs", () => {
-  assert.throws(() => activateManifest(manifest, "http://example.com"), /HTTPS origin/);
-  assert.throws(() => activateManifest(manifest, "https://example.com/api"), /HTTPS origin/);
-  assert.throws(() => activateManifest(manifest, "https://user:pass@example.com"), /HTTPS origin/);
+  assert.throws(() => activateManifest(manifest, "http://example.com", workerVersionId), /HTTPS origin/);
+  assert.throws(() => activateManifest(manifest, "https://example.com/api", workerVersionId), /HTTPS origin/);
+  assert.throws(() => activateManifest(manifest, "https://user:pass@example.com", workerVersionId), /HTTPS origin/);
+  assert.throws(() => activateManifest(manifest, "https://example.com", "1.1.18"), /lowercase UUID/);
 });

@@ -106,6 +106,7 @@ interface Env {
   THE402_REGISTRATION_WINDOW?: string;
   THE402_PLATFORM_ENVELOPE_AUTH_ENABLED?: string;
   NEAR_MARKET_AUTOMATION_ENABLED?: string;
+  WORKER_VERSION_METADATA?: WorkerVersionMetadata;
   CANARY_RATE_LIMITER?: RateLimit;
   FLAKE_RATE_LIMITER?: RateLimit;
   NEAR_MARKET_RATE_LIMITER?: RateLimit;
@@ -874,8 +875,16 @@ app.get("/_internal/canary/:product", async (c) => {
     c.header("Retry-After", "60");
     return c.json({ product, ok: false, error: "CANARY_RATE_LIMITED" }, 429);
   }
+  const workerVersionId = c.env.WORKER_VERSION_METADATA?.id;
+  if (!workerVersionId || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionId)) {
+    console.error("Functional canary Worker version metadata is not configured.");
+    return c.json({ error: "NOT_FOUND" }, 404);
+  }
   try {
-    return c.json(await runFunctionalCanary(product, { GITHUB_TOKEN: c.env.GITHUB_TOKEN }));
+    return c.json({
+      ...await runFunctionalCanary(product, { GITHUB_TOKEN: c.env.GITHUB_TOKEN }),
+      worker_version_id: workerVersionId,
+    });
   } catch (error) {
     console.error(`Functional canary ${product} failed:`, error);
     return c.json({

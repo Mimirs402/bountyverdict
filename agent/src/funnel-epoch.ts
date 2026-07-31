@@ -4,12 +4,15 @@ import {
   FUNNEL_CLIENT_CLASSES,
   MCP_CLIENT_FAMILIES,
   MCP_FUNNEL_STAGES,
+  MCP_PROTOCOL_ERROR_KINDS,
   MCP_VALIDATION_KINDS,
   discoveryBuyerCandidateTotals,
+  mcpBuyerCandidateProtocolErrorKinds,
   mcpBuyerCandidateTotals,
   type FunnelCounters,
   type FunnelSnapshot,
   type McpFunnelCounters,
+  type McpProtocolErrorKindCounters,
 } from "./funnel-telemetry.ts";
 
 type ProductCounters = Pick<FunnelCounters,
@@ -30,6 +33,8 @@ export type TrustedMcpBaseline = {
   by_client_class: FunnelSnapshot["mcp_by_client_class"];
   by_client_family: FunnelSnapshot["mcp_by_client_family"];
   validation_kinds: FunnelSnapshot["mcp_validation_kinds"];
+  protocol_error_kinds: McpProtocolErrorKindCounters;
+  protocol_error_kinds_by_channel: FunnelSnapshot["mcp_protocol_error_kinds_by_channel"];
 };
 
 export type TrustedFunnelBaseline = {
@@ -91,6 +96,8 @@ const TRUSTED_MCP_BASELINE_KEYS = [
   "by_client_class",
   "by_client_family",
   "validation_kinds",
+  "protocol_error_kinds",
+  "protocol_error_kinds_by_channel",
 ] as const;
 
 function emptyMcpCounters(): McpFunnelCounters {
@@ -122,6 +129,8 @@ export function captureTrustedMcpBaseline(state: FunnelSnapshot): TrustedMcpBase
     by_client_class: structuredClone(state.mcp_by_client_class),
     by_client_family: structuredClone(state.mcp_by_client_family),
     validation_kinds: structuredClone(state.mcp_validation_kinds),
+    protocol_error_kinds: mcpBuyerCandidateProtocolErrorKinds(state),
+    protocol_error_kinds_by_channel: structuredClone(state.mcp_protocol_error_kinds_by_channel),
   };
 }
 
@@ -160,6 +169,25 @@ export function trustedMcpDelta(state: FunnelSnapshot, baseline: TrustedMcpBasel
       kind,
       monotonicMcpDelta(current.validation_kinds[kind], baseline.validation_kinds[kind], `MCP validation kind ${kind}`),
     ])) as FunnelSnapshot["mcp_validation_kinds"],
+    protocol_error_kinds: Object.fromEntries(MCP_PROTOCOL_ERROR_KINDS.map((kind) => [
+      kind,
+      monotonicMcpDelta(
+        current.protocol_error_kinds[kind],
+        baseline.protocol_error_kinds[kind],
+        `Buyer-candidate MCP protocol error kind ${kind}`,
+      ),
+    ])) as McpProtocolErrorKindCounters,
+    protocol_error_kinds_by_channel: Object.fromEntries(FUNNEL_CHANNELS.map((channel) => [
+      channel,
+      Object.fromEntries(MCP_PROTOCOL_ERROR_KINDS.map((kind) => [
+        kind,
+        monotonicMcpDelta(
+          current.protocol_error_kinds_by_channel[channel][kind],
+          baseline.protocol_error_kinds_by_channel[channel][kind],
+          `MCP channel ${channel} protocol error kind ${kind}`,
+        ),
+      ])) as McpProtocolErrorKindCounters,
+    ])) as FunnelSnapshot["mcp_protocol_error_kinds_by_channel"],
   };
 }
 
@@ -216,11 +244,46 @@ function migrateFunnelChannelCounters(value: unknown): FunnelSnapshot["by_channe
   ])) as FunnelSnapshot["by_channel"];
 }
 
+function protocolErrorKindsValid(value: unknown): value is McpProtocolErrorKindCounters {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).length === MCP_PROTOCOL_ERROR_KINDS.length &&
+    MCP_PROTOCOL_ERROR_KINDS.every((kind) => Number.isSafeInteger(record[kind]) && Number(record[kind]) >= 0);
+}
+
+function migrateProtocolErrorKindsByChannel(
+  value: unknown,
+  byChannel: FunnelSnapshot["mcp_by_channel"],
+): FunnelSnapshot["mcp_protocol_error_kinds_by_channel"] | null {
+  if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) return null;
+  const record = value as Record<string, unknown> | undefined;
+  if (record && (Object.keys(record).length !== FUNNEL_CHANNELS.length ||
+    !FUNNEL_CHANNELS.every((channel) => protocolErrorKindsValid(record[channel]) &&
+      MCP_PROTOCOL_ERROR_KINDS.reduce(
+        (sum, kind) => sum + Number((record[channel] as McpProtocolErrorKindCounters)[kind]),
+        0,
+      ) === byChannel[channel].protocol_error))) return null;
+  return Object.fromEntries(FUNNEL_CHANNELS.map((channel) => [
+    channel,
+    record
+      ? structuredClone(record[channel])
+      : Object.fromEntries(MCP_PROTOCOL_ERROR_KINDS.map((kind) => [
+        kind,
+        kind === "legacy_unclassified" ? byChannel[channel].protocol_error : 0,
+      ])),
+  ])) as FunnelSnapshot["mcp_protocol_error_kinds_by_channel"];
+}
+
 function normalizeTrustedMcpBaseline(value: unknown): TrustedMcpBaseline | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const baseline = value as Partial<TrustedMcpBaseline>;
-  if (Object.keys(value).length !== TRUSTED_MCP_BASELINE_KEYS.length ||
-    !TRUSTED_MCP_BASELINE_KEYS.every((key) => key in value) ||
+  const baselineKeys = Object.keys(value);
+  const legacyKeys = TRUSTED_MCP_BASELINE_KEYS.slice(0, -2);
+  const hasCurrentKeys = baselineKeys.length === TRUSTED_MCP_BASELINE_KEYS.length &&
+    TRUSTED_MCP_BASELINE_KEYS.every((key) => key in value);
+  const hasLegacyKeys = baselineKeys.length === legacyKeys.length &&
+    legacyKeys.every((key) => key in value);
+  if ((!hasCurrentKeys && !hasLegacyKeys) ||
     !mcpCountersValid(baseline.external_totals) || !mcpCountersValid(baseline.buyer_candidate_totals) ||
     !keyedMcpCountersValid(baseline.external_by_product, MCP_PRODUCTS) ||
     !keyedMcpCountersValid(baseline.by_client_class, FUNNEL_CLIENT_CLASSES) ||
@@ -228,6 +291,23 @@ function normalizeTrustedMcpBaseline(value: unknown): TrustedMcpBaseline | null 
     !baseline.validation_kinds || typeof baseline.validation_kinds !== "object" || Array.isArray(baseline.validation_kinds)) return null;
   const byChannel = migrateMcpChannelCounters(baseline.by_channel);
   if (!byChannel) return null;
+  const protocolErrorKindsByChannel = migrateProtocolErrorKindsByChannel(
+    baseline.protocol_error_kinds_by_channel,
+    byChannel,
+  );
+  if (!protocolErrorKindsByChannel) return null;
+  const protocolErrorKinds = baseline.protocol_error_kinds === undefined
+    ? mcpBuyerCandidateProtocolErrorKinds({
+      mcp_protocol_error_kinds_by_channel: protocolErrorKindsByChannel,
+    })
+    : baseline.protocol_error_kinds;
+  if (!protocolErrorKindsValid(protocolErrorKinds) ||
+    MCP_PROTOCOL_ERROR_KINDS.reduce((sum, kind) => sum + protocolErrorKinds[kind], 0) !==
+      baseline.buyer_candidate_totals.protocol_error) return null;
+  const derivedBuyerKinds = mcpBuyerCandidateProtocolErrorKinds({
+    mcp_protocol_error_kinds_by_channel: protocolErrorKindsByChannel,
+  });
+  if (MCP_PROTOCOL_ERROR_KINDS.some((kind) => derivedBuyerKinds[kind] !== protocolErrorKinds[kind])) return null;
   const validationKinds = baseline.validation_kinds as Record<string, unknown>;
   if (Object.keys(validationKinds).length !== MCP_VALIDATION_KINDS.length ||
     !MCP_VALIDATION_KINDS.every((kind) => Number.isSafeInteger(validationKinds[kind]) && Number(validationKinds[kind]) >= 0)) return null;
@@ -248,6 +328,8 @@ function normalizeTrustedMcpBaseline(value: unknown): TrustedMcpBaseline | null 
       family,
       normalizeMcpCounters(baseline.by_client_family![family]),
     ])) as TrustedMcpBaseline["by_client_family"],
+    protocol_error_kinds: structuredClone(protocolErrorKinds),
+    protocol_error_kinds_by_channel: protocolErrorKindsByChannel,
   } as TrustedMcpBaseline;
 }
 

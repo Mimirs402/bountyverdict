@@ -12,7 +12,9 @@ import {
   isFunnelSnapshot,
   isBuyerCandidateDiscoveryCohort,
   loadFunnelSnapshot,
+  mcpBuyerCandidateProtocolErrorKinds,
   mcpBuyerCandidateTotals,
+  MCP_PROTOCOL_ERROR_KINDS,
   MCP_VALIDATION_KINDS,
   recordDiscoveryObservation,
   recordFunnelObservation,
@@ -225,12 +227,13 @@ test("records a zero-argument selector catalog hit without inventing product int
   const value = event("/mcp", 200, { "user-agent": "Codex/99" }, "POST");
   Object.assign(value, { logs: [{ message: [JSON.stringify({
     type: "bountyverdict_mcp_funnel",
-    schema_version: 3,
+    schema_version: 4,
     stage: "selection_preview",
     product: null,
     source: "external",
     client_family: "not_applicable",
     validation_kind: "not_applicable",
+    protocol_error_kind: "not_applicable",
   })] }] });
 
   const observations = classifyMcpTailEvents(value);
@@ -280,8 +283,57 @@ test("records protocol negotiation failures without retaining the requested vers
   const snapshot = recordMcpObservation(createFunnelSnapshot("2026-07-20T19:00:00.000Z"), observations[0]);
   assert.equal(snapshot.mcp_totals.protocol_error, 1);
   assert.equal(snapshot.mcp_by_client_class.agent_runtime.protocol_error, 1);
+  assert.equal(snapshot.mcp_protocol_error_kinds.legacy_unclassified, 1);
+  assert.equal(snapshot.mcp_protocol_error_kinds_by_channel.direct_or_hidden.legacy_unclassified, 1);
+  assert.equal(mcpBuyerCandidateProtocolErrorKinds(snapshot).legacy_unclassified, 1);
   assert.doesNotMatch(JSON.stringify(snapshot), /secret-version|Codex\/private/);
   assert.equal(isFunnelSnapshot(snapshot), true);
+});
+
+test("retains only an allowlisted MCP protocol-error kind", () => {
+  const value = event("/mcp", 400, { "user-agent": "Codex/private" }, "POST");
+  Object.assign(value, { logs: [{ message: [JSON.stringify({
+    type: "bountyverdict_mcp_funnel",
+    schema_version: 4,
+    stage: "protocol_error",
+    product: null,
+    source: "external",
+    client_family: "not_applicable",
+    validation_kind: "not_applicable",
+    protocol_error_kind: "unsupported_protocol",
+  })] }] });
+  const observations = classifyMcpTailEvents(value);
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].protocol_error_kind, "unsupported_protocol");
+  const snapshot = recordMcpObservation(createFunnelSnapshot("2026-07-20T19:00:00.000Z"), observations[0]);
+  assert.equal(snapshot.mcp_protocol_error_kinds.unsupported_protocol, 1);
+  assert.equal(snapshot.mcp_protocol_error_kinds.legacy_unclassified, 0);
+  assert.deepEqual(Object.keys(snapshot.mcp_protocol_error_kinds).sort(), [...MCP_PROTOCOL_ERROR_KINDS].sort());
+  assert.equal(isFunnelSnapshot(snapshot), true);
+});
+
+test("migrates pre-taxonomy protocol errors per channel without guessing a reason", () => {
+  const snapshot = createFunnelSnapshot("2026-07-20T19:00:00.000Z") as any;
+  recordMcpObservation(snapshot, {
+    observed_at: "2026-07-20T19:00:01.000Z",
+    stage: "protocol_error",
+    product: null,
+    source: "automated_client",
+    client_class: "agent_runtime",
+    client_family: "not_applicable",
+    validation_kind: "not_applicable",
+    protocol_error_kind: "unsupported_protocol",
+    channel: "direct_or_hidden",
+  });
+  delete snapshot.mcp_protocol_error_kinds;
+  delete snapshot.mcp_protocol_error_kinds_by_channel;
+  const loaded = loadFunnelSnapshot(snapshot);
+  assert.ok(loaded);
+  assert.equal(loaded.mcp_protocol_error_kinds.legacy_unclassified, 1);
+  assert.equal(loaded.mcp_protocol_error_kinds.unsupported_protocol, 0);
+  assert.equal(loaded.mcp_protocol_error_kinds_by_channel.direct_or_hidden.legacy_unclassified, 1);
+  assert.equal(loaded.mcp_protocol_error_kinds_by_channel.github.legacy_unclassified, 0);
+  assert.equal(isFunnelSnapshot(loaded), true);
 });
 
 test("rejects malformed, forged, and identity-inconsistent MCP log events", () => {
@@ -297,6 +349,9 @@ test("rejects malformed, forged, and identity-inconsistent MCP log events", () =
     { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 3, stage: "capacity_rejected", product: "flake", source: "owner_automation", client_family: "not_applicable", validation_kind: "invalid_run_or_attempt" })] },
     { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 3, stage: "capacity_rejected", product: "single", source: "owner_automation", client_family: "not_applicable", validation_kind: "not_applicable" })] },
     { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 1, stage: "capacity_rejected", product: "flake", source: "owner_automation" })] },
+    { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 4, stage: "protocol_error", product: null, source: "owner_automation", client_family: "not_applicable", validation_kind: "not_applicable", protocol_error_kind: "not_applicable" })] },
+    { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 4, stage: "tools_list", product: null, source: "owner_automation", client_family: "not_applicable", validation_kind: "not_applicable", protocol_error_kind: "unsupported_protocol" })] },
+    { message: [JSON.stringify({ type: "bountyverdict_mcp_funnel", schema_version: 4, stage: "protocol_error", product: null, source: "owner_automation", client_family: "not_applicable", validation_kind: "not_applicable", protocol_error_kind: "unsupported_protocol", raw: "forbidden" })] },
   ] });
   assert.deepEqual(classifyMcpTailEvents(value), []);
 });

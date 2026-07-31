@@ -527,12 +527,13 @@ test("unknown-tool recovery records one privacy-safe event without echoing the r
   assert.equal(events.length, 1);
   assert.deepEqual(events[0], {
     type: "bountyverdict_mcp_funnel",
-    schema_version: 3,
+    schema_version: 4,
     stage: "tool_not_found",
     product: null,
     source: "owner_automation",
     client_family: "not_applicable",
     validation_kind: "not_applicable",
+    protocol_error_kind: "not_applicable",
   });
   assert.doesNotMatch(JSON.stringify(events), /private_invented_name|discard-me/);
 });
@@ -921,6 +922,46 @@ test("MCP accepts every SDK-supported negotiated protocol and rejects an unknown
   assert.match((await wrongProtocol.json() as any).error.message, /Unsupported protocol version/);
   const put = await app.request(`${origin}/mcp`, { method: "PUT", headers, body: "{}" }, env);
   assert.equal(put.status, 405);
+});
+
+test("MCP protocol failures emit only bounded actionable reason categories", async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    const nextProtocol = await rpc(35, "tools/list", {}, {
+      ...headers,
+      "MCP-Protocol-Version": "2026-07-28",
+    });
+    assert.equal(nextProtocol.status, 400);
+    const unknownProtocol = await rpc(36, "tools/list", {}, {
+      ...headers,
+      "MCP-Protocol-Version": "2099-01-01",
+    });
+    assert.equal(unknownProtocol.status, 400);
+    await app.request(`${origin}/mcp`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 37,
+        method: "tools/call",
+        params: { name: "invented_tool", arguments: [] },
+      }),
+    }, env);
+  } finally {
+    console.log = originalLog;
+  }
+  const events = logs.flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  }).filter((event) => event.type === "bountyverdict_mcp_funnel" && event.stage === "protocol_error");
+  assert.deepEqual(events.map(({ protocol_error_kind }) => protocol_error_kind), [
+    "unsupported_protocol",
+    "unsupported_protocol",
+    "malformed_tool_call",
+  ]);
+  assert.equal(events.every((event) => event.schema_version === 4), true);
+  assert.doesNotMatch(JSON.stringify(events), /2099-01-01|invented_tool/);
 });
 
 test("stateless MCP declines standalone GET and DELETE streams", async () => {

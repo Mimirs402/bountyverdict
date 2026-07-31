@@ -204,6 +204,67 @@ test("captures exact bounded MCP epoch dimensions and computes monotonic deltas"
   assert.throws(() => trustedMcpDelta(state, futureBaseline), /internally inconsistent/);
 });
 
+test("trusted protocol-error reasons preserve buyer-channel exclusions and migrate legacy baselines", () => {
+  const state = createFunnelSnapshot("2026-07-21T17:00:00Z");
+  const observations = [
+    ["owner_automation", "owner_automation", "owner_automation", "unsupported_protocol"],
+    ["known_directory", "registry_crawler", "registry_or_directory", "unsupported_protocol"],
+    ["automated_client", "agent_runtime", "smithery", "malformed_tool_call"],
+    ["automated_client", "agent_runtime", "direct_or_hidden", "free_selector_schema_rejected"],
+  ] as const;
+  for (const [source, client_class, channel, protocol_error_kind] of observations) {
+    recordMcpObservation(state, {
+      observed_at: "2026-07-21T17:00:01Z",
+      stage: "protocol_error",
+      product: null,
+      source,
+      client_class,
+      client_family: "not_applicable",
+      validation_kind: "not_applicable",
+      protocol_error_kind,
+      channel,
+    });
+  }
+  const baseline = captureTrustedMcpBaseline(state);
+  assert.equal(baseline.external_totals.protocol_error, 3);
+  assert.equal(baseline.buyer_candidate_totals.protocol_error, 1);
+  assert.equal(baseline.protocol_error_kinds.free_selector_schema_rejected, 1);
+  assert.equal(baseline.protocol_error_kinds.unsupported_protocol, 0);
+  assert.equal(baseline.protocol_error_kinds_by_channel.owner_automation.unsupported_protocol, 1);
+  assert.equal(baseline.protocol_error_kinds_by_channel.registry_or_directory.unsupported_protocol, 1);
+  assert.equal(baseline.protocol_error_kinds_by_channel.smithery.malformed_tool_call, 1);
+
+  const full = captureTrustedFunnelBaseline(
+    state,
+    "2026-07-21T17:00:02Z",
+    "A clean legacy migration boundary with bounded MCP taxonomy.",
+    70,
+  ) as any;
+  delete full.mcp.protocol_error_kinds;
+  delete full.mcp.protocol_error_kinds_by_channel;
+  const migrated = trustedFunnelBaseline(full);
+  assert.ok(migrated?.mcp);
+  assert.equal(migrated.mcp.protocol_error_kinds.legacy_unclassified, 1);
+  assert.equal(migrated.mcp.protocol_error_kinds_by_channel.direct_or_hidden.legacy_unclassified, 1);
+  assert.equal(migrated.mcp.protocol_error_kinds_by_channel.owner_automation.legacy_unclassified, 1);
+
+  recordMcpObservation(state, {
+    observed_at: "2026-07-21T17:00:03Z",
+    stage: "protocol_error",
+    product: null,
+    source: "automated_client",
+    client_class: "agent_runtime",
+    client_family: "not_applicable",
+    validation_kind: "not_applicable",
+    protocol_error_kind: "unsupported_protocol",
+    channel: "direct_or_hidden",
+  });
+  const delta = trustedMcpDelta(state, baseline);
+  assert.equal(delta.protocol_error_kinds.unsupported_protocol, 1);
+  assert.equal(delta.protocol_error_kinds_by_channel.direct_or_hidden.unsupported_protocol, 1);
+  assert.equal(delta.protocol_error_kinds_by_channel.owner_automation.unsupported_protocol, 0);
+});
+
 test("epoch rotation requires a live collector heartbeat", () => {
   const state = createFunnelSnapshot("2026-07-21T17:00:00Z");
   assert.doesNotThrow(() => assertFreshFunnelCollector(state, "2026-07-21T17:00:45Z"));

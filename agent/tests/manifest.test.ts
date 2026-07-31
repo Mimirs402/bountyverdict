@@ -41,5 +41,5 @@ test("manifest activation rejects non-origin and non-HTTPS URLs", () => {
   assert.throws(() => activateManifest(manifest, "http://example.com", workerVersionId), /HTTPS origin/);
   assert.throws(() => activateManifest(manifest, "https://example.com/api", workerVersionId), /HTTPS origin/);
   assert.throws(() => activateManifest(manifest, "https://user:pass@example.com", workerVersionId), /HTTPS origin/);
-  assert.throws(() => activateManifest(manifest, "https://example.com", "1.1.18"), /lowercase UUID/);
+  assert.throws(() => activateManifest(manifest, "https://example.com", "1.1.19"), /lowercase UUID/);
 });

@@ -11,7 +11,7 @@ import {
 export const DAILY_REVIEW_SCORECARD_MAX_BYTES = 10_240;
 export const DAILY_REVIEW_SCORECARD_SCHEMA_VERSION = 2 as const;
 const opportunityIdPattern =
-  /^(?:0x[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
+  /^(?:0x[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}|[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+#[1-9][0-9]{0,9})$/i;
 
 export type DailyReviewState = {
   distribution?: unknown;
@@ -19,6 +19,7 @@ export type DailyReviewState = {
   functional?: unknown;
   demand?: unknown;
   githubDigest?: unknown;
+  algoraScout?: unknown;
   acquisitionExperiment?: unknown;
   taskmarket?: unknown;
   payan?: unknown;
@@ -72,6 +73,20 @@ export type DailyReviewScorecard = {
     taskmarket: string | null;
     payan_records: number | null;
     clawlancer: string | null;
+    algora: {
+      checked_at: string;
+      evaluated_count: number;
+      admitted_candidate_count: number;
+      emitted_new_trigger: boolean;
+      evaluations: Array<{
+        issue_url: string;
+        verdict: string | null;
+        score: number | null;
+        reward_state: string | null;
+        reward_amount: number | null;
+        hard_stops: string[];
+      }>;
+    } | null;
     opportunity: {
       completed_count: number;
       latest_trigger_id: string;
@@ -300,6 +315,45 @@ function compactOpportunityOutcome(
   };
 }
 
+function compactAlgoraScout(value: unknown): DailyReviewScorecard["autonomous_work"]["algora"] {
+  if (value === undefined) return null;
+  const scout = object(value);
+  const evaluations = Array.isArray(scout.evaluations) ? scout.evaluations : [];
+  if (scout.schema_version !== 1 || scout.account !== "Mimirs402" || scout.read_only !== true ||
+    scout.external_actions_enabled !== false || typeof scout.checked_at !== "string" ||
+    !Number.isFinite(Date.parse(scout.checked_at)) ||
+    !Number.isSafeInteger(scout.evaluated_count) || scout.evaluated_count < 0 || scout.evaluated_count > 15 ||
+    !Number.isSafeInteger(scout.admitted_candidate_count) || scout.admitted_candidate_count < 0 ||
+    scout.admitted_candidate_count > scout.evaluated_count ||
+    typeof scout.emitted_new_trigger !== "boolean" || evaluations.length !== scout.evaluated_count) return null;
+  const compact = evaluations.slice(0, 5).map((raw) => {
+    const evaluation = object(raw);
+    const hardStops = Array.isArray(evaluation.hard_stops)
+      ? evaluation.hard_stops.filter((item): item is string => typeof item === "string" && item.length <= 200).slice(0, 5)
+      : [];
+    const issueUrl = safeString(evaluation.issue_url);
+    if (!issueUrl || !/^https:\/\/github\.com\/[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+\/issues\/[1-9][0-9]{0,9}$/.test(issueUrl)) {
+      return null;
+    }
+    return {
+      issue_url: issueUrl,
+      verdict: safeString(evaluation.verdict),
+      score: Number.isFinite(evaluation.score) ? Number(evaluation.score) : null,
+      reward_state: safeString(evaluation.reward_state),
+      reward_amount: Number.isFinite(evaluation.reward_amount) ? Number(evaluation.reward_amount) : null,
+      hard_stops: hardStops,
+    };
+  });
+  if (compact.some((item) => item === null)) return null;
+  return {
+    checked_at: new Date(scout.checked_at).toISOString(),
+    evaluated_count: scout.evaluated_count,
+    admitted_candidate_count: scout.admitted_candidate_count,
+    emitted_new_trigger: scout.emitted_new_trigger,
+    evaluations: compact as NonNullable<DailyReviewScorecard["autonomous_work"]["algora"]>["evaluations"],
+  };
+}
+
 export function buildDailyReviewScorecard(
   input: DailyReviewState,
   generatedAt = new Date().toISOString(),
@@ -366,6 +420,7 @@ export function buildDailyReviewScorecard(
   const taskmarket = object(input.taskmarket);
   const payan = object(input.payan);
   const clawlancer = object(input.clawlancer);
+  const algora = compactAlgoraScout(input.algoraScout);
   const opportunity = compactOpportunityOutcome(input.opportunityWorkflow, input.opportunityResult);
   const freshWithin = (value: unknown, maxAgeMs: number): boolean => {
     if (typeof value !== "string") return false;
@@ -396,6 +451,9 @@ export function buildDailyReviewScorecard(
   if (!mcpContractHealthy) alerts.push("unsigned_mcp_contract_canary_unhealthy_or_missing");
   if (funnelProvenance === "unavailable") alerts.push("buyer_funnel_unavailable");
   if (demandErrors !== null && demandErrors > 0) alerts.push("demand_watch_errors");
+  if (input.algoraScout !== undefined && (!algora || !freshWithin(algora.checked_at, 8 * 60 * 60 * 1_000))) {
+    alerts.push("algora_scout_stale_or_invalid");
+  }
   if (opportunity.invalid) alerts.push("opportunity_workflow_result_missing_or_invalid");
 
   const withoutFingerprint: Omit<DailyReviewScorecard, "material_fingerprint"> = {
@@ -446,6 +504,7 @@ export function buildDailyReviewScorecard(
       taskmarket: safeString(taskmarket.pitch_status || taskmarket.task_status || taskmarket.state),
       payan_records: Array.isArray(payan.records) ? payan.records.length : null,
       clawlancer: safeString(clawlancer.status),
+      algora,
       opportunity: opportunity.outcome,
     },
     github_updates: githubUpdates,

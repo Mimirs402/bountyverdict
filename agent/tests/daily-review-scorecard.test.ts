@@ -364,6 +364,64 @@ test("a new completed opportunity produces one bounded product-learning review",
   assert.equal(buildDailyReviewGate(changed, changed).action, "skip_codex");
 });
 
+test("daily review retains bounded Algora near-miss evidence and accepts GitHub opportunity IDs", () => {
+  const triggerId = "d".repeat(64);
+  const scorecard = buildDailyReviewScorecard({
+    distribution: distribution(),
+    functional: functional(),
+    funnel: snapshot(),
+    demand: { errors: [] },
+    algoraScout: {
+      schema_version: 1,
+      checked_at: "2026-07-28T11:50:00.000Z",
+      account: "Mimirs402",
+      read_only: true,
+      external_actions_enabled: false,
+      evaluated_count: 1,
+      admitted_candidate_count: 0,
+      emitted_new_trigger: false,
+      evaluations: [{
+        issue_url: "https://github.com/acme/widget/issues/7",
+        verdict: "AVOID",
+        score: 0,
+        reward_state: "LISTED",
+        reward_amount: 100,
+        hard_stops: ["Bounty platform reports active competition"],
+      }],
+    },
+    opportunityWorkflow: {
+      schema_version: 1,
+      completed: [{
+        trigger_id: triggerId,
+        completed_at: "2026-07-28T11:55:00.000Z",
+        task_ids: ["acme/widget#7"],
+        result_file: "/private/path/is-not-projected.md",
+      }],
+    },
+    opportunityResult: {
+      trigger_id: triggerId,
+      result_sha256: `sha256:${"e".repeat(64)}`,
+      result_excerpt: "NO_GO: active Algora competition appeared before preparation.",
+    },
+  }, "2026-07-28T12:00:00.000Z");
+  assert.equal(scorecard.healthy, true);
+  assert.deepEqual(scorecard.autonomous_work.algora, {
+    checked_at: "2026-07-28T11:50:00.000Z",
+    evaluated_count: 1,
+    admitted_candidate_count: 0,
+    emitted_new_trigger: false,
+    evaluations: [{
+      issue_url: "https://github.com/acme/widget/issues/7",
+      verdict: "AVOID",
+      score: 0,
+      reward_state: "LISTED",
+      reward_amount: 100,
+      hard_stops: ["Bounty platform reports active competition"],
+    }],
+  });
+  assert.deepEqual(scorecard.autonomous_work.opportunity?.task_ids, ["acme/widget#7"]);
+});
+
 test("a completion without its exact bounded result fails closed", () => {
   const scorecard = buildDailyReviewScorecard({
     distribution: distribution(),

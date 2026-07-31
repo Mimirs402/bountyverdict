@@ -42,6 +42,7 @@ import {
   OPPORTUNITY_MARKER_VERSION,
   parseOpportunityTrigger,
 } from "../src/opportunity-agent-workflow.ts";
+import { acquireExclusiveRun } from "../src/exclusive-run.ts";
 import { coordinateOpportunityTrigger } from "../src/opportunity-trigger-coordination.ts";
 
 const MOLTJOBS_API = "https://api.moltjobs.io/v1/jobs";
@@ -51,6 +52,8 @@ const stateFile = process.env.DEMAND_WATCH_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/demand-watch.json`;
 const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
   `${homedir()}/.local/state/bountyverdict/opportunity-trigger.json`;
+const opportunityProducerLockFile = process.env.BOUNTY_OPPORTUNITY_PRODUCER_LOCK_FILE ||
+  `${homedir()}/.local/state/bountyverdict/opportunity-trigger-producer.lock`;
 const dynamicTaskmarketTrackedFile = process.env.BOUNTY_OPPORTUNITY_TASKMARKET_TRACKED_FILE ||
   `${homedir()}/.local/state/bountyverdict/opportunity-taskmarket-tracked.json`;
 const timeoutMs = 20_000;
@@ -500,7 +503,6 @@ const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
   statuses.taskmarket_inventory.last_good_at === checkedAt;
 const moltJobsInventoryFresh = statuses.moltjobs.error === null &&
   statuses.moltjobs.last_good_at === checkedAt;
-const pendingTriggerId = await pendingOpportunityTriggerId();
 const eligibleOpportunityCandidates = [
   ...(taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
@@ -516,15 +518,26 @@ const eligibleOpportunityCandidates = [
   if (rewardDifference !== 0) return rewardDifference;
   return String(left.created_at).localeCompare(String(right.created_at));
 });
-const opportunityEvent = await coordinateOpportunityTrigger({
-  candidates: eligibleOpportunityCandidates,
-  rememberedOpportunityFingerprints: previousRememberedOpportunityFingerprints,
-  checkedAt,
-  pendingTriggerId,
-  writeTrigger: async (trigger) => {
-    await atomicWrite(opportunityTriggerFile, `${JSON.stringify(trigger, null, 2)}\n`);
-  },
-});
+const releaseOpportunityProducerLock = await acquireExclusiveRun(
+  opportunityProducerLockFile,
+  { staleAfterMs: 10 * 60 * 1_000 },
+);
+let pendingTriggerId: string | null = null;
+let opportunityEvent: Awaited<ReturnType<typeof coordinateOpportunityTrigger>>;
+try {
+  pendingTriggerId = await pendingOpportunityTriggerId();
+  opportunityEvent = await coordinateOpportunityTrigger({
+    candidates: eligibleOpportunityCandidates,
+    rememberedOpportunityFingerprints: previousRememberedOpportunityFingerprints,
+    checkedAt,
+    pendingTriggerId,
+    writeTrigger: async (trigger) => {
+      await atomicWrite(opportunityTriggerFile, `${JSON.stringify(trigger, null, 2)}\n`);
+    },
+  });
+} finally {
+  await releaseOpportunityProducerLock();
+}
 const state = {
   schema_version: 2,
   checked_at: checkedAt,

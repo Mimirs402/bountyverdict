@@ -2,11 +2,14 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { CANARY_PRODUCTS, isCanaryProduct, type CanaryProduct } from "../src/canary.ts";
-import { runMcpContractCanary } from "../src/mcp-functional-canary.ts";
+import { waitForPinnedWorkerVersion } from "../src/functional-canary-convergence.ts";
+import { probeMcpReleaseIdentity, runMcpContractCanary } from "../src/mcp-functional-canary.ts";
 import { activeReleaseIdentity } from "../src/functional-canary-release.ts";
 
 const DEFAULT_API = "https://bountyverdict-agent-production.mimirslab.workers.dev";
 const TIMEOUT_MS = 120_000;
+const RELEASE_CONVERGENCE_TIMEOUT_MS = 45_000;
+const RELEASE_CONVERGENCE_ATTEMPT_TIMEOUT_MS = 10_000;
 const WORKER_VERSION_ID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const configuredApi = new URL(process.env.PRODUCTION_API_URL || DEFAULT_API);
 if (configuredApi.origin !== DEFAULT_API || configuredApi.pathname !== "/" || configuredApi.search || configuredApi.hash) {
@@ -38,7 +41,34 @@ const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as unknown;
 const activeRelease = activeReleaseIdentity(manifest, api);
 const checks: Array<Record<string, unknown>> = [];
 
+async function waitForPinnedMcpRelease(workerVersionId: string) {
+  return waitForPinnedWorkerVersion(workerVersionId, () =>
+    probeMcpReleaseIdentity(api, workerVersionId, {
+      timeoutMs: RELEASE_CONVERGENCE_ATTEMPT_TIMEOUT_MS,
+    }), {
+      timeoutMs: RELEASE_CONVERGENCE_TIMEOUT_MS,
+      retryMs: 1_000,
+    });
+}
+
+const fullCanaryRequested = !requestedProduct || requestedProduct === "all";
+const pinnedReleaseProbe = !fullCanaryRequested || !workerVersionOverride
+  ? null
+  : await waitForPinnedMcpRelease(workerVersionOverride);
+const releaseConverged = pinnedReleaseProbe === null ||
+  (pinnedReleaseProbe.worker_version_id === workerVersionOverride &&
+    pinnedReleaseProbe.server_version === activeRelease.release_version);
+
 for (const product of products) {
+  if (!releaseConverged) {
+    checks.push({
+      product,
+      ok: false,
+      error: "The pinned Worker release did not converge before functional canaries.",
+      duration_ms: 0,
+    });
+    continue;
+  }
   const started = Date.now();
   try {
     const response = await fetch(`${api}/_internal/canary/${product}`, {

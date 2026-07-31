@@ -12,8 +12,8 @@ const maximumSubmissionsPerTask = 1_000;
 const maximumDescriptionBytes = 20_000;
 const freshOpportunityMaximumAgeMs = 12 * 60 * 60 * 1_000;
 const freshOpportunityMinimumRemainingMs = 2 * 60 * 60 * 1_000;
-const freshOpportunityMaximumSubmissions = 3;
-const freshOpportunityMinimumNetAtomic = 5_000_000n;
+export const TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS = 2;
+export const TASKMARKET_OPPORTUNITY_MINIMUM_NET_ATOMIC = 100_000_000n;
 const freshOpportunityLimit = 10;
 // Canonical Base deployment and settlement event documented by Taskmarket:
 // https://docs.taskmarket.dev/smart-contracts/overview
@@ -541,8 +541,8 @@ function taskmarketOpportunityPreliminary(task: TaskmarketTask, nowMs: number): 
     task.submissionVisibility === "public" &&
     task.taskVisibility === "public" &&
     !excludedOwnerAddresses.has(task.requester.toLowerCase()) &&
-    task.submissionCount <= freshOpportunityMaximumSubmissions &&
-    BigInt(task.netRewardAtomic) >= freshOpportunityMinimumNetAtomic &&
+    task.submissionCount <= TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS &&
+    BigInt(task.netRewardAtomic) >= TASKMARKET_OPPORTUNITY_MINIMUM_NET_ATOMIC &&
     createdMs <= nowMs &&
     nowMs - createdMs <= freshOpportunityMaximumAgeMs &&
     expiryMs - nowMs >= freshOpportunityMinimumRemainingMs;
@@ -716,7 +716,7 @@ export function analyzeTaskmarket(
         opportunity_score_usdc_per_current_entry: atomicToDecimal(scoreAtomic),
         requires_agent_fit_review: true,
         selection_basis:
-          "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+          "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=2 submissions; >=100 USDC net; <=12h old; >=2h remaining",
       };
     })
     .sort((left, right) => {
@@ -728,7 +728,7 @@ export function analyzeTaskmarket(
     })
     .slice(0, freshOpportunityLimit);
   const saturatedSubmissionOpenTasks = submissionOpen
-    .filter((task) => task.submissionCount > freshOpportunityMaximumSubmissions)
+    .filter((task) => task.submissionCount > TASKMARKET_OPPORTUNITY_MAXIMUM_SUBMISSIONS)
     .length;
   const expiredPitchEntryTasks = tasks.filter((task) =>
     task.mode === "pitch" &&
@@ -752,7 +752,7 @@ export function analyzeTaskmarket(
     excluded_expired_assigned_or_closed_window: tasks.length - submissionOpen.length,
     funding_rule: "fresh opportunity candidates require a successful Base receipt with the exact TaskCreated event and exact Base-USDC escrow transfer to the pinned Taskmarket Diamond; open inventory remains API-reported and neither is revenue",
     fresh_low_competition_rule:
-      "onchain_verified_escrow_plus_bounty_mode_plus_open_unassigned_submission_window_plus_non_owner_requester_plus_max_3_submissions_plus_min_5_usdc_net_plus_max_12h_age_plus_min_2h_remaining; candidate requires agent fit and canonical task review before any action",
+      "onchain_verified_escrow_plus_bounty_mode_plus_open_unassigned_submission_window_plus_non_owner_requester_plus_max_2_submissions_plus_min_100_usdc_net_plus_max_12h_age_plus_min_2h_remaining; candidate requires agent fit and canonical task review before any action",
   };
 }
 

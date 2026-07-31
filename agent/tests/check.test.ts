@@ -2243,7 +2243,7 @@ function transferredAlgoraMock(actorId: number, pageIssueUrl: string, requested:
   }) as typeof fetch;
 }
 
-test("a transferred issue recovers Algora funding and claims from a strongly bound legacy record", async () => {
+test("a transferred issue does not access Algora for a legacy record", async () => {
   const requested: string[] = [];
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
@@ -2252,17 +2252,12 @@ test("a transferred issue recovers Algora funding and claims from a strongly bou
     new Date("2026-07-20T12:00:00Z"),
   );
   assert.equal(result.issue.transferred, true);
-  assert.equal(result.reward.platform, "Algora");
-  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
-  assert.equal(result.reward.amount, 100);
-  assert.equal(result.verdict, "AVOID");
-  assert.ok(result.signals.some((signal) =>
-    signal.label === "Bounty platform reports active competition" && signal.hard_stop
-  ));
-  assert.ok(requested.includes("https://algora.io/McPizza0/bounties?status=open"));
+  assert.equal(result.reward.platform, null);
+  assert.notEqual(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.ok(!requested.includes("https://algora.io/McPizza0/bounties?status=open"));
 });
 
-test("a canonical transferred destination follows the exact legacy Algora repository reference", async () => {
+test("a canonical transferred destination does not follow a legacy Algora repository reference", async () => {
   const requested: string[] = [];
   const result = await checkGithubIssue(
     "https://github.com/newco/gadget/issues/4",
@@ -2271,9 +2266,9 @@ test("a canonical transferred destination follows the exact legacy Algora reposi
     new Date("2026-07-20T12:00:00Z"),
   );
   assert.equal(result.issue.transferred, false);
-  assert.equal(result.reward.platform, "Algora");
-  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
-  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.reward.platform, null);
+  assert.notEqual(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.ok(!requested.includes("https://algora.io/McPizza0/bounties?status=open"));
 });
 
 test("legacy Algora login or wrong issue route alone cannot authenticate a platform listing", async () => {

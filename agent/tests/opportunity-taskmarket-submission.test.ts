@@ -27,8 +27,8 @@ const task: TaskmarketTask = {
   id: `0x${"a".repeat(64)}`,
   requester: "0x1111111111111111111111111111111111111111",
   description: "Produce a verified compatibility report.",
-  rewardAtomic: "6000000",
-  netRewardAtomic: "5550000",
+  rewardAtomic: "110000000",
+  netRewardAtomic: "101750000",
   escrowTxHash: `0x${"b".repeat(64)}`,
   createdAt: "2026-07-21T11:30:00.000Z",
   expiryTime: "2026-07-21T18:00:00.000Z",
@@ -51,8 +51,8 @@ const candidate: OpportunityCandidate = {
   task_id: task.id,
   title: "Produce a verified compatibility report.",
   mode: "bounty",
-  gross_reward_usdc: "6",
-  net_reward_usdc: "5.55",
+  gross_reward_usdc: "110",
+  net_reward_usdc: "101.75",
   submission_count: 1,
   created_at: task.createdAt,
   deadline_at: task.expiryTime,
@@ -60,7 +60,7 @@ const candidate: OpportunityCandidate = {
   escrow_tx_hash: task.escrowTxHash,
   requester: task.requester,
   task_snapshot_sha256: taskmarketTaskSnapshotSha256(task),
-  opportunity_score_usdc_per_current_entry: "2.775",
+  opportunity_score_usdc_per_current_entry: "50.875",
   requires_agent_fit_review: true,
   selection_basis: "onchain verified",
 };
@@ -189,7 +189,7 @@ test("blocker-free Taskmarket preparation becomes a hash-bound eligible intent",
   });
   assert.equal(reconciled.status, "VERIFIED");
   if (reconciled.status === "VERIFIED") {
-    assert.equal(reconciled.tracked.expected_net_atomic, "5550000");
+    assert.equal(reconciled.tracked.expected_net_atomic, "101750000");
     assert.equal(verifyTaskmarketSubmissionReceipt(intent, reconciled.submission, {
       transaction_hash: reconciled.submission.submitTxHash,
       receipt: {

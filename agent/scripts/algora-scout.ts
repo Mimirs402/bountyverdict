@@ -28,6 +28,10 @@ const statePath = `${stateRoot}/algora-scout.json`;
 const triggerPath = `${stateRoot}/opportunity-trigger.json`;
 const producerLockPath = `${stateRoot}/opportunity-trigger-producer.lock`;
 
+if (process.env.ALGORA_AUTOMATION_PERMISSION !== "WRITTEN_PERMISSION_CONFIRMED") {
+  throw new Error("Algora automation is disabled unless current written platform permission has been confirmed.");
+}
+
 async function ghJson(args: string[]): Promise<unknown> {
   const { stdout } = await execFileAsync("gh", args, {
     timeout: 60_000,

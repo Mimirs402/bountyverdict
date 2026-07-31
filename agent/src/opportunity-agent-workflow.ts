@@ -20,8 +20,6 @@ const publicEvidenceHosts = new Set([
   "base.blockscout.com",
   "base-sepolia.blockscout.com",
   "api.moltjobs.io",
-  "algora.io",
-  "console.algora.io",
 ]);
 
 export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v4";

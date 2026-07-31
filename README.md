@@ -89,7 +89,7 @@ Review the public [security policy](SECURITY.md) and [privacy/data-handling disc
 
 ## Free human bounty checker
 
-Visit [BountyVerdict](https://mimirs402.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks canonical/transferred issue state, assignments, explicit soft locks, trusted Algora status, reward provenance, rewarded labels, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
+Visit [BountyVerdict](https://mimirs402.github.io/bountyverdict/) and paste a public GitHub issue URL. The browser makes read-only requests directly to GitHub's public API without an account, backend, analytics, or data storage. It checks canonical/transferred issue state, assignments, explicit soft locks, authenticated GitHub App bounty and claim comments, reward provenance, rewarded labels, competing pull requests, failed-attempt swarms, maintainer rejection, and reward-withdrawal language. It does not automatically access Algora's web service. Every important result links to public evidence; no result guarantees a reward, acceptance, merge, or payment.
 
 ## Run locally
 

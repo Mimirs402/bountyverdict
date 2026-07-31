@@ -665,8 +665,8 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
   const fresh = parseTaskmarketPage({
     tasks: [rawTask({
       description: "Implement a bounded parser for our public API.",
-      reward: "6000000",
-      netReward: "5550000",
+      reward: "110000000",
+      netReward: "101750000",
       createdAt: "2026-07-21T11:30:00.000Z",
       expiryTime: "2026-07-21T18:00:00.000Z",
       submissionCount: 1,
@@ -674,7 +674,7 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
     hasMore: false,
     nextCursor: null,
   }).tasks[0];
-  const saturated = { ...fresh, id: `0x${"2".repeat(64)}`, submissionCount: 4 };
+  const saturated = { ...fresh, id: `0x${"2".repeat(64)}`, submissionCount: 3 };
   const owner = {
     ...fresh,
     id: `0x${"3".repeat(64)}`,
@@ -688,8 +688,8 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
   const lowReward = {
     ...fresh,
     id: `0x${"5".repeat(64)}`,
-    rewardAtomic: "4000000",
-    netRewardAtomic: "3700000",
+    rewardAtomic: "108108107",
+    netRewardAtomic: "99999999",
   };
   const expiredPitch = {
     ...fresh,
@@ -719,8 +719,8 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
     task_id: taskId,
     title: "Implement a bounded parser for our public API.",
     mode: "bounty",
-    gross_reward_usdc: "6",
-    net_reward_usdc: "5.55",
+    gross_reward_usdc: "110",
+    net_reward_usdc: "101.75",
     submission_count: 1,
     created_at: "2026-07-21T11:30:00.000Z",
     deadline_at: "2026-07-21T18:00:00.000Z",
@@ -728,10 +728,10 @@ test("Taskmarket identifies only fresh escrowed low-competition bounties for age
     escrow_tx_hash: escrowTx,
     requester,
     task_snapshot_sha256: taskmarketTaskSnapshotSha256(fresh),
-    opportunity_score_usdc_per_current_entry: "2.775",
+    opportunity_score_usdc_per_current_entry: "50.875",
     requires_agent_fit_review: true,
     selection_basis:
-      "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+      "official open bounty plus successful Base receipt binding the current TaskCreated task/requester/reward/expiry/stake fields and Base-USDC escrow transfer to the pinned Taskmarket Diamond; independent current getTask, getTaskHooks, evaluatorFor, and getTaskMetadata proofs; non-owner requester; no hooks or evaluator; <=2 submissions; >=100 USDC net; <=12h old; >=2h remaining",
   }]);
   assert.equal(analyzeTaskmarket([fresh], now).fresh_low_competition_candidate_count, 0);
   assert.equal(verifyTaskmarketFundingReceipt(fresh, {

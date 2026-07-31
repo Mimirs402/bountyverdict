@@ -30,7 +30,7 @@ const candidate: OpportunityCandidate = {
   opportunity_score_usdc_per_current_entry: "2.775",
   requires_agent_fit_review: true,
   selection_basis:
-    "official escrow-backed open bounty; non-owner requester; <=3 submissions; >=5 USDC net; <=12h old; >=2h remaining",
+    "official escrow-backed open bounty; non-owner requester; <=2 submissions; >=100 USDC net; <=12h old; >=2h remaining",
 };
 
 test("opportunity workflow launches Codex once and persists a private completion receipt", async () => {

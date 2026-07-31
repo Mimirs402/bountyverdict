@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ALGORA_SCOUT_MAX_EVALUATIONS,
+  ALGORA_SCOUT_MINIMUM_REWARD_USD,
   algoraOpportunityCandidate,
   mergeAlgoraSearches,
   parseAlgoraSearch,
@@ -59,7 +60,7 @@ function verdict(overrides: Partial<AgentVerdict> = {}): AgentVerdict {
       state: "LISTED",
       verification: "TRUSTED_PLATFORM_API",
       platform: "Algora",
-      amount: 75,
+      amount: 120,
       currency: "USD",
       evidence_url: "https://algora.io/sponsor-one/bounties?status=open",
     },
@@ -98,6 +99,7 @@ test("Algora scout unions legacy and current bot searches and bounds changed wor
     items: [],
   }), /incomplete, unbounded, or malformed/);
   assert.equal(ALGORA_SCOUT_MAX_EVALUATIONS, 15);
+  assert.equal(ALGORA_SCOUT_MINIMUM_REWARD_USD, 100);
 });
 
 test("only a current trusted unclaimed Algora verdict becomes an opportunity candidate", () => {
@@ -110,7 +112,7 @@ test("only a current trusted unclaimed Algora verdict becomes an opportunity can
   assert.ok(candidate);
   assert.equal(candidate.market, "github_algora");
   assert.equal(candidate.task_id, "acme/widget#7");
-  assert.equal(candidate.reward_amount_usd, "75");
+  assert.equal(candidate.reward_amount_usd, "120");
   assert.match(candidate.listing_snapshot_sha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(parseOpportunityCandidates([candidate]), [candidate]);
   const event = buildOpportunityTrigger([candidate], [], "2026-07-31T12:00:00Z");
@@ -137,7 +139,7 @@ test("only a current trusted unclaimed Algora verdict becomes an opportunity can
       state: "LISTED",
       verification: "TRUSTED_PLATFORM_APP",
       platform: "Algora",
-      amount: 75,
+      amount: 120,
       currency: "USD",
       evidence_url: `${issue.html_url}#issuecomment-123456`,
     },

@@ -19,11 +19,13 @@ import { PRODUCT_SELECTION_PREVIEWS } from "../src/selection-preview.ts";
 
 const origin = "https://bountyverdict.example";
 const payTo = "0x1111111111111111111111111111111111111111";
+const workerVersionId = "12345678-1234-1234-1234-123456789abc";
 const env = {
   PAY_TO_ADDRESS: payTo,
   X402_NETWORK: "eip155:84532",
   X402_FACILITATOR_URL: "https://facilitator.invalid",
   FLAKE_RATE_LIMITER: { limit: async () => ({ success: true }) },
+  WORKER_VERSION_METADATA: { id: workerVersionId, tag: "", timestamp: "2026-07-31T16:15:00.000Z" },
 };
 const headers = {
   Accept: "application/json, text/event-stream",
@@ -47,11 +49,13 @@ async function rpcBody(id: number, method: string, params: Record<string, unknow
 }
 
 test("MCP initializes as a stateless 2025-11-25 server", async () => {
-  const body = await rpcBody(1, "initialize", {
+  const response = await rpc(1, "initialize", {
     protocolVersion: "2025-11-25",
     capabilities: {},
     clientInfo: { name: "test-client", version: "1.0.0" },
   });
+  assert.equal(response.headers.get("X-BountyVerdict-Worker-Version"), workerVersionId);
+  const body = await response.json() as any;
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "BountyVerdict");
   assert.equal(body.result.serverInfo.version, "1.1.19");

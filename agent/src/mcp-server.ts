@@ -48,6 +48,7 @@ type ToolResult = {
 interface McpEnvironment extends X402ServerEnvironment {
   GITHUB_TOKEN?: string;
   FLAKE_RATE_LIMITER?: RateLimit;
+  WORKER_VERSION_METADATA?: WorkerVersionMetadata;
 }
 
 interface PaymentContext {
@@ -556,6 +557,10 @@ export async function handleMcpRequest(request: Request, env: McpEnvironment): P
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store");
     headers.set("X-Content-Type-Options", "nosniff");
+    const workerVersionId = env.WORKER_VERSION_METADATA?.id;
+    if (workerVersionId && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionId)) {
+      headers.set("X-BountyVerdict-Worker-Version", workerVersionId);
+    }
     if (allowedCorsOrigin) {
       headers.set("Access-Control-Allow-Origin", allowedCorsOrigin);
       headers.append("Vary", "Origin");

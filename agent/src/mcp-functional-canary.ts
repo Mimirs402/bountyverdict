@@ -38,6 +38,12 @@ export type McpContractCanaryReport = {
   checks: McpContractCheck[];
 };
 
+export type McpReleaseProbe = {
+  server_version: string | null;
+  worker_version_id: string | null;
+  error?: string;
+};
+
 function requireCondition(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -123,6 +129,48 @@ async function readServerVersion(
     "MCP initialize returned an invalid semantic version.",
   );
   return version;
+}
+
+export async function probeMcpReleaseIdentity(
+  origin: string,
+  workerVersionOverride: string,
+  options: { fetch?: FetchLike; timeoutMs?: number } = {},
+): Promise<McpReleaseProbe> {
+  const normalizedOrigin = new URL(origin).origin;
+  requireCondition(normalizedOrigin === origin, "MCP release probe origin must be an exact origin.");
+  requireCondition(
+    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionOverride),
+    "MCP release probe Worker version override must be a lowercase UUID.",
+  );
+  const fetchImpl = options.fetch || fetch;
+  let versionObserved = false;
+  const pinnedFetch: FetchLike = async (input, init = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set(
+      "Cloudflare-Workers-Version-Overrides",
+      `bountyverdict-agent-production="${workerVersionOverride}"`,
+    );
+    const response = await fetchImpl(input, { ...init, headers });
+    requireCondition(
+      response.headers.get("X-BountyVerdict-Worker-Version") === workerVersionOverride,
+      "MCP release probe did not execute on the pinned Worker version.",
+    );
+    versionObserved = true;
+    return response;
+  };
+  try {
+    const serverVersion = await readServerVersion(origin, pinnedFetch, options.timeoutMs || 10_000);
+    return {
+      server_version: serverVersion,
+      worker_version_id: versionObserved ? workerVersionOverride : null,
+    };
+  } catch (error) {
+    return {
+      server_version: null,
+      worker_version_id: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function checkFreeSelector(
@@ -253,6 +301,7 @@ export async function runMcpContractCanary(
   requireCondition(normalizedOrigin === origin, "MCP canary origin must be an exact origin.");
   const fetchImpl = options.fetch || fetch;
   const workerVersionOverride = options.workerVersionOverride;
+  let pinnedVersionResponses = 0;
   if (workerVersionOverride) {
     requireCondition(
       /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(workerVersionOverride),
@@ -260,13 +309,19 @@ export async function runMcpContractCanary(
     );
   }
   const versionPinnedFetch: FetchLike = workerVersionOverride
-    ? (input, init = {}) => {
+    ? async (input, init = {}) => {
         const headers = new Headers(init.headers);
         headers.set(
           "Cloudflare-Workers-Version-Overrides",
           `bountyverdict-agent-production="${workerVersionOverride}"`,
         );
-        return fetchImpl(input, { ...init, headers });
+        const response = await fetchImpl(input, { ...init, headers });
+        requireCondition(
+          response.headers.get("X-BountyVerdict-Worker-Version") === workerVersionOverride,
+          "MCP request did not execute on the pinned Worker version.",
+        );
+        pinnedVersionResponses += 1;
+        return response;
       }
     : fetchImpl;
   const timeoutMs = options.timeoutMs || 30_000;
@@ -298,11 +353,14 @@ export async function runMcpContractCanary(
       });
     }
   }
+  const workerVersionId = workerVersionOverride && pinnedVersionResponses === 1 + definitions.length
+    ? workerVersionOverride
+    : null;
   return {
     healthy: serverVersion !== null && checks.length === MCP_CANARY_KINDS.length && checks.every(({ ok }) => ok),
     endpoint: `${origin}${MCP_PATH}`,
     server_version: serverVersion,
-    worker_version_id: workerVersionOverride || null,
+    worker_version_id: workerVersionId,
     ...(serverIdentityError ? { server_identity_error: serverIdentityError } : {}),
     payment_or_signing_attempted: false,
     checks,

@@ -892,6 +892,7 @@ app.get("/_internal/canary/:product", async (c) => {
       ok: false,
       error: canaryErrorCode(error),
       checked_at: new Date().toISOString(),
+      worker_version_id: workerVersionId,
     }, 503);
   }
 });

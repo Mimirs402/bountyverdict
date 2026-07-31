@@ -74,6 +74,43 @@ function fixture(toolsList: number) {
   };
 }
 
+function advancePastMeasurement(
+  input: ReturnType<typeof fixture>,
+  previous: Record<string, unknown>,
+) {
+  const nextStartedAt = "2026-07-28T15:00:00.000Z";
+  const nextState = structuredClone(input.funnelState);
+  nextState.updated_at = nextStartedAt;
+  nextState.collector_heartbeat_at = nextStartedAt;
+  const nextBaseline = captureTrustedFunnelBaseline(
+    nextState,
+    nextStartedAt,
+    "A stable clean epoch after the boundary audit rotation completed.",
+    59,
+  );
+  input.observedAt = "2026-07-28T15:01:00.000Z";
+  input.trustedBaseline = nextBaseline;
+  input.trustedLedger.epochs[0].status = "closed";
+  input.trustedLedger.epochs[0].conversion_eligible = false;
+  Object.assign(input.trustedLedger.epochs[0], { ended_at: nextStartedAt });
+  input.trustedLedger.epochs.push({
+    id: 59,
+    status: "active",
+    conversion_eligible: true,
+    started_at: nextStartedAt,
+    baseline: nextBaseline,
+  });
+  input.trustedLedger.active_epoch_id = 59;
+  input.trustedLedger.rotation = {
+    id: "marketplace-audit-epoch-59",
+    status: "activated",
+    target_epoch_id: 59,
+    activated_at: nextStartedAt,
+  };
+  input.previous = previous;
+  return input;
+}
+
 test("local free-selector checkpoint waits without marketplace retrieval", () => {
   const result = checkpointFreeSelectorBoundary(fixture(9));
   assert.equal(result.audit_ready, false);
@@ -103,6 +140,80 @@ test("local free-selector checkpoint never audits after the clean epoch closes",
   const result = checkpointFreeSelectorBoundary(input);
   assert.equal(result.audit_ready, false);
   assert.equal(result.experiment.status, "paused_audited_drain");
+});
+
+test("a valid frozen checkpoint permits an idempotent audit retry after its epoch closes", () => {
+  const initial = fixture(25);
+  const frozen = checkpointFreeSelectorBoundary(initial);
+  assert.equal(frozen.audit_ready, true);
+  const retry = checkpointFreeSelectorBoundary(advancePastMeasurement(
+    fixture(25),
+    frozen.experiment,
+  ));
+  assert.equal(retry.audit_ready, true);
+  assert.equal(retry.experiment.status, "completed");
+  assert.deepEqual(retry.experiment.boundary, frozen.experiment.boundary);
+});
+
+test("an incomplete checkpoint stays fail-closed after its epoch closes", () => {
+  const initial = fixture(24);
+  const incomplete = checkpointFreeSelectorBoundary(initial);
+  assert.equal(incomplete.audit_ready, false);
+  const retry = checkpointFreeSelectorBoundary(advancePastMeasurement(
+    fixture(24),
+    incomplete.experiment,
+  ));
+  assert.equal(retry.audit_ready, false);
+  assert.equal(retry.experiment.status, "measurement_epoch_closed_before_target");
+});
+
+test("a drifted frozen checkpoint stays fail-closed after its epoch closes", () => {
+  const initial = fixture(25);
+  const frozen = checkpointFreeSelectorBoundary(initial);
+  const drifted = structuredClone(frozen.experiment);
+  (drifted.boundary as Record<string, any>).measurement_epoch_id = 999;
+  const retry = checkpointFreeSelectorBoundary(advancePastMeasurement(
+    fixture(25),
+    drifted,
+  ));
+  assert.equal(retry.audit_ready, false);
+});
+
+test("a frozen checkpoint cannot retry against drifted historical epoch coordinates", () => {
+  const initial = fixture(25);
+  const frozen = checkpointFreeSelectorBoundary(initial);
+  const retryInput = advancePastMeasurement(fixture(25), frozen.experiment);
+  retryInput.trustedLedger.epochs[0].started_at = "2026-07-28T13:24:00.000Z";
+  const retry = checkpointFreeSelectorBoundary(retryInput);
+  assert.equal(retry.audit_ready, false);
+});
+
+test("a frozen checkpoint cannot retry in the same epoch under an unrelated rotation", () => {
+  const initial = fixture(25);
+  const frozen = checkpointFreeSelectorBoundary(initial);
+  const retryInput = fixture(25);
+  retryInput.previous = frozen.experiment;
+  retryInput.trustedLedger.rotation = {
+    id: "unrelated-audit-rotation-999",
+    status: "activated",
+    target_epoch_id: 999,
+    activated_at: retryInput.observedAt,
+  };
+  const retry = checkpointFreeSelectorBoundary(retryInput);
+  assert.equal(retry.audit_ready, false);
+});
+
+test("a frozen checkpoint cannot retry with drifted current baseline coordinates", () => {
+  const initial = fixture(25);
+  const frozen = checkpointFreeSelectorBoundary(initial);
+  const retryInput = advancePastMeasurement(fixture(25), frozen.experiment);
+  retryInput.trustedLedger.epochs[1].baseline = {
+    ...retryInput.trustedLedger.epochs[1].baseline,
+    epoch_id: 999,
+    initialized_at: "2026-07-28T15:00:01.000Z",
+  };
+  const retry = checkpointFreeSelectorBoundary(retryInput);
+  assert.equal(retry.audit_ready, false);
 });
 
 test("local catalog checkpoint uses the fresh catalog identity without network activity", () => {

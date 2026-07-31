@@ -48,6 +48,7 @@ test("every production deployment probe identifies as owner automation", async (
   assert.match(workflow, /freeRoute\?\.next_call\?\.authorization_required_before_settlement !== true/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.unsigned_call_action !== "inspect_quote_then_authorize_or_stop"/);
   assert.match(workflow, /freeRoute\?\.next_call\?\.preserve_arguments_on_retry !== true/);
+  assert.match(workflow, /outputSchemaSizes\.some\(\(bytes\) => bytes > 2304\)/);
   assert.match(workflow, /outputSchemaSizes\.reduce\(\(total, bytes\) => total \+ bytes, 0\) > 12500/);
   assert.match(workflow, /called\.result\?\.content\?\.length !== 2/);
   assert.match(workflow, /\/\^PAYMENT REQUIRED:\//);

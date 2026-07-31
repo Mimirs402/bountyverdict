@@ -130,6 +130,10 @@ form.addEventListener("submit", async (event) => {
     const submittedBase = `/repos/${encodeURIComponent(submitted.owner)}/${encodeURIComponent(submitted.repo)}`;
     const issueResponse = await githubJson(`${submittedBase}/issues/${submitted.number}`);
     const { owner, repo, number } = canonicalIssueCoordinates(issueResponse.data, submitted);
+    const issueAliases = owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+      repo.toLowerCase() !== submitted.repo.toLowerCase() || number !== submitted.number
+      ? [submitted]
+      : [];
     const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     const repoResponse = await githubJson(base);
     const commentPageCount = Math.max(1, Math.ceil(issueResponse.data.comments / 100));
@@ -168,6 +172,7 @@ form.addEventListener("submit", async (event) => {
       comments,
       timeline,
       coverage,
+      issueAliases,
     });
     render({
       issue: issueResponse.data,

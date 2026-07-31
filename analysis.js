@@ -504,7 +504,7 @@ function canonicalPullRequestUrl(value) {
   return match ? `https://github.com/${match[1]}/${match[2]}/pull/${match[3]}` : null;
 }
 
-function relevantPullRequestUrl(value, repository) {
+function relevantPullRequestUrl(value, issue, repository, issueAliases = []) {
   const url = canonicalPullRequestUrl(value);
   const relevantRepository = typeof repository?.full_name === "string"
     ? repository.full_name.toLowerCase()
@@ -514,9 +514,117 @@ function relevantPullRequestUrl(value, repository) {
   if (!match) return null;
   const referencedRepository = `${match[1]}/${match[2]}`.toLowerCase();
   const relevantOwner = relevantRepository.split("/")[0];
-  return referencedRepository === relevantRepository || match[1].toLowerCase() === relevantOwner
+  const targetRepositories = issueReferenceTargets(issue, repository, issueAliases)
+    .map((target) => `${target.owner}/${target.repo}`.toLowerCase());
+  return targetRepositories.includes(referencedRepository) ||
+    match[1].toLowerCase() === relevantOwner
     ? url
     : null;
+}
+
+function escapeRegularExpression(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function issueReferenceTargets(issue, repository, issueAliases = []) {
+  const repositoryName = typeof repository?.full_name === "string"
+    ? repository.full_name
+    : null;
+  if (!repositoryName) return [];
+  const repositoryParts = repositoryName.split("/");
+  if (repositoryParts.length !== 2 || !repositoryParts[0] || !repositoryParts[1]) return [];
+
+  let issueNumber = Number(issue?.number);
+  if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) {
+    const issueMatch = String(issue?.html_url ?? "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/([1-9]\d*)\/?$/i);
+    if (!issueMatch || `${issueMatch[1]}/${issueMatch[2]}`.toLowerCase() !== repositoryName.toLowerCase()) return [];
+    issueNumber = Number(issueMatch[3]);
+  }
+
+  const targets = [{ owner: repositoryParts[0], repo: repositoryParts[1], number: issueNumber }];
+  for (const alias of Array.isArray(issueAliases) ? issueAliases.slice(0, 1) : []) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(alias?.owner ?? "") ||
+      !/^[A-Za-z0-9_.-]+$/.test(alias?.repo ?? "") ||
+      !Number.isSafeInteger(alias?.number) || alias.number < 1) continue;
+    const duplicate = targets.some((target) =>
+      target.owner.toLowerCase() === alias.owner.toLowerCase() &&
+      target.repo.toLowerCase() === alias.repo.toLowerCase() &&
+      target.number === alias.number
+    );
+    if (!duplicate) targets.push({ owner: alias.owner, repo: alias.repo, number: alias.number });
+  }
+  return targets;
+}
+
+function targetBindingIsNegated(text, matchIndex) {
+  const prefix = text.slice(0, matchIndex);
+  const clauseBoundary = Math.max(
+    prefix.lastIndexOf("."), prefix.lastIndexOf("!"), prefix.lastIndexOf("?"),
+    prefix.lastIndexOf(";"), prefix.lastIndexOf("\n"),
+  );
+  const rawClause = prefix.slice(clauseBoundary + 1);
+  const exceptiveNegation = /\b(?:anything|nothing)\b(?:\s+[A-Za-z-]+){0,3}\s+but\b(?:\s+[A-Za-z-]+){0,3}\s*$/i.test(rawClause);
+  const clause = rawClause
+    .replace(/^.*\b(?:but|however|yet|although|though)\b[,\s]*/i, "");
+  if (/(?:\bnot\b|n['’]t\b)\s+(?:just|merely|only|simply)\s*$/i.test(rawClause)) return false;
+  return /(?:\b(?:do(?:es)?|did|is|are|was|were|will|would|can|could|should|may|might|must|has|have|had)\s+not|\b(?:doesn|don|didn|isn|aren|wasn|weren|wouldn|couldn|shouldn|mightn|mustn|hasn|haven|hadn|won|can)['’]t|\b(?:cannot|never|not))\b(?:\s+[A-Za-z-]+){0,3}\s*$/i.test(clause) ||
+    /\bno\s+longer\b(?:\s+[A-Za-z-]+){0,3}\s*$/i.test(clause) ||
+    exceptiveNegation;
+}
+
+function hasAffirmativeTargetMatch(text, pattern) {
+  for (const match of text.matchAll(pattern)) {
+    if (!targetBindingIsNegated(text, match.index ?? 0)) return true;
+  }
+  return false;
+}
+
+function pullRequestTargetsIssue(item, issue, repository, pullUrl, issueAliases = []) {
+  const pullMatch = String(pullUrl ?? "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/\d+$/i);
+  const targets = issueReferenceTargets(issue, repository, issueAliases);
+  if (!pullMatch || targets.length === 0) return false;
+  const pullRepository = `${pullMatch[1]}/${pullMatch[2]}`.toLowerCase();
+  const references = targets.flatMap((target) => {
+    const owner = escapeRegularExpression(target.owner);
+    const repo = escapeRegularExpression(target.repo);
+    const referenceTerminator = "(?![\\p{L}\\p{N}\\p{M}_/%-])";
+    const qualifiedReference = `${owner}\/${repo}#${target.number}${referenceTerminator}`;
+    const urlReference = `https:\/\/github\\.com\/${owner}\/${repo}\/issues\/${target.number}\/?${referenceTerminator}`;
+    const shortReference = pullRepository === `${target.owner}/${target.repo}`.toLowerCase()
+      ? `#${target.number}${referenceTerminator}`
+      : null;
+    return [qualifiedReference, urlReference, shortReference].filter(Boolean);
+  });
+  const reference = references.join("|");
+  const targetBinding = new RegExp(
+    `\\b(?:close(?:s|d|ing)?|fix(?:e[sd]|ing)?|resolve(?:s|d|ing)?|implement(?:s|ed|ing)?|address(?:es|ed|ing)?|refs?|references?|relates?\\s+to)\\s*:?[ \\t]*(?:${reference})`,
+    "giu",
+  );
+  const titleReference = new RegExp(`(?:\\(|\\[)\\s*(?:${reference})\\s*(?:\\)|\\])`, "giu");
+  return [item?.title, item?.body].some((value) =>
+    typeof value === "string" && (() => {
+      const text = unquotedClaimText(value);
+      return hasAffirmativeTargetMatch(text, targetBinding) || hasAffirmativeTargetMatch(text, titleReference);
+    })()
+  );
+}
+
+function authenticMergedTimelinePull(event, item, pullUrl) {
+  if (event?.source?.type !== "issue") return false;
+  const pullMatch = String(pullUrl ?? "").match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)$/i,
+  );
+  const repositoryMatch = String(item?.repository_url ?? "").match(
+    /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/?$/i,
+  );
+  if (!pullMatch || !repositoryMatch) return false;
+  if (`${pullMatch[1]}/${pullMatch[2]}`.toLowerCase() !==
+    `${repositoryMatch[1]}/${repositoryMatch[2]}`.toLowerCase()) return false;
+  if (!Number.isSafeInteger(item?.number) || item.number !== Number(pullMatch[3])) return false;
+  const mergedAt = item?.pull_request?.merged_at;
+  return typeof mergedAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(mergedAt) &&
+    Number.isFinite(Date.parse(mergedAt));
 }
 
 function bodyPullRequests(issue, comments, repository) {
@@ -553,18 +661,20 @@ function bodyPullRequests(issue, comments, repository) {
   return [...pulls.values()];
 }
 
-function uniquePullRequests(timeline = [], issue = null, comments = [], repository = null) {
+function uniquePullRequests(timeline = [], issue = null, comments = [], repository = null, issueAliases = []) {
   const pulls = new Map();
   for (const pull of bodyPullRequests(issue, comments, repository)) {
     pulls.set(pull.url.toLowerCase(), pull);
   }
   for (const event of timeline) {
     const item = event.event === "cross-referenced" ? event.source?.issue : null;
-    const url = relevantPullRequestUrl(item?.pull_request?.html_url, repository);
+    const url = relevantPullRequestUrl(item?.pull_request?.html_url, issue, repository, issueAliases);
     if (!url) continue;
+    const targetBound = authenticMergedTimelinePull(event, item, url) &&
+      pullRequestTargetsIssue(item, issue, repository, url, issueAliases);
     pulls.set(url.toLowerCase(), {
       url,
-      state: item.pull_request.merged_at ? "merged" : item.state,
+      state: targetBound ? "merged" : item.pull_request.merged_at ? "referenced" : item.state,
       title: item.title,
       author: item.user?.login ?? "unknown",
       evidenceUrl: url,
@@ -1128,12 +1238,12 @@ function activeClaimIntent(issue, comments, now) {
   );
 }
 
-export function analyzeBounty({ issue, repository, comments = [], timeline = [], platformEvidence = null, policyDocuments = [], coverage = {}, now = new Date() }) {
+export function analyzeBounty({ issue, repository, comments = [], timeline = [], issueAliases = [], platformEvidence = null, policyDocuments = [], coverage = {}, now = new Date() }) {
   const signals = [];
   const assignees = Array.isArray(issue.assignees)
     ? issue.assignees.filter((assignee) => typeof assignee?.login === "string" && assignee.login.trim())
     : [];
-  const pulls = uniquePullRequests(timeline, issue, comments, repository);
+  const pulls = uniquePullRequests(timeline, issue, comments, repository, issueAliases);
   const openPulls = pulls.filter((pull) => pull.state === "open");
   const mergedPulls = pulls.filter((pull) => pull.state === "merged");
   const closedPulls = pulls.filter((pull) => pull.state === "closed");
@@ -1531,7 +1641,7 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     signals.push(signal(
       "Referenced competing PR",
       impact,
-      `${referencedPulls.length} exact same-owner pull request URL${referencedPulls.length === 1 ? " appears" : "s appear"} in the issue discussion but not in the bounded timeline evidence; confirm relevance and current PR status before starting parallel work.`,
+      `${referencedPulls.length} exact same-owner pull request URL${referencedPulls.length === 1 ? " appears" : "s appear"} in the bounded issue evidence without a target-bound open or merged implementation relationship; confirm relevance and current PR status before starting parallel work.`,
       referencedPulls[0].evidenceUrl ?? referencedPulls[0].url,
     ));
   }

@@ -824,6 +824,10 @@ async function checkGithubIssueInternal(
     repository: repoResponse.data,
     comments,
     timeline,
+    issueAliases: owner.toLowerCase() !== submitted.owner.toLowerCase() ||
+        repo.toLowerCase() !== submitted.repo.toLowerCase() || number !== submitted.number
+      ? [submitted]
+      : [],
     platformEvidence,
     policyDocuments,
     coverage: {

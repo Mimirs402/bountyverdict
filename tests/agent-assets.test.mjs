@@ -23,6 +23,13 @@ const assertPortableWithoutMcpRuntime = (skill) => {
   for (const signal of agentPluginsMcpRuntimeSignals) assert.doesNotMatch(body, new RegExp(signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 };
 
+test("public checker preserves the exact submitted issue alias after a verified transfer", async () => {
+  const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /const issueAliases = owner\.toLowerCase\(\) !== submitted\.owner\.toLowerCase\(\)/);
+  assert.match(app, /number !== submitted\.number[\s\S]+\? \[submitted\][\s\S]+: \[\]/);
+  assert.match(app, /analyzeBounty\(\{[\s\S]+issueAliases,[\s\S]+\}\)/);
+});
+
 test("production enables every published marketplace fulfillment adapter", async () => {
   const wrangler = JSON.parse(await readFile(
     new URL("../agent/wrangler.jsonc", import.meta.url),

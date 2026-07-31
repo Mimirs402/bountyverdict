@@ -1726,8 +1726,12 @@ test("one merged cross-referenced implementation is a hard stop on an open issue
   const timeline = [{
     event: "cross-referenced",
     source: {
+      type: "issue",
       issue: {
+        number: 9,
+        repository_url: "https://api.github.com/repos/acme/widget",
         title: "Implement the requested DevDocs scraper",
+        body: "Closes #4",
         state: "closed",
         user: { login: "solver" },
         pull_request: {
@@ -1747,6 +1751,225 @@ test("one merged cross-referenced implementation is a hard stop on an open issue
   ));
   assert.ok(!output.signals.some((item) => item.label === "No linked open PR found"));
   assert.ok(!output.signals.some((item) => item.label === "Closed-PR swarm"));
+});
+
+test("a merged same-repository PR that closes another issue cannot impersonate the target implementation", () => {
+  const timeline = [{
+    event: "cross-referenced",
+    source: {
+      type: "issue",
+      issue: {
+        number: 1641,
+        repository_url: "https://api.github.com/repos/acme/widget",
+        title: "Fix agent creation race condition and enforce plan limits",
+        body: "This does not close #4, but closes #1453.",
+        state: "closed",
+        user: { login: "solver" },
+        pull_request: {
+          html_url: "https://github.com/acme/widget/pull/1641",
+          merged_at: "2026-07-29T19:14:51Z",
+        },
+      },
+    },
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+  assert.equal(output.pullRequests.length, 1);
+  assert.equal(output.pullRequests[0].state, "referenced");
+  assert.ok(!output.signals.some((item) => item.label === "Merged implementation PR"));
+  assert.ok(output.signals.some((item) => item.label === "Referenced competing PR"));
+});
+
+test("quoted, code-formatted, and negated target references remain weak evidence", () => {
+  const bodies = [
+    "> Closes #4\n\nCloses #1453.",
+    "```markdown\nCloses #4\n```\nCloses #1453.",
+    "Example only: `Closes #4`. Closes #1453.",
+    "This does not close #4, but closes #1453.",
+    "This no longer closes #4; it closes #1453.",
+    "This does anything but close #4; it closes #1453.",
+    "This does anything but actually close #4; it closes #1453.",
+    "This does nothing at all but close #4; it closes #1453.",
+    "Closes #4ever, not the target issue.",
+    "Closes #4éver, not the target issue.",
+    "Closes acme/widget#4ever, not the target issue.",
+    "Closes https://github.com/acme/widget/issues/4ever, not the target issue.",
+  ];
+
+  for (const [index, body] of bodies.entries()) {
+    const timeline = [{
+      event: "cross-referenced",
+      source: {
+        type: "issue",
+        issue: {
+          number: 1700 + index,
+          repository_url: "https://api.github.com/repos/acme/widget",
+          title: "Other implementation",
+          body,
+          state: "closed",
+          user: { login: "solver" },
+          pull_request: {
+            html_url: `https://github.com/acme/widget/pull/${1700 + index}`,
+            merged_at: "2026-07-29T19:14:51Z",
+          },
+        },
+      },
+    }];
+    const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, timeline, now });
+
+    assert.equal(output.pullRequests[0].state, "referenced", body);
+    assert.ok(!output.signals.some((item) => item.label === "Merged implementation PR"), body);
+  }
+});
+
+test("canonical reference punctuation and additive target language remain strong evidence", () => {
+  const bodies = [
+    "Closes https://github.com/acme/widget/issues/4/",
+    "This does not just fix #4; it also repairs the related API.",
+    "This does not merely resolve #4; it documents the fix too.",
+    "This doesn't only address #4; it adds a regression test.",
+    "This does not simply implement #4; it improves the surrounding module.",
+  ];
+
+  for (const [index, body] of bodies.entries()) {
+    const output = analyzeBounty({
+      issue: healthyIssue,
+      repository: healthyRepo,
+      timeline: [{
+        event: "cross-referenced",
+        source: {
+          type: "issue",
+          issue: {
+            number: 1800 + index,
+            repository_url: "https://api.github.com/repos/acme/widget",
+            title: "Delivered implementation",
+            body,
+            state: "closed",
+            user: { login: "solver" },
+            pull_request: {
+              html_url: `https://github.com/acme/widget/pull/${1800 + index}`,
+              merged_at: "2026-07-29T19:14:51Z",
+            },
+          },
+        },
+      }],
+      now,
+    });
+    assert.equal(output.pullRequests[0].state, "merged", body);
+    assert.ok(output.signals.some((item) => item.label === "Merged implementation PR" && item.hardStop), body);
+  }
+});
+
+test("merged timeline hard stops require an authenticated GitHub issue source", () => {
+  const baseSource = {
+    type: "issue",
+    issue: {
+      number: 9,
+      repository_url: "https://api.github.com/repos/acme/widget",
+      title: "Delivered implementation",
+      body: "Closes #4",
+      state: "closed",
+      user: { login: "solver" },
+      pull_request: {
+        html_url: "https://github.com/acme/widget/pull/9",
+        merged_at: "2026-05-26T12:00:00Z",
+      },
+    },
+  };
+  const mutations = [
+    (source) => ({ ...source, type: "commit" }),
+    (source) => ({ ...source, issue: { ...source.issue, repository_url: "https://api.github.com/repos/evil/other" } }),
+    (source) => ({ ...source, issue: { ...source.issue, number: 10 } }),
+    (source) => ({ ...source, issue: { ...source.issue, pull_request: { ...source.issue.pull_request, merged_at: "yesterday" } } }),
+  ];
+
+  for (const mutate of mutations) {
+    const output = analyzeBounty({
+      issue: healthyIssue,
+      repository: healthyRepo,
+      timeline: [{ event: "cross-referenced", source: mutate(baseSource) }],
+      now,
+    });
+    assert.equal(output.pullRequests[0].state, "referenced");
+    assert.ok(!output.signals.some((item) => item.label === "Merged implementation PR"));
+  }
+});
+
+test("coordination-repository shorthand stays weak while a qualified target hard-stops", () => {
+  const analyze = (body) => analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    timeline: [{
+      event: "cross-referenced",
+      source: {
+        type: "issue",
+        issue: {
+          number: 9,
+          repository_url: "https://api.github.com/repos/acme/widget-mobile",
+          title: "Coordinated mobile implementation",
+          body,
+          state: "closed",
+          user: { login: "solver" },
+          pull_request: {
+            html_url: "https://github.com/acme/widget-mobile/pull/9",
+            merged_at: "2026-07-29T19:14:51Z",
+          },
+        },
+      },
+    }],
+    now,
+  });
+
+  assert.equal(analyze("Closes #4").pullRequests[0].state, "referenced");
+  const qualified = analyze("Closes acme/widget#4");
+  assert.equal(qualified.pullRequests[0].state, "merged");
+  assert.ok(qualified.signals.some((item) => item.label === "Merged implementation PR" && item.hardStop));
+});
+
+test("an exact submitted transfer alias preserves qualified legacy target evidence only", () => {
+  const transferredIssue = {
+    ...healthyIssue,
+    number: 9,
+    html_url: "https://github.com/newco/gadget/issues/9",
+  };
+  const transferredRepo = {
+    ...healthyRepo,
+    full_name: "newco/gadget",
+    html_url: "https://github.com/newco/gadget",
+  };
+  const analyze = (body) => analyzeBounty({
+    issue: transferredIssue,
+    repository: transferredRepo,
+    issueAliases: [
+      { owner: "acme", repo: "widget", number: 4 },
+      { owner: "unrelated", repo: "project", number: 4 },
+    ],
+    timeline: [{
+      event: "cross-referenced",
+      source: {
+        type: "issue",
+        issue: {
+          number: 18,
+          repository_url: "https://api.github.com/repos/acme/widget",
+          title: "Legacy implementation",
+          body,
+          state: "closed",
+          user: { login: "solver" },
+          pull_request: {
+            html_url: "https://github.com/acme/widget/pull/18",
+            merged_at: "2026-07-29T19:14:51Z",
+          },
+        },
+      },
+    }],
+    now,
+  });
+
+  for (const reference of ["acme/widget#4", "https://github.com/acme/widget/issues/4"]) {
+    const output = analyze(`Closes ${reference}`);
+    assert.equal(output.pullRequests[0].state, "merged", reference);
+  }
+  assert.equal(analyze("Closes unrelated/project#4").pullRequests[0].state, "referenced");
 });
 
 test("an unrelated repository cross-reference cannot impersonate a merged implementation", () => {

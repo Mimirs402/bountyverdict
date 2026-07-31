@@ -61,6 +61,7 @@ import {
   AWESOME_SKILLS_URL,
   parseAwesomeSkillsPage,
 } from "../src/awesome-skills.ts";
+import { readAgentPluginsCatalogStatus } from "../src/agent-plugins-catalog.ts";
 import {
   MCP_MARKETPLACE_MAX_PAGE_BYTES,
   parseMcpMarketplaceListing,
@@ -659,32 +660,16 @@ async function awesomeSkillsStatus(): Promise<Record<string, unknown>> {
   }
 }
 
-async function agentPluginsCatalogStatus(): Promise<Record<string, unknown>> {
-  const response = await fetch(agentPluginsCatalogUrl, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!response.ok) throw new Error(`Agent Plugins catalog returned HTTP ${response.status}.`);
-  const payload = await response.json() as Record<string, unknown>;
-  if (!Array.isArray(payload.skills) || !payload.providers || typeof payload.providers !== "object" ||
-    !Number.isSafeInteger(payload.total_skills) || Number(payload.total_skills) !== payload.skills.length) {
-    throw new Error("Agent Plugins catalog returned malformed telemetry.");
-  }
-  const matching = (payload.skills as Array<Record<string, any>>).filter((skill) =>
-    skill?.source?.repo === repository && PUBLISHED_SKILLS.includes(skill.name));
-  return {
-    url: "https://dmgrok.github.io/agent-plugins/",
-    catalog_url: agentPluginsCatalogUrl,
-    listed: matching.length === PUBLISHED_SKILLS.length,
-    listed_skills: matching.length,
-    expected_skills: PUBLISHED_SKILLS.length,
-    total_catalog_skills: payload.skills.length,
-    generated_at: typeof payload.generated_at === "string" ? payload.generated_at : null,
-    skills: matching.map(({ id, name, quality_score, maintenance_status }) => ({
-      id,
-      name,
-      quality_score,
-      maintenance_status,
-    })),
-    measurement: "catalog_presence_and_quality_metadata_not_impressions_installs_or_purchases",
-  };
+async function agentPluginsCatalogStatus(previousStatus: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return readAgentPluginsCatalogStatus({
+    catalogUrl: agentPluginsCatalogUrl,
+    publicUrl: "https://dmgrok.github.io/agent-plugins/",
+    repository,
+    publishedSkills: PUBLISHED_SKILLS,
+    previousStatus,
+    observedAt: new Date().toISOString(),
+    timeoutMs,
+  });
 }
 
 async function awesomeCopilotStatus(
@@ -3414,7 +3399,7 @@ const [
   githubPrStatus("LLMSecurity", "awesome-agent-skills-security", 38, securityDirectoryPrUrl),
   githubPrStatus("xpaysh", "awesome-x402", 959, x402DirectoryPrUrl),
   githubPrStatus("dmgrok", "agent-plugins", 97, agentPluginsPrUrl),
-  agentPluginsCatalogStatus(),
+  agentPluginsCatalogStatus(previous.agent_plugins_catalog || {}),
   awesomeCopilotStatus(previous.awesome_copilot || {}, new Date().toISOString()),
   lobeHubStatus(previous.lobehub || {}, new Date().toISOString()),
   awesomeMcpServersStatus(previous.awesome_mcp_servers || {}, new Date().toISOString()),

@@ -793,9 +793,7 @@ async function checkGithubIssueInternal(
       ? bountyHubEvidence
       : opireEvidence?.claim_count
         ? opireEvidence
-      : issueHuntEvidence?.submitted_pull_requests.length
-        ? issueHuntEvidence
-        : bountyHubEvidence || opireEvidence || lightningEvidence || issueHuntEvidence;
+      : bountyHubEvidence || opireEvidence || lightningEvidence;
   const commentsTruncated = commentPageCount > commentPages.length || comments.length !== commentsTotal;
   const policyDocuments = deduplicatePolicyDocuments(policyResponses
     .map((result) => result.document)
@@ -846,7 +844,20 @@ async function checkGithubIssueInternal(
   }
   const linkedSourceHardStop = Boolean(linkedCoordinates) && inspectLinkedSource &&
     (linkedErrorCode !== null || linkedVerdict?.verdict === "AVOID");
-  const finalVerdict: AgentVerdict["verdict"] = linkedSourceHardStop ? "AVOID" : analysis.verdict;
+  const independentlyTrustedReward =
+    (analysis.reward.verification === "TRUSTED_PLATFORM_API" ||
+      analysis.reward.verification === "TRUSTED_PLATFORM_APP") &&
+    analysis.reward.platform !== "IssueHunt";
+  const unverifiedIssueHuntFunding = issueHuntEvidence?.state === "ACTIVE_UNVERIFIED" &&
+    !independentlyTrustedReward;
+  const issueHuntSubmittedOutputs = issueHuntEvidence?.state === "ACTIVE_UNVERIFIED"
+    ? issueHuntEvidence.submitted_pull_requests
+    : [];
+  const issueHuntSubmissionHardStop = issueHuntSubmittedOutputs.length > 0;
+  const finalVerdict: AgentVerdict["verdict"] = linkedSourceHardStop || unverifiedIssueHuntFunding ||
+      issueHuntSubmissionHardStop
+    ? "AVOID"
+    : analysis.verdict;
   const signals: VerdictSignal[] = analysis.signals.map((item) => ({
     label: item.label,
     impact: item.impact,
@@ -873,7 +884,29 @@ async function checkGithubIssueInternal(
       hard_stop: false,
     });
   }
-  const finalScore = linkedSourceHardStop ? 0 : analysis.score;
+  if (unverifiedIssueHuntFunding) {
+    signals.push({
+      label: "IssueHunt funding is not currently collectible evidence",
+      impact: -100,
+      detail: "IssueHunt's public funded/ready pages expose historical deposit accounting but not the original purchase date for balance-funded deposits, current reserve or withdrawability, or the contributor share required to prove a collectible reward under its 180-day rules. Require authenticated platform or explicit independent funding evidence before starting work.",
+      evidence_url: "https://oss.issuehunt.io/terms",
+      hard_stop: true,
+    });
+  }
+  if (issueHuntSubmissionHardStop) {
+    signals.push({
+      label: "Bounty platform reports submitted outputs",
+      impact: -70,
+      detail: `IssueHunt lists ${issueHuntSubmittedOutputs.length} non-cancelled pull request submission${issueHuntSubmittedOutputs.length === 1 ? "" : "s"}; verify current GitHub state before considering duplicate work.`,
+      evidence_url: issueHuntSubmittedOutputs[0],
+      hard_stop: true,
+    });
+  }
+  const finalScore = linkedSourceHardStop || unverifiedIssueHuntFunding || issueHuntSubmissionHardStop
+    ? 0
+    : analysis.score;
+  const projectIssueHuntReward = unverifiedIssueHuntFunding &&
+    !new Set(["PAID_OR_AWARDED", "WITHDRAWN"]).has(analysis.reward.state);
 
   return {
     product: "BountyVerdict",
@@ -920,12 +953,12 @@ async function checkGithubIssueInternal(
       }),
     },
     reward: {
-      state: analysis.reward.state,
-      verification: analysis.reward.verification,
-      platform: analysis.reward.platform,
-      amount: analysis.reward.amount,
-      currency: analysis.reward.currency,
-      evidence_url: analysis.reward.evidenceUrl,
+      state: projectIssueHuntReward ? "UNVERIFIED" : analysis.reward.state,
+      verification: projectIssueHuntReward ? "UNVERIFIED" : analysis.reward.verification,
+      platform: projectIssueHuntReward ? "IssueHunt" : analysis.reward.platform,
+      amount: projectIssueHuntReward ? null : analysis.reward.amount,
+      currency: projectIssueHuntReward ? null : analysis.reward.currency,
+      evidence_url: projectIssueHuntReward ? issueHuntEvidence!.evidence_url : analysis.reward.evidenceUrl,
     },
     linked_source: linkedCoordinates
       ? inspectLinkedSource
@@ -976,6 +1009,8 @@ async function checkGithubIssueInternal(
       "A VIABLE verdict is permission to investigate, not a payout guarantee.",
       "Confirm current reward terms, payout eligibility, contribution policy, and acceptance criteria before coding.",
       "A trusted platform record proves platform-reported listing or funding state, not acceptance, merge, or payout.",
+      "Public IssueHunt funded/ready pages are excluded from trusted active reward evidence because they do not prove that displayed deposits remain collectible under the platform's 180-day validity rules; terminal rewarded records remain conservative hard stops.",
+      "A terminal IssueHunt rewarded amount is the platform's gross deposited reward; the public proof chain separately reports fees and shares, so the displayed amount must not be treated as contributor net proceeds.",
       "One explicitly linked external GitHub source issue is checked recursively; longer mirror chains stop after that bounded hop and remain non-actionable without separate verification.",
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",

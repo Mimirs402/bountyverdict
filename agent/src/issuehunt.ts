@@ -1,6 +1,7 @@
 const ISSUEHUNT_ORIGIN = "https://oss.issuehunt.io";
 const ISSUEHUNT_MAX_RESPONSE_BYTES = 1_000_000;
 const ISSUEHUNT_MAX_RECORDS = 20;
+const ISSUEHUNT_MAX_EVENTS = 20;
 const NEXT_DATA_START = "__NEXT_DATA__ = ";
 const NEXT_DATA_END = ";__NEXT_LOADED_PAGES__";
 const ISSUEHUNT_REFERENCE = /https:\/\/(?:oss\.)?issuehunt\.io\/(?:r\/[^\s/]+\/[^\s/]+\/issues\/\d+|repos\/\d+\/issues\/\d+)(?:\b|\/)/i;
@@ -9,15 +10,23 @@ const ISSUEHUNT_MAX_REFERENCE_ROUTES = 3;
 
 type FetchLike = typeof fetch;
 
-export type IssueHuntEvidence = {
+type IssueHuntEvidenceBase = {
   platform: "IssueHunt";
-  verification: "TRUSTED_PLATFORM_API";
-  state: "FUNDED" | "REWARDED";
-  amount: number;
-  currency: "USD";
   evidence_url: string;
   submitted_pull_requests: string[];
 };
+
+export type IssueHuntEvidence = IssueHuntEvidenceBase & ({
+  verification: "UNVERIFIED";
+  state: "ACTIVE_UNVERIFIED";
+  amount: null;
+  currency: null;
+} | {
+  verification: "TRUSTED_PLATFORM_API";
+  state: "REWARDED";
+  amount: number;
+  currency: "USD";
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -27,6 +36,22 @@ function exactPositiveCents(value: unknown): bigint | null {
   if (typeof value !== "string" || !/^[1-9]\d{0,10}$/.test(value)) return null;
   const cents = BigInt(value);
   return cents > 0n ? cents : null;
+}
+
+function exactNonNegativeCents(value: unknown): bigint | null {
+  if (typeof value !== "string" || !/^\d{1,12}$/.test(value)) return null;
+  return BigInt(value);
+}
+
+function exactObjectId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{24}$/i.test(value);
+}
+
+function exactUtcTimestamp(value: unknown): number | null {
+  if (typeof value !== "string" || value.length < 20 || value.length > 30) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) return null;
+  return timestamp;
 }
 
 function exactRouteQuery(
@@ -163,10 +188,13 @@ export function parseIssueHuntPage(
 
   const submitted: string[] = [];
   const seenSubmissions = new Set<string>();
+  const parsedPulls: Array<{ id: string; rewardId: string | null; cancelled: boolean }> = [];
   for (const pull of page.pullRequests) {
-    if (!isRecord(pull) || typeof pull._id !== "string" || !/^[0-9a-f]{24}$/i.test(pull._id) ||
+    if (!isRecord(pull) || !exactObjectId(pull._id) ||
         typeof pull.cancelled !== "boolean" || typeof pull.repositoryOwnerName !== "string" ||
         typeof pull.repositoryName !== "string" || !Number.isSafeInteger(pull.number) || Number(pull.number) < 1) return null;
+    const rewardId = pull.reward === undefined ? null : exactObjectId(pull.reward) ? pull.reward : null;
+    if (pull.reward !== undefined && rewardId === null) return null;
     const canonical = exactPullRequestUrl(
       pull.url,
       pull.repositoryOwnerName,
@@ -175,6 +203,7 @@ export function parseIssueHuntPage(
     );
     if (!canonical || pull.repositoryOwnerName.toLowerCase() !== owner.toLowerCase() ||
         pull.repositoryName.toLowerCase() !== repo.toLowerCase()) return null;
+    parsedPulls.push({ id: pull._id, rewardId, cancelled: pull.cancelled });
     if (pull.cancelled) continue;
     const key = canonical.toLowerCase();
     if (seenSubmissions.has(key)) return null;
@@ -182,13 +211,63 @@ export function parseIssueHuntPage(
     submitted.push(canonical);
   }
 
+  const evidenceUrl = `${ISSUEHUNT_ORIGIN}${expectedPath}`;
+  if (issue.status !== "rewarded") {
+    // IssueHunt's public SSR payload is historical accounting, not an active
+    // escrow or collectibility ledger. Its Terms extinguish Deposits after 180
+    // days from purchase, while balance-funded records omit that original
+    // purchase time and every public record omits current reserve,
+    // withdrawability, and contributor-share state. The strictly identity-bound
+    // record remains useful for an explicit unverified hard stop and submitted
+    // output evidence, but never becomes trusted active funding.
+    return {
+      platform: "IssueHunt",
+      verification: "UNVERIFIED",
+      state: "ACTIVE_UNVERIFIED",
+      amount: null,
+      currency: null,
+      evidence_url: evidenceUrl,
+      submitted_pull_requests: submitted,
+    };
+  }
+
+  const reward = page.reward;
+  if (!exactObjectId(repository._id) || !exactObjectId(issue._id) ||
+      exactUtcTimestamp(issue.rewardedAt) === null || !isRecord(reward) ||
+      !exactObjectId(reward._id) || reward.repository !== repository._id || reward.issue !== issue._id ||
+      !exactObjectId(reward.pullRequest) || exactUtcTimestamp(reward.createdAt) === null ||
+      !Number.isSafeInteger(reward.repositoryPercentge) || Number(reward.repositoryPercentge) < 0 ||
+      Number(reward.repositoryPercentge) > 100 || !Number.isSafeInteger(reward.feePercentage) ||
+      Number(reward.feePercentage) < 0 || Number(reward.feePercentage) > 100 ||
+      Number(reward.repositoryPercentge) + Number(reward.feePercentage) > 100 ||
+      !Array.isArray(page.events) || page.events.length < 1 || page.events.length > ISSUEHUNT_MAX_EVENTS) return null;
+  const rewardAmount = exactPositiveCents(reward.amount);
+  const feeAmount = exactNonNegativeCents(reward.feeAmount);
+  const repositoryRewardAmount = exactNonNegativeCents(reward.repositoryRewardAmount);
+  const userRewardAmount = exactNonNegativeCents(reward.userRewardAmount);
+  if (rewardAmount === null || feeAmount === null || repositoryRewardAmount === null ||
+      userRewardAmount === null || rewardAmount !== activeDepositCents ||
+      feeAmount + repositoryRewardAmount + userRewardAmount !== rewardAmount ||
+      parsedPulls.filter((pull) => !pull.cancelled && pull.id === reward.pullRequest &&
+        pull.rewardId === reward._id).length !== 1) return null;
+  const matchingRewardEvents = page.events.filter((event) => isRecord(event) &&
+    event.__t === "RewardEvent" && event.type === "Reward" && exactObjectId(event._id) &&
+    exactUtcTimestamp(event.createdAt) !== null && event.rewardId === reward._id &&
+    event.repositoryId === repository._id && String(event.repositoryGithubId) === String(repositoryGithubId) &&
+    typeof event.repositoryOwnerName === "string" && event.repositoryOwnerName.toLowerCase() === owner.toLowerCase() &&
+    typeof event.repositoryName === "string" && event.repositoryName.toLowerCase() === repo.toLowerCase() &&
+    event.issueId === issue._id && event.issueNumber === number && event.amount === reward.amount &&
+    event.feeAmount === reward.feeAmount && event.repositoryRewardAmount === reward.repositoryRewardAmount &&
+    event.userRewardAmount === reward.userRewardAmount);
+  if (matchingRewardEvents.length !== 1) return null;
+
   return {
     platform: "IssueHunt",
     verification: "TRUSTED_PLATFORM_API",
-    state: issue.status === "rewarded" ? "REWARDED" : "FUNDED",
-    amount: Number(activeDepositCents) / 100,
+    state: "REWARDED",
+    amount: Number(rewardAmount) / 100,
     currency: "USD",
-    evidence_url: `${ISSUEHUNT_ORIGIN}${expectedPath}`,
+    evidence_url: evidenceUrl,
     submitted_pull_requests: submitted,
   };
 }

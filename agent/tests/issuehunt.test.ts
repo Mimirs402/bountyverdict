@@ -13,29 +13,78 @@ const repositoryId = 123456;
 const issueNumber = 4;
 
 function payload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const repositoryObjectId = "4d82dd50a64b4b0068bae8f4";
+  const issueObjectId = "5d82dd50a64b4b0068bae8f3";
+  const pullRequestObjectId = "5d8371ed874954009a39fe83";
+  const rewardObjectId = "7d8371ed874954009a39fe83";
+  const issueOverride = typeof overrides.issue === "object" && overrides.issue !== null &&
+      !Array.isArray(overrides.issue)
+    ? overrides.issue as Record<string, unknown>
+    : {};
+  const mergedIssue = {
+    _id: issueObjectId,
+    repositoryOwnerName: owner,
+    repositoryName: repo,
+    repositoryGithubId: String(repositoryId),
+    number: issueNumber,
+    status: "rewarded",
+    depositAmount: 4000,
+    rewardedAt: "2026-07-01T12:00:00.006Z",
+    ...issueOverride,
+  };
+  const gross = Number(mergedIssue.depositAmount);
+  const fee = Math.floor(gross * 0.1);
+  const repositoryReward = Math.floor(gross * 0.2);
+  const userReward = gross - fee - repositoryReward;
+  const reward = {
+    _id: rewardObjectId,
+    repository: repositoryObjectId,
+    issue: issueObjectId,
+    pullRequest: pullRequestObjectId,
+    repositoryPercentge: 20,
+    feePercentage: 10,
+    amount: String(gross),
+    feeAmount: String(fee),
+    repositoryRewardAmount: String(repositoryReward),
+    userRewardAmount: String(userReward),
+    createdAt: "2026-07-01T12:00:00.000Z",
+  };
+  const { issue: _issue, ...remainingOverrides } = overrides;
   const pageProps = {
-    repository: { ownerName: owner, name: repo, githubId: String(repositoryId) },
-    issue: {
-      repositoryOwnerName: owner,
-      repositoryName: repo,
-      repositoryGithubId: String(repositoryId),
-      number: issueNumber,
-      status: "funded",
-      depositAmount: 4000,
-    },
+    repository: { _id: repositoryObjectId, ownerName: owner, name: repo, githubId: String(repositoryId) },
+    issue: mergedIssue,
     deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "4000", cancelled: false }],
     anonymousDeposits: [],
     organizationGithubIdBalanceAmountEntries: [],
     pullRequests: [{
-      _id: "5d8371ed874954009a39fe83",
+      _id: pullRequestObjectId,
       cancelled: false,
       url: "https://github.com/acme/widget/pull/12",
       repositoryOwnerName: owner,
       repositoryName: repo,
       number: 12,
+      reward: rewardObjectId,
+    }],
+    reward,
+    events: [{
+      __t: "RewardEvent",
+      type: "Reward",
+      _id: "8d8371ed874954009a39fe83",
+      createdAt: "2026-07-01T12:00:00.050Z",
+      rewardId: rewardObjectId,
+      repositoryId: repositoryObjectId,
+      repositoryOwnerName: owner,
+      repositoryName: repo,
+      repositoryGithubId: String(repositoryId),
+      issueId: issueObjectId,
+      issueNumber,
+      amount: reward.amount,
+      feeAmount: reward.feeAmount,
+      repositoryRewardAmount: reward.repositoryRewardAmount,
+      userRewardAmount: reward.userRewardAmount,
     }],
     depositRequests: [],
-    ...overrides,
+    ...remainingOverrides,
   };
   return {
     props: {
@@ -55,16 +104,73 @@ function html(value: unknown): string {
   return `<html><script>__NEXT_DATA__ = ${JSON.stringify(value)};__NEXT_LOADED_PAGES__ = []</script></html>`;
 }
 
-test("parses exact funded IssueHunt SSR evidence and submitted outputs", () => {
+function mutatedPayload(mutate: (page: Record<string, unknown>) => void): Record<string, unknown> {
+  const value = payload();
+  const props = value.props as Record<string, unknown>;
+  const page = props.pageProps as Record<string, unknown>;
+  mutate(page);
+  return value;
+}
+
+test("parses exact terminal rewarded IssueHunt SSR evidence and submitted outputs", () => {
   assert.deepEqual(parseIssueHuntPage(html(payload()), owner, repo, repositoryId, issueNumber), {
     platform: "IssueHunt",
     verification: "TRUSTED_PLATFORM_API",
-    state: "FUNDED",
+    state: "REWARDED",
     amount: 40,
     currency: "USD",
     evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
     submitted_pull_requests: ["https://github.com/acme/widget/pull/12"],
   });
+});
+
+test("requires a complete identity-bound reward proof chain for terminal records", () => {
+  const cases = [
+    mutatedPayload((page) => { delete page.reward; }),
+    mutatedPayload((page) => {
+      (page.reward as Record<string, unknown>).issue = "6d82dd50a64b4b0068bae8f3";
+    }),
+    mutatedPayload((page) => {
+      const pulls = page.pullRequests as Array<Record<string, unknown>>;
+      pulls[0].reward = "6d8371ed874954009a39fe83";
+    }),
+    mutatedPayload((page) => {
+      (page.reward as Record<string, unknown>).userRewardAmount = "2799";
+    }),
+    mutatedPayload((page) => { page.events = []; }),
+    mutatedPayload((page) => {
+      const events = page.events as Array<Record<string, unknown>>;
+      page.events = [events[0], { ...events[0], _id: "9d8371ed874954009a39fe83" }];
+    }),
+  ];
+
+  for (const value of cases) {
+    assert.equal(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), null);
+  }
+});
+
+test("classifies identity-bound funded or ready SSR accounting as active but unverified", () => {
+  for (const status of ["funded", "ready"]) {
+    const value = payload({
+      issue: {
+        repositoryOwnerName: owner,
+        repositoryName: repo,
+        repositoryGithubId: String(repositoryId),
+        number: issueNumber,
+        status,
+        depositAmount: 4000,
+      },
+    });
+    assert.deepEqual(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), {
+      platform: "IssueHunt",
+      verification: "UNVERIFIED",
+      state: "ACTIVE_UNVERIFIED",
+      amount: null,
+      currency: null,
+      evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
+      submitted_pull_requests: ["https://github.com/acme/widget/pull/12"],
+    });
+  }
 });
 
 test("does not mistake a zero-dollar deposit request for funded evidence", () => {
@@ -120,7 +226,7 @@ test("includes bounded anonymous deposits without retaining funder identity", ()
       repositoryName: repo,
       repositoryGithubId: String(repositoryId),
       number: issueNumber,
-      status: "funded",
+      status: "rewarded",
       depositAmount: 5000,
     },
     anonymousDeposits: [{
@@ -133,7 +239,7 @@ test("includes bounded anonymous deposits without retaining funder identity", ()
   assert.deepEqual(parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber), {
     platform: "IssueHunt",
     verification: "TRUSTED_PLATFORM_API",
-    state: "FUNDED",
+    state: "REWARDED",
     amount: 50,
     currency: "USD",
     evidence_url: "https://oss.issuehunt.io/r/acme/widget/issues/4",
@@ -191,17 +297,25 @@ test("ignores cancelled submissions and recognizes terminal rewarded state", () 
       depositAmount: 4000,
     },
     pullRequests: [{
-      _id: "5d8371ed874954009a39fe83",
+      _id: "6d8371ed874954009a39fe83",
       cancelled: true,
+      url: "https://github.com/acme/widget/pull/11",
+      repositoryOwnerName: owner,
+      repositoryName: repo,
+      number: 11,
+    }, {
+      _id: "5d8371ed874954009a39fe83",
+      cancelled: false,
       url: "https://github.com/acme/widget/pull/12",
       repositoryOwnerName: owner,
       repositoryName: repo,
       number: 12,
+      reward: "7d8371ed874954009a39fe83",
     }],
   });
   const result = parseIssueHuntPage(html(value), owner, repo, repositoryId, issueNumber);
   assert.equal(result?.state, "REWARDED");
-  assert.deepEqual(result?.submitted_pull_requests, []);
+  assert.deepEqual(result?.submitted_pull_requests, ["https://github.com/acme/widget/pull/12"]);
 });
 
 test("fetches only bounded HTML without redirects and fails soft", async () => {

@@ -61,8 +61,10 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(distribution, /ToolHive in-agent catalog:[^\n]+PR \[#1388\]/);
   assert.match(distribution, /Placement and review state are not impressions, installs, purchases, or revenue/);
   assert.match(auditedRunner, /FUNNEL_ROTATION_ID: rotationId/);
-  assert.match(auditedRunner, /if \(monitor === "distribution"\) loadDistributionMonitorConfiguration\(process\.env\)/);
-  assert.match(auditedRunner, /process\.env\.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE = monitor/);
+  assert.match(auditedRunner, /monitor === "distribution"[\s\S]+loadDistributionMonitorConfiguration\(process\.env\)/);
+  assert.match(auditedRunner, /auditedMonitorRequiresRotation\([\s\S]+distributionConfiguration\?\.reportOnly === true/);
+  assert.match(auditedRunner, /status: "report_only_without_rotation"/);
+  assert.match(auditedRunner, /if \(requiresRotation\) process\.env\.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE = monitor/);
   assert.match(auditedRunner, /if \(monitor === "directory"\).*directory-monitor/s);
   assert.match(auditedRunner, /else await import\("\.\/distribution-monitor\.ts"\)/);
   assert.match(directory, /BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory"/);

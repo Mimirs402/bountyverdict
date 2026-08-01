@@ -4,8 +4,10 @@ import {
   analyzeBountyHubInventory,
   bountyHubDetailListings,
   bountyHubGithubIssueReferences,
+  bountyHubGithubPullRequestReferences,
   parseBountyHubDetail,
   parseBountyHubGithubIssue,
+  parseBountyHubGithubPullRequest,
   parseBountyHubPage,
 } from "../src/bountyhub-watch.ts";
 import {
@@ -53,8 +55,12 @@ function listing({
 }
 
 function claim(id: string, overrides: Record<string, unknown> = {}) {
+  const pullRequestNumber = 100 + Math.max(0, ids.indexOf(id));
   return {
     id,
+    pullRequestNumber,
+    pullRequestURL: `https://api.github.com/repos/acme/widget/pulls/${pullRequestNumber}`,
+    pullRequestWebURL: `https://github.com/acme/widget/pull/${pullRequestNumber}`,
     deletedAt: null,
     rejectedAt: null,
     isOpen: true,
@@ -77,6 +83,25 @@ function githubIssue(
     updated_at: "2026-08-01T08:00:00.000Z",
     ...overrides,
   }, reference);
+}
+
+function githubPullRequests(
+  listings: Parameters<typeof bountyHubGithubPullRequestReferences>[0],
+  details: Parameters<typeof bountyHubGithubPullRequestReferences>[1],
+  issues: Parameters<typeof bountyHubGithubPullRequestReferences>[2],
+  overrides: Record<string, Record<string, unknown>> = {},
+) {
+  return bountyHubGithubPullRequestReferences(listings, details, issues).map((reference) =>
+    parseBountyHubGithubPullRequest({
+      url: reference.pull_request_api_url,
+      html_url: reference.pull_request_url,
+      number: reference.pull_request_number,
+      state: "open",
+      merged: false,
+      updated_at: "2026-08-01T08:30:00.000Z",
+      ...(overrides[reference.claim_id] || {}),
+    }, reference)
+  );
 }
 
 test("BountyHub parser bounds pages and verifies detail identity", () => {
@@ -105,7 +130,8 @@ test("BountyHub analysis aggregates prepaid sponsors and deduplicates active cla
     }, parsed[1]),
   ];
   const issue = githubIssue(bountyHubGithubIssueReferences(parsed)[0]);
-  const result = analyzeBountyHubInventory(parsed, details, [issue]);
+  const pullRequests = githubPullRequests(parsed, details, [issue]);
+  const result = analyzeBountyHubInventory(parsed, details, [issue], pullRequests);
   assert.equal(result.evaluations.length, 1);
   assert.deepEqual(result.evaluations[0], {
     task_id: "acme/widget#7",
@@ -114,8 +140,11 @@ test("BountyHub analysis aggregates prepaid sponsors and deduplicates active cla
     prepaid_gross_usd: "150",
     conservative_net_usd: "120",
     paid_listing_ids: [ids[0], ids[1]],
+    platform_active_claim_count: 1,
     active_claim_count: 1,
+    canonical_open_claim_count_lower_bound: 1,
     merged_claim_present: false,
+    canonical_claim_evidence_complete: true,
     github_issue_state: "open",
     github_issue_locked: false,
     admitted: true,
@@ -139,12 +168,13 @@ test("BountyHub analysis fails closed on incomplete or excessive competition evi
   const row = listing({ amount: "125.00" });
   const parsed = parseBountyHubPage({ data: [row], hasNextPage: false }).listings;
   const issue = githubIssue(bountyHubGithubIssueReferences(parsed)[0]);
-  assert.equal(analyzeBountyHubInventory(parsed, [], [issue]).evaluations[0].excluded_reason, "claim_evidence_incomplete");
+  assert.equal(analyzeBountyHubInventory(parsed, [], [issue], []).evaluations[0].excluded_reason, "claim_evidence_incomplete");
   const detail = parseBountyHubDetail({
     ...row,
     claims: [claim(ids[1]), claim(ids[2]), claim(ids[3])],
   }, parsed[0]);
-  const crowded = analyzeBountyHubInventory(parsed, [detail], [issue]);
+  const crowdedPullRequests = githubPullRequests(parsed, [detail], [issue]);
+  const crowded = analyzeBountyHubInventory(parsed, [detail], [issue], crowdedPullRequests);
   assert.equal(crowded.candidates.length, 0);
   assert.equal(crowded.evaluations[0].excluded_reason, "active_competition_above_gate");
 
@@ -152,7 +182,10 @@ test("BountyHub analysis fails closed on incomplete or excessive competition evi
     ...row,
     claims: [claim(ids[1], { isOpen: false, pullRequestIsmerged: true })],
   }, parsed[0]);
-  const terminal = analyzeBountyHubInventory(parsed, [merged], [issue]);
+  const terminalPullRequests = githubPullRequests(parsed, [merged], [issue], {
+    [ids[1]]: { state: "closed", merged: true },
+  });
+  const terminal = analyzeBountyHubInventory(parsed, [merged], [issue], terminalPullRequests);
   assert.equal(terminal.candidates.length, 0);
   assert.equal(terminal.evaluations[0].excluded_reason, "merged_claim_present");
 });
@@ -167,13 +200,47 @@ test("BountyHub analysis rejects a stale listing when canonical GitHub says the 
     state_reason: "completed",
     updated_at: "2026-05-23T09:48:45.000Z",
   });
-  const result = analyzeBountyHubInventory(parsed, [detail], [closed]);
+  const result = analyzeBountyHubInventory(parsed, [detail], [closed], []);
   assert.equal(result.candidates.length, 0);
   assert.equal(result.evaluations[0].github_issue_state, "closed");
   assert.equal(result.evaluations[0].excluded_reason, "github_issue_closed");
 
-  const missing = analyzeBountyHubInventory(parsed, [detail], []);
+  const missing = analyzeBountyHubInventory(parsed, [detail], [], []);
   assert.equal(missing.evaluations[0].excluded_reason, "github_issue_evidence_incomplete");
   assert.throws(() => githubIssue(reference, { pull_request: { url: "https://api.github.com/repos/acme/widget/pulls/207" } }),
     /identity is inconsistent/);
+});
+
+test("BountyHub analysis uses canonical pull request state and fails closed on unavailable claims", () => {
+  const row = listing({ amount: "250.00" });
+  const parsed = parseBountyHubPage({ data: [row], hasNextPage: false }).listings;
+  const detail = parseBountyHubDetail({
+    ...row,
+    claims: [claim(ids[1]), claim(ids[2]), claim(ids[3])],
+  }, parsed[0]);
+  const issue = githubIssue(bountyHubGithubIssueReferences(parsed)[0]);
+  const reconciled = githubPullRequests(parsed, [detail], [issue], {
+    [ids[1]]: { state: "closed", merged: false },
+    [ids[2]]: { state: "closed", merged: false },
+  });
+  const result = analyzeBountyHubInventory(parsed, [detail], [issue], reconciled);
+  assert.equal(result.evaluations[0].platform_active_claim_count, 3);
+  assert.equal(result.evaluations[0].active_claim_count, 1);
+  assert.equal(result.evaluations[0].admitted, true);
+
+  const references = bountyHubGithubPullRequestReferences(parsed, [detail], [issue]);
+  const unavailable = references.map((reference) => parseBountyHubGithubPullRequest(
+    reference.claim_id === ids[2] ? null : {
+      url: reference.pull_request_api_url,
+      html_url: reference.pull_request_url,
+      number: reference.pull_request_number,
+      state: "closed",
+      merged: false,
+      updated_at: "2026-08-01T08:30:00.000Z",
+    },
+    reference,
+  ));
+  const incomplete = analyzeBountyHubInventory(parsed, [detail], [issue], unavailable);
+  assert.equal(incomplete.evaluations[0].canonical_claim_evidence_complete, false);
+  assert.equal(incomplete.evaluations[0].excluded_reason, "github_claim_evidence_incomplete");
 });

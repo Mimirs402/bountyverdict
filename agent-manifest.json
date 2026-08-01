@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "product": "BountyVerdict",
-  "release_version": "1.1.22",
-  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.22",
+  "release_version": "1.1.23",
+  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.23",
   "status": "active",
   "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
   "worker_version_id": "cb2e233d-c055-4693-930d-cc7749e99a5e",
@@ -30,7 +30,7 @@
   },
   "mcp": {
     "registry_name": "io.github.Mimirs402/bountyverdict",
-    "server_version": "1.1.22",
+    "server_version": "1.1.23",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
     "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp",

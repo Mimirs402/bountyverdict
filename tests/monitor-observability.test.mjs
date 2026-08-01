@@ -782,7 +782,7 @@ test("directory monitoring tracks ToolHive review and exact in-agent remote cont
   assert.match(distribution, /ToolHive in-agent catalog/);
   assert.match(distribution, /exact seven-tool remote contract/);
   assert.match(parser, /io\.github\.stacklok\/bountyverdict/);
-  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.22"/);
+  assert.match(parser, /TOOLHIVE_SERVER_VERSION = "1\.1\.23"/);
 });
 
 test("directory monitoring tracks Gemini CLI gallery propagation without claiming demand", async () => {
@@ -950,7 +950,7 @@ test("Gemini CLI extension exposes only the hosted paid MCP without secrets", as
   const manifest = JSON.parse(await readFile(geminiExtensionUrl, "utf8"));
   assert.deepEqual(manifest, {
     name: "bountyverdict",
-    version: "1.1.22",
+    version: "1.1.23",
     description: "Paid GitHub bounty selection, CI diagnosis, flaky-run triage, agent-instruction audits, and MCP compatibility checks for autonomous coding agents.",
     mcpServers: {
       bountyverdict: {

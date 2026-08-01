@@ -44,7 +44,7 @@ function selectorResponse(): Response {
   });
 }
 
-function initializeResponse(version = "1.1.22"): Response {
+function initializeResponse(version = "1.1.23"): Response {
   return jsonResponse({
     jsonrpc: "2.0",
     id: 900,
@@ -143,7 +143,7 @@ test("recurring MCP canary proves the free selector and handoff without credenti
     workerVersionOverride: workerVersionId,
   });
   assert.equal(report.healthy, true);
-  assert.equal(report.server_version, "1.1.22");
+  assert.equal(report.server_version, "1.1.23");
   assert.equal(report.worker_version_id, workerVersionId);
   assert.equal(report.payment_or_signing_attempted, false);
   assert.deepEqual(report.checks.map(({ kind, ok }) => ({ kind, ok })), [
@@ -189,7 +189,7 @@ test("release probe verifies one pinned MCP initialize response without tool cal
     },
   });
   assert.deepEqual(report, {
-    server_version: "1.1.22",
+    server_version: "1.1.23",
     worker_version_id: workerVersionId,
   });
   assert.equal(requests.length, 1);
@@ -256,7 +256,7 @@ test("recurring MCP canary rejects an invalid Worker version override before req
       requested = true;
       return initializeResponse();
     },
-    workerVersionOverride: "1.1.22",
+    workerVersionOverride: "1.1.23",
   }), /lowercase UUID/);
   assert.equal(requested, false);
 });

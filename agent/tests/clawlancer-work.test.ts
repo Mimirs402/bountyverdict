@@ -43,11 +43,14 @@ test("Clawlancer transaction parsing fails closed on money and identity drift", 
 test("Clawlancer persisted state reconciles transaction, action, and accounting", () => {
   const transaction = parseClawlancerTransaction(raw("PENDING"));
   const state = {
-    schema_version: 1,
+    schema_version: 2,
     status: "pending",
     checked_at: "2026-07-21T08:49:28.936Z",
     action: "wait_for_funding",
     submitted_now: false,
+    read_only: true,
+    external_actions_enabled: false,
+    delivery_disabled: true,
     transaction,
     artifact: {
       path: "/home/mcr/notes/clawlancer/mimir-reliability-intro.md",
@@ -56,6 +59,9 @@ test("Clawlancer persisted state reconciles transaction, action, and accounting"
     accounting: "no_released_payment_not_revenue",
   };
   assert.equal(parseClawlancerWorkState(state).transaction.amountAtomic, "10000");
+  assert.equal(parseClawlancerWorkState(state).deliveryDisabled, true);
   assert.throws(() => parseClawlancerWorkState({ ...state, action: "submit_work" }), /status or action/);
   assert.throws(() => parseClawlancerWorkState({ ...state, accounting: "release_reported_but_not_onchain_verified_not_revenue" }), /accounting/);
+  assert.throws(() => parseClawlancerWorkState({ ...state, external_actions_enabled: true }), /mutation boundary/);
+  assert.throws(() => parseClawlancerWorkState({ ...state, submitted_now: true }), /cannot submit/);
 });

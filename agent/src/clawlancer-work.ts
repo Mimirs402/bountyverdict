@@ -37,11 +37,14 @@ export type ClawlancerTransaction = {
 };
 
 export type ClawlancerWorkState = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   status: Lowercase<ClawlancerTransactionState>;
   checkedAt: string;
   action: ClawlancerWorkAction;
   submittedNow: boolean;
+  readOnly: true;
+  externalActionsEnabled: false;
+  deliveryDisabled: true;
   transaction: ClawlancerTransaction;
   artifact: { path: string; sha256: string };
   accounting: "no_released_payment_not_revenue" | "release_reported_but_not_onchain_verified_not_revenue";
@@ -141,10 +144,14 @@ export function clawlancerWorkAction(transaction: ClawlancerTransaction): Clawla
 
 export function parseClawlancerWorkState(value: unknown): ClawlancerWorkState {
   const state = object(value, "Clawlancer work state");
-  if (state.schema_version !== 1) throw new Error("Clawlancer work-state schema is unsupported.");
+  if (state.schema_version !== 2) throw new Error("Clawlancer work-state schema is unsupported.");
   const checkedAt = exactString(state.checked_at, "Clawlancer work-state timestamp", /^\d{4}-\d{2}-\d{2}T/, 64);
   if (!Number.isFinite(Date.parse(checkedAt))) throw new Error("Clawlancer work-state timestamp is invalid.");
   if (typeof state.submitted_now !== "boolean") throw new Error("Clawlancer submitted flag is invalid.");
+  if (state.read_only !== true || state.external_actions_enabled !== false || state.delivery_disabled !== true) {
+    throw new Error("Clawlancer work-state mutation boundary is invalid.");
+  }
+  if (state.submitted_now !== false) throw new Error("Read-only Clawlancer reconciliation cannot submit work.");
   const transaction = parseNormalizedTransaction(state.transaction);
   const status = exactString(
     state.status,
@@ -170,11 +177,14 @@ export function parseClawlancerWorkState(value: unknown): ClawlancerWorkState {
     : "no_released_payment_not_revenue";
   if (accounting !== expectedAccounting) throw new Error("Clawlancer work-state accounting is inconsistent.");
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status,
     checkedAt,
     action,
     submittedNow: state.submitted_now,
+    readOnly: true,
+    externalActionsEnabled: false,
+    deliveryDisabled: true,
     transaction,
     artifact: {
       path: exactString(artifact.path, "Clawlancer artifact path", /^\//, 512),

@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile the outstanding Clawlancer transaction read-only every thirty minutes
+
+[Timer]
+OnCalendar=*-*-* *:03,33:00 Europe/Bucharest
+RandomizedDelaySec=30s
+Persistent=true
+Unit=bountyverdict-clawlancer-reconcile.service
+
+[Install]
+WantedBy=timers.target

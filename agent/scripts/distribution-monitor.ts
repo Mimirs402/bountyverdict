@@ -1358,6 +1358,7 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
   const state = JSON.parse(await readFile(publicDemandStateFile, "utf8")) as Record<string, any>;
   const molt = state.sources?.moltjobs;
   const open = state.sources?.openjobs;
+  const clankonomy = state.sources?.clankonomy;
   const taskmarket = state.sources?.taskmarket;
   const taskmarketTracked = taskmarket?.tracked_worker;
   const sourceStatus = state.source_status;
@@ -1368,6 +1369,7 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     !Number.isSafeInteger(degradedSources) || degradedSources < 0 ||
     !molt || typeof molt !== "object" || Array.isArray(molt) ||
     !open || typeof open !== "object" || Array.isArray(open) ||
+    !clankonomy || typeof clankonomy !== "object" || Array.isArray(clankonomy) ||
     !taskmarket || typeof taskmarket !== "object" || Array.isArray(taskmarket) ||
     !taskmarketTracked || typeof taskmarketTracked !== "object" || Array.isArray(taskmarketTracked)) {
     throw new Error("Public demand watcher state is malformed or not strictly read-only.");
@@ -1379,7 +1381,7 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     if (!sourceStatus || typeof sourceStatus !== "object" || Array.isArray(sourceStatus)) {
       throw new Error("Public demand watcher source status is malformed.");
     }
-    const keys = ["moltjobs", "openjobs", "taskmarket_inventory", "taskmarket_tracked"];
+    const keys = ["moltjobs", "openjobs", "clankonomy", "taskmarket_inventory", "taskmarket_tracked"];
     let sourceErrors = 0;
     for (const key of keys) {
       const status = sourceStatus[key];
@@ -1408,6 +1410,9 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     "rejected_unfunded_or_expired", "rejected_funded_non_matches",
   ]], [open, [
     "open_jobs", "usdc_open_jobs", "eligible_usdc_open_jobs", "wage_open_jobs", "exact_candidate_count",
+  ]], [clankonomy, [
+    "active_bounties", "active_usdc_bounties", "details_verified", "chain_verified_active_bounties",
+    "fresh_low_competition_candidate_count", "exact_candidate_count",
   ]], [taskmarket, [
     "open_tasks", "api_escrow_backed_open_tasks", "unassigned_unexpired_submission_open_tasks",
     "exact_candidate_count", "rejected_escrow_non_matches", "excluded_expired_assigned_or_closed_window",
@@ -1655,6 +1660,7 @@ async function publicDemandStatus(): Promise<Record<string, any>> {
     source_status: sourceStatus || null,
     moltjobs: molt,
     openjobs: open,
+    clankonomy,
     taskmarket,
     excluded: state.sources.excluded || {},
     measurement: "public_inventory_exact_fits_submissions_and_API_awards_are_not_purchases_or_revenue; only non-owner awards with successful Base receipts, exact task topics, and exact Base-USDC worker transfers settle",
@@ -2601,6 +2607,7 @@ function renderMonitorNote(report: Record<string, any>): string {
   const publicDemand = report.acquisition?.public_demand_watch || {};
   const moltDemand = publicDemand.moltjobs || {};
   const openDemand = publicDemand.openjobs || {};
+  const clankonomyDemand = publicDemand.clankonomy || {};
   const taskmarketDemand = publicDemand.taskmarket || {};
   const buyerQuerySummary = report.discovery?.buyer_query_summary || {};
   const buyerQueryBenchmark = report.discovery?.buyer_query_benchmark || {};
@@ -2798,7 +2805,7 @@ function renderMonitorNote(report: Record<string, any>): string {
 - **NEAR Agent Market listings:** ${report.marketplaces?.near?.listing_contracts_verified ? `${Number(report.marketplaces.near.service_count || 0)} / ${Number(report.marketplaces.near.expected_service_count || NEAR_MARKET_LISTINGS.length)} exact contracts verified` : "unavailable or drifted"}
 - **PayanAgent offers:** ${report.marketplaces?.payan?.listing_contracts_verified ? `${Number(report.marketplaces.payan.offer_count || 0)} / ${Number(report.marketplaces.payan.expected_offer_count || PAYAN_OFFERS.length)} exact contracts verified` : "unavailable or drifted"} (${payanAttributedSales} delivered sales, attributed inside direct onchain totals)
 - **Payan exact-fit demand capture:** ${payanDemand.healthy ? "enabled and healthy" : "unavailable or degraded"}; ${Number(payanDemand.open_requests_seen || 0)} open seen, ${Number(payanDemand.exact_matches || 0)} exact fits, ${Number(payanDemand.tracked_requests || 0)} tracked bids, ${Number(payanDemand.accepted || 0)} accepted, ${Number(payanDemand.fulfilled || 0)} fulfilled, ${Number(payanDemand.approved || 0)} approved (never bids on incomplete or mismatched briefs)
-- **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits; Taskmarket ${Number(taskmarketDemand.api_escrow_backed_open_tasks || 0)} API escrow-backed / $${String(taskmarketDemand.api_escrow_backed_reward_usdc || "0")} USDC and ${Number(taskmarketDemand.exact_candidate_count || 0)} exact existing-product fits (inventory is never revenue)
+- **Public funded-demand watcher:** ${publicDemand.healthy ? "healthy and strictly read-only" : "unavailable or degraded"}; MoltJobs ${Number(moltDemand.verified_funded_open_jobs || 0)} verified funded / $${String(moltDemand.verified_funded_budget_usdc || "0")} USDC and ${Number(moltDemand.exact_candidate_count || 0)} exact fits; Clankonomy ${Number(clankonomyDemand.chain_verified_active_bounties || 0)} chain-verified active / $${String(clankonomyDemand.gross_active_usdc || "0")} USDC and ${Number(clankonomyDemand.fresh_low_competition_candidate_count || 0)} strict opportunities; OpenJobs ${Number(openDemand.usdc_open_jobs || 0)} USDC jobs and ${Number(openDemand.exact_candidate_count || 0)} exact fits; Taskmarket ${Number(taskmarketDemand.api_escrow_backed_open_tasks || 0)} API escrow-backed / $${String(taskmarketDemand.api_escrow_backed_reward_usdc || "0")} USDC and ${Number(taskmarketDemand.exact_candidate_count || 0)} exact existing-product fits (inventory is never revenue)
 - **Taskmarket worker settlement:** ${Number(taskmarketTracked.tracked_submissions || 0)} tracked submissions for ${taskmarketTracked.worker_address || "unavailable"}; ${Number(taskmarketTracked.submission_window_open_pending_submissions || 0)} live-window pending ($${String(taskmarketTracked.submission_window_open_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.expired_awaiting_finalization_pending_submissions || 0)} expired awaiting requester finalization ($${String(taskmarketTracked.expired_awaiting_finalization_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.pre_expiry_window_closed_pending_submissions || 0)} pre-expiry closed awaiting finalization ($${String(taskmarketTracked.pre_expiry_window_closed_net_potential_usdc || "0")} net potential), ${Number(taskmarketTracked.rejected_submissions || 0)} rejected, ${Number(taskmarketTracked.unverified_award_submissions || 0)} API awards awaiting/failed Base verification, ${taskmarketPurchases} onchain-verified awards / ${money(taskmarketRevenueValue)} worker earnings (all pending amounts are potential, and submissions, submit transactions, API award rows, or expiry alone remain zero purchases and zero revenue)
 - **Agentic Market automatic directory:** ${report.marketplaces?.agentic_market?.exact_contracts_verified ? `${report.marketplaces.agentic_market.endpoint_count} / 7 exact contracts indexed` : "unavailable or drifted"}${agenticMissing.length ? `; pending ${agenticMissing.join(", ")}` : ""}
 - **Agent402 open router:** ${report.acquisition?.agent402?.listed ? `listed and ${report.acquisition.agent402.routable ? "routable" : "not routable"}; ${report.acquisition.agent402.observed_tool_count ?? "unknown"} indexed operations versus ${report.acquisition.agent402.expected_paid_tool_count ?? 7} paid products; scope ${report.acquisition.agent402.indexed_scope_status || "unknown"}` : "unavailable or missing"} (${report.acquisition?.agent402?.listing_source || "unknown source"}; passive cached index health only, not impressions or demand; semantic owner-query monitoring disabled)

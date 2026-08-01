@@ -71,6 +71,7 @@ import {
   MCP_MARKET_COM_MAX_PAGE_BYTES,
   parseMcpMarketComListing,
 } from "../src/mcp-market-com.ts";
+import { readAgent402SellerIndex } from "../src/agent402-index.ts";
 
 if (process.env.BOUNTYVERDICT_AUDITED_ROTATION_ACTIVE !== "directory") {
   throw new Error("Directory retrieval must run through run-audited-monitor.ts after establishing a draining funnel rotation.");
@@ -2115,23 +2116,17 @@ async function mcpObservatoryStatus(): Promise<Record<string, unknown>> {
 
 async function agent402Status(): Promise<Record<string, unknown>> {
   try {
-    const indexResponse = await fetch(`${agent402Api}/index`, {
-      headers: { "User-Agent": "bountyverdict-directory-monitor" },
-      signal: AbortSignal.timeout(timeoutMs),
+    const index = await readAgent402SellerIndex({
+      apiUrl: `${agent402Api}/index`,
+      targetOrigin: productionOrigin,
+      timeoutMs,
     });
-    if (!indexResponse.ok) {
-      return { url: "https://agent402.tools/marketplace", http_status: indexResponse.status, listed: false, status: "unexpected_response" };
-    }
-    const index = await indexResponse.json() as {
-      totals?: Record<string, unknown>;
-      sellers?: Array<Record<string, unknown>>;
-    };
-    const seller = (index.sellers || []).find((entry) => entry.origin === productionOrigin);
+    const seller = index.seller;
     const observedToolCount = typeof seller?.toolCount === "number" ? seller.toolCount : null;
     return {
       url: "https://agent402.tools/marketplace",
       api_url: `${agent402Api}/index`,
-      http_status: indexResponse.status,
+      http_status: 200,
       listed: Boolean(seller),
       status: seller ? "listed" : "missing",
       routable: seller?.routable === true,
@@ -2145,7 +2140,9 @@ async function agent402Status(): Promise<Record<string, unknown>> {
         : observedToolCount === expectedAgent402PaidTools
           ? "exact_paid_catalog"
           : "overindexed_non_paid_operations",
-      ecosystem_sellers: index.totals?.sellers ?? null,
+      ecosystem_sellers: index.ecosystemSellers,
+      index_pages_scanned: index.pagesScanned,
+      index_sellers_scanned: index.sellersScanned,
       semantic_query_monitoring: "disabled",
       semantic_query_reason: "Owner-authored searches are not impressions or demand and can trigger downstream origin traffic.",
       measurement: "passive_cached_index_presence_health_and_scope_not_search_impressions_tool_calls_customer_purchases_or_revenue",

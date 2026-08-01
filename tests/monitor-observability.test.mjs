@@ -1238,7 +1238,10 @@ test("directory monitoring validates the organic Agent Tools Cloud placement wit
 });
 
 test("all scheduled broad directory audits establish or reuse a funnel drain", async () => {
-  const directoryService = await readFile(new URL("../ops/systemd/bountyverdict-directory-monitor.service", import.meta.url), "utf8");
+  const [directoryService, directoryTimer] = await Promise.all([
+    readFile(new URL("../ops/systemd/bountyverdict-directory-monitor.service", import.meta.url), "utf8"),
+    readFile(directoryTimerUrl, "utf8"),
+  ]);
   const snapshotService = await readFile(new URL("../ops/systemd/bountyverdict-acquisition-snapshot.service", import.meta.url), "utf8");
   assert.match(directoryService, /Environment=AUDITED_MONITOR=directory/);
   assert.match(directoryService, /scripts\/run-audited-monitor\.ts/);
@@ -1248,6 +1251,9 @@ test("all scheduled broad directory audits establish or reuse a funnel drain", a
   assert.doesNotMatch(snapshotService, /ExecStart=.*scripts\/(?:directory|distribution)-monitor\.ts/);
   assert.match(directoryService, /Description=BountyVerdict read-only agent-directory listing monitor/);
   assert.doesNotMatch(directoryService, /submit|register|publish|MUTATION|FORCE_SUBMIT/i);
+  assert.match(directoryTimer, /OnActiveSec=25h/);
+  assert.match(directoryTimer, /OnUnitActiveSec=48h/);
+  assert.doesNotMatch(directoryTimer, /OnCalendar=/);
   assert.doesNotMatch(snapshotService, /submit-agentskill|FORCE_SUBMIT|DIRECTORY_MUTATION/i);
 });
 
@@ -1339,14 +1345,16 @@ test("acquisition snapshot retries are bounded and cannot overwrite a successful
   assert.match(script, /Date\.now\(\) < Date\.parse\(EARNED_PLACEMENT_ENDS_AT\)/);
 });
 
-test("broad retrieval audits share a bounded six-hour measurement window", async () => {
+test("scheduled directory retrieval preserves a full clean funnel measurement window", async () => {
   const [directoryTimer, marketplaceTimer] = await Promise.all([
     readFile(directoryTimerUrl, "utf8"),
     readFile(marketplaceTimerUrl, "utf8"),
   ]);
-  assert.match(directoryTimer, /OnCalendar=\*-\*-\* 05,11,17,23:15:00/);
+  assert.match(directoryTimer, /OnActiveSec=25h/);
+  assert.match(directoryTimer, /OnUnitActiveSec=48h/);
+  assert.doesNotMatch(directoryTimer, /OnCalendar=/);
   assert.match(marketplaceTimer, /OnCalendar=\*-\*-\* 05,11,17,23:17:00/);
-  assert.doesNotMatch(directoryTimer, /OnUnitActiveSec=1h|hourly/i);
+  assert.doesNotMatch(directoryTimer, /OnUnitActiveSec=(?:1|6|12|24)h|hourly/i);
   assert.doesNotMatch(marketplaceTimer, /OnUnitActiveSec=1h|hourly/i);
 });
 

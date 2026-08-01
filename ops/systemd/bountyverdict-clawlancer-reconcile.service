@@ -1,0 +1,32 @@
+[Unit]
+Description=BountyVerdict read-only Clawlancer status and payout reconciler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=RPC_URL=https://mainnet.base.org
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/clawlancer-reconcile.ts
+TimeoutStartSec=1min
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/bountyverdict
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+UMask=0077

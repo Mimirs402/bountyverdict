@@ -1141,21 +1141,35 @@ test("only independently funded blocker-free Taskmarket work reaches the isolate
   assert.match(retryTimer, /^OnUnitInactiveSec=10min$/m);
 });
 
-test("Clawlancer delivery and revenue require exact Base escrow evidence", async () => {
-  const [distribution, worker, chain, lock] = await Promise.all([
+test("Clawlancer reconciliation is read-only while revenue still requires exact Base escrow evidence", async () => {
+  const [distribution, observer, service, timer, disabled, chain, lock] = await Promise.all([
     readFile(distributionUrl, "utf8"),
-    readFile(new URL("../agent/scripts/clawlancer-work.ts", import.meta.url), "utf8"),
+    readFile(new URL("../agent/scripts/clawlancer-reconcile.ts", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-clawlancer-reconcile.service", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-clawlancer-reconcile.timer", import.meta.url), "utf8"),
+    readFile(new URL("../ops/systemd/bountyverdict-clawlancer-work.service.d/99-demand-first-disabled.conf", import.meta.url), "utf8"),
     readFile(new URL("../agent/src/clawlancer-chain.ts", import.meta.url), "utf8"),
     readFile(new URL("../agent/src/exclusive-run.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(worker, /verifyClawlancerFunding\(client, transaction\)/);
-  assert.match(worker, /acquireExclusiveRun\(LOCK_PATH\)/);
+  assert.match(observer, /verifyClawlancerFunding\(client, transaction\)/);
+  assert.match(observer, /verifyClawlancerRelease\(client, transaction\)/);
+  assert.match(observer, /acquireExclusiveRun\(LOCK_PATH\)/);
+  assert.match(observer, /method: "GET"/);
+  assert.match(observer, /external_actions_enabled: false/);
+  assert.match(observer, /delivery_disabled: true/);
+  assert.doesNotMatch(observer, /\/deliver|method: "POST"|deliverable:/);
+  assert.match(service, /Description=BountyVerdict read-only Clawlancer status and payout reconciler/);
+  assert.match(service, /ProtectSystem=strict/);
+  assert.match(service, /ProtectHome=read-only/);
+  assert.match(timer, /^OnCalendar=\*-\*-\* \*:03,33:00 Europe\/Bucharest$/m);
+  assert.match(disabled, /^ExecCondition=\/usr\/bin\/false$/m);
   assert.match(chain, /event Created\(bytes32 indexed id, address indexed buyer, address indexed seller/);
   assert.match(chain, /event Released\(bytes32 indexed id, uint256 sellerAmount, uint256 feeAmount\)/);
   assert.match(chain, /event\.from\.toLowerCase\(\) === CLAWLANCER_CHAIN\.escrowAddress\.toLowerCase\(\)/);
   assert.match(chain, /event\.sellerAmount \+ event\.feeAmount === expectedAmount/);
   assert.match(distribution, /verifyClawlancerRelease\(client, transaction\)/);
   assert.match(distribution, /verified_worker_earnings_usdc/);
+  assert.match(distribution, /read-only reconciliation only; delivery remains disabled/);
   assert.match(distribution, /errors\.push\(`Clawlancer canary:/);
   assert.match(lock, /await mkdir\(path, \{ mode: 0o700 \}\)/);
 });

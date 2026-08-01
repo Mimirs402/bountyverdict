@@ -13,7 +13,7 @@ test("free self-evaluation surfaces advertise the paid contract", () => {
     mcpdrift: "$0.02",
   });
   assert.match(spec.info.title, /Agent Decision APIs/);
-  assert.equal(spec.info.version, "1.1.24");
+  assert.equal(spec.info.version, "1.1.25");
   assert.match(spec.info.description, /Seven bounded/);
   assert.match(spec.info["x-guidance"], /service_reuse/);
   assert.match(spec.info["x-catalog-scope"], /exactly seven paid POST/);

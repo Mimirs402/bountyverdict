@@ -1,0 +1,14 @@
+[Unit]
+Description=Bounded read-only Arena42 funded-competition monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/sandbox/bountyverdict/agent
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node --experimental-strip-types scripts/arena42-watch.ts
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+TimeoutStartSec=5min

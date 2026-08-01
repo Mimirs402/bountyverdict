@@ -12,6 +12,9 @@ const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.u
 const paymentSmokeUrl = new URL("../agent/scripts/payment-smoke.ts", import.meta.url);
 const demandServiceUrl = new URL("../ops/systemd/bountyverdict-demand-watch.service", import.meta.url);
 const demandTimerUrl = new URL("../ops/systemd/bountyverdict-demand-watch.timer", import.meta.url);
+const arena42WatchUrl = new URL("../agent/scripts/arena42-watch.ts", import.meta.url);
+const arena42ServiceUrl = new URL("../ops/systemd/bountyverdict-arena42-watch.service", import.meta.url);
+const arena42TimerUrl = new URL("../ops/systemd/bountyverdict-arena42-watch.timer", import.meta.url);
 const opportunityAgentServiceUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.service", import.meta.url);
 const opportunityAgentPathUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent.path", import.meta.url);
 const opportunityAgentRetryTimerUrl = new URL("../ops/systemd/bountyverdict-opportunity-agent-retry.timer", import.meta.url);
@@ -1099,6 +1102,28 @@ test("fresh high-confidence marketplace markers launch one deduplicated guarded 
   assert.doesNotMatch(workflow, /\bexec\(|shell:\s*true/);
   assert.equal((workflow.match(/execFileAsync\(/g) || []).length, 1);
   assert.doesNotMatch(workflow, /node_modules\/\.bin\/taskmarket|["'](?:submit|claim|pitch)["']/i);
+});
+
+test("Arena42 monitoring is read-only and requires exact Base escrow evidence", async () => {
+  const [watcher, service, timer] = await Promise.all([
+    readFile(arena42WatchUrl, "utf8"),
+    readFile(arena42ServiceUrl, "utf8"),
+    readFile(arena42TimerUrl, "utf8"),
+  ]);
+  assert.match(watcher, /joinable/);
+  assert.match(watcher, /limit", "100"/);
+  assert.match(watcher, /ARENA42_DEPOSIT_TOPIC/);
+  assert.match(watcher, /method: "eth_getTransactionReceipt"/);
+  assert.match(watcher, /read_only: true/);
+  assert.match(watcher, /external_actions_enabled: false/);
+  assert.match(watcher, /coordinateOpportunityTrigger/);
+  assert.doesNotMatch(watcher, /Authorization|api[_-]?key|private[_-]?key|wallet[_-]?secret/i);
+  assert.doesNotMatch(watcher, /eth_sendRawTransaction|eth_sendTransaction/);
+  assert.match(service, /NoNewPrivileges=yes/);
+  assert.match(service, /UMask=0077/);
+  assert.doesNotMatch(service, /EnvironmentFile/);
+  assert.match(timer, /OnUnitInactiveSec=1h/);
+  assert.match(timer, /Persistent=true/);
 });
 
 test("only independently funded blocker-free Taskmarket work reaches the isolated no-resubmit adapter", async () => {

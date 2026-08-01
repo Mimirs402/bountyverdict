@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
   "product": "BountyVerdict",
-  "release_version": "1.1.23",
-  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.23",
-  "status": "active",
-  "production_api": "https://bountyverdict-agent-production.mimirslab.workers.dev",
-  "worker_version_id": "6911ca71-f016-4674-9730-6628d43f7211",
+  "release_version": "1.1.24",
+  "release_url": "https://github.com/Mimirs402/bountyverdict/releases/tag/v1.1.24",
+  "status": "awaiting_production",
+  "production_api": null,
+  "worker_version_id": null,
   "test_api": "https://bountyverdict-agent.mimirslab.workers.dev",
   "test_network": "eip155:84532",
   "test_verification": {
@@ -30,7 +30,7 @@
   },
   "mcp": {
     "registry_name": "io.github.Mimirs402/bountyverdict",
-    "server_version": "1.1.23",
+    "server_version": "1.1.24",
     "transport": "streamable-http",
     "protocol_version": "2025-11-25",
     "url": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp",
@@ -212,7 +212,7 @@
     "check_mcp_tool_drift": "https://mimirs402.github.io/bountyverdict/skills/check-mcp-tool-drift/SKILL.md"
   },
   "source": "https://github.com/Mimirs402/bountyverdict",
-  "updated_at": "2026-08-01T10:13:57.343Z",
+  "updated_at": "2026-08-01T12:42:16.000Z",
   "marketplaces": {
     "the402": {
       "provider_id": "p_d4b4ece39162409b",

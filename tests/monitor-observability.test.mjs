@@ -54,7 +54,7 @@ test("frequent reporting samples merchant activity without semantic retrieval wh
   assert.match(distribution, /agentmrr: await agentMrrStatus\(\)/);
   assert.match(distribution, /AgentMRR marketplace:[^\n]+tries[^\n]+upvotes/);
   assert.match(distribution, /public engagement counters are acquisition telemetry only, never purchases or revenue/);
-  assert.match(distribution, /mcp_registry: previousReport\.acquisition\?\.mcp_registry/);
+  assert.match(distribution, /mcp_registry: await mcpRegistryStatus\(\)/);
   assert.match(distribution, /if \(reportOnly\) \{[\s\S]+mcp_downstreams: previousReport\.acquisition\?\.mcp_downstreams[\s\S]+\} else \{\s+try \{\s+acquisition = \{[\s\S]+mcp_downstreams: await mcpDownstreamStatus/);
   assert.match(distribution, /agenticMarket = previousReport\.marketplaces\?\.agentic_market/);
   assert.match(distribution, /Security action required:[^\n]+x402\.jobs API key/);
@@ -749,6 +749,8 @@ test("official MCP Registry monitoring tolerates its observed slow response with
   const distribution = await readFile(new URL("../agent/scripts/distribution-monitor.ts", import.meta.url), "utf8");
   assert.match(distribution, /const MCP_REGISTRY_TIMEOUT_MS = 45_000/);
   assert.match(distribution, /MCP_REGISTRY_TIMEOUT_MS,\n\s*\)/);
+  assert.match(distribution, /mcp_registry: await mcpRegistryStatus\(\)/);
+  assert.doesNotMatch(distribution, /previousReport\.acquisition\?\.mcp_registry/);
   assert.doesNotMatch(distribution, /monitoredFetchWithNetworkRetry\(`https:\/\/registry\.modelcontextprotocol\.io/);
 });
 

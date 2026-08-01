@@ -3205,26 +3205,15 @@ if (reportOnly) {
   }
 }
 
-if (reportOnly) {
+try {
   acquisition = {
     ...acquisition,
-    mcp_registry: previousReport.acquisition?.mcp_registry || {
-      listed: false,
-      checked_at: null,
-      status: "awaiting_full_audited_retrieval",
-    },
+    mcp_registry: await mcpRegistryStatus(),
   };
-} else {
-  try {
-    acquisition = {
-      ...acquisition,
-      mcp_registry: await mcpRegistryStatus(),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
-    errors.push(`MCP Registry: ${message}`);
-  }
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  acquisition = { ...acquisition, mcp_registry: { listed: false, checked_at: checkedAt, error: message } };
+  errors.push(`MCP Registry: ${message}`);
 }
 
 try {

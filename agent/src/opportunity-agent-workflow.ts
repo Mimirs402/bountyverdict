@@ -22,15 +22,17 @@ const publicEvidenceHosts = new Set([
   "api.moltjobs.io",
   "api.clankonomy.com",
   "api.bountyhub.dev",
+  "api.arena42.ai",
+  "arena42.ai",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v6";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v7";
 
 export type EscrowOpportunityCandidate = {
-  market: "taskmarket" | "moltjobs" | "clankonomy";
+  market: "taskmarket" | "moltjobs" | "clankonomy" | "arena42";
   task_id: string;
   title: string;
-  mode: "bounty" | "competitive_job";
+  mode: "bounty" | "competitive_job" | "competition";
   gross_reward_usdc: string;
   net_reward_usdc: string;
   submission_count: number;
@@ -367,11 +369,12 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         selection_basis: string(candidate.selection_basis, "Opportunity selection basis", 500),
       };
     }
-    if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs" && candidate.market !== "clankonomy") {
+    if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs" && candidate.market !== "clankonomy" &&
+      candidate.market !== "arena42") {
       throw new Error("Opportunity candidate has unsupported workflow flags.");
     }
     const market = candidate.market;
-    const mode = market === "moltjobs" ? "competitive_job" : "bounty";
+    const mode = market === "moltjobs" ? "competitive_job" : market === "arena42" ? "competition" : "bounty";
     if (candidate.mode !== mode) throw new Error("Opportunity candidate has an unsupported market mode.");
     const hoursRemaining = Number(candidate.hours_remaining);
     if (!Number.isFinite(hoursRemaining) || hoursRemaining < 0 || hoursRemaining > 24 * 366) {
@@ -427,7 +430,7 @@ export function parseRememberedOpportunityFingerprints(value: unknown): string[]
     throw new Error("Remembered opportunity fingerprints are malformed.");
   }
   const legacyPattern = /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i;
-  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|(?:moltjobs|clankonomy):[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
+  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|(?:moltjobs|clankonomy|arena42):[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
   const fingerprints = value.map((item) => {
     const parsed = string(item, "Remembered opportunity fingerprint", 400);
     if (!legacyPattern.test(parsed) && !crossMarketPattern.test(parsed)) {
@@ -453,7 +456,7 @@ export function buildOpportunityTrigger(
     ? `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.listing_snapshot_sha256}`
     : `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.escrow_tx_hash.toLowerCase()}`;
   const migratedRemembered = remembered.map((entry) => {
-    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("clankonomy:") || entry.startsWith("github_algora:") ||
+    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("clankonomy:") || entry.startsWith("arena42:") || entry.startsWith("github_algora:") ||
       entry.startsWith("github_bountyhub:")) {
       return entry;
     }
@@ -593,7 +596,7 @@ export function parseOpportunityAssessment(value: unknown, trigger: OpportunityT
       220,
       triggerCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : triggerCandidate.market === "moltjobs" || triggerCandidate.market === "clankonomy"
+        : triggerCandidate.market === "moltjobs" || triggerCandidate.market === "clankonomy" || triggerCandidate.market === "arena42"
           ? uuidPattern
           : githubIssueIdPattern,
     );
@@ -683,7 +686,7 @@ export function parseOpportunityPreparationResult(
       220,
       expectedCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : expectedCandidate.market === "moltjobs" || expectedCandidate.market === "clankonomy"
+        : expectedCandidate.market === "moltjobs" || expectedCandidate.market === "clankonomy" || expectedCandidate.market === "arena42"
           ? uuidPattern
           : githubIssueIdPattern,
     ).toLowerCase() !== taskId.toLowerCase()) {
@@ -783,6 +786,13 @@ function canonicalOpportunityEvidenceUrls(candidate: OpportunityCandidate): stri
   if (candidate.market === "clankonomy") {
     return [
       `https://api.clankonomy.com/bounties/${candidate.task_id}`,
+      `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
+    ];
+  }
+  if (candidate.market === "arena42") {
+    return [
+      `https://api.arena42.ai/api/competitions/${candidate.task_id}`,
+      `https://arena42.ai/competition/${candidate.task_id}`,
       `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
     ];
   }

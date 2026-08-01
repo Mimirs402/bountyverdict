@@ -289,6 +289,7 @@ function withIssueHunt(base: typeof fetch, pageOverrides: Record<string, unknown
 function withLightningBounties(
   base: typeof fetch,
   overrides: Record<string, unknown> = {},
+  rewardOverrides: Record<string, unknown> = {},
 ): typeof fetch {
   const record = {
     id: "9035b808-41cf-4d64-b251-f0871cd0dd20",
@@ -313,8 +314,27 @@ function withLightningBounties(
   const page = `<script>self.__next_f.push(${JSON.stringify([1, payload])})</script>`;
   return async (input, init) => {
     const url = new URL(String(input));
-    if (url.origin === "https://app.lightningbounties.com") {
+    if (url.href === "https://app.lightningbounties.com/") {
       return new Response(page, { headers: { "content-type": "text/html" } });
+    }
+    if (url.origin === "https://app.lightningbounties.com" && url.pathname === "/api/rewards/") {
+      return Response.json([{
+        created_at: "2026-06-23T17:43:23.127896",
+        modified_at: "2026-06-23T17:43:23.127896",
+        id: "79d438e3-518d-4ec1-9c6f-b3a384399886",
+        issue_id: record.id,
+        rewarder_id: "87d0b35b-9b2a-44ff-a5e5-e62b63a9daaf",
+        reward_sats: record.total_reward_sats,
+        unlocks_at: "2026-07-23T17:43:22.427000Z",
+        expires_at: null,
+        issue_data: {
+          id: record.id,
+          issue_number: record.issue_number,
+          title: "Add a stable parser",
+          is_closed: record.is_closed,
+        },
+        ...rewardOverrides,
+      }]);
     }
     return base(input, init);
   };
@@ -684,6 +704,24 @@ test("verifies locked Lightning Bounties sats without relabeling them as USD", a
   const listing = result.signals.find((signal) => signal.label === "Trusted platform listing found");
   assert.match(listing?.detail || "", /50,000 sats/);
   assert.doesNotMatch(listing?.detail || "", /\$50000 USD/);
+});
+
+test("does not trust a stale aggregate locked total over an exact unlocked reward", async () => {
+  const lightningIssue = { ...issue, id: 4_727_309_482, comments: 0 };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withLightningBounties(githubMock([], null, lightningIssue), {}, {
+      unlocks_at: "2026-07-19T17:43:22.427000Z",
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(result.reward.state, "PROMISED");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Platform pay-when-solved promise found" &&
+    /50,000 sats as unlocked\/reclaimable/.test(signal.detail)
+  ));
 });
 
 test("hard-stops an awarded Lightning bounty", async () => {

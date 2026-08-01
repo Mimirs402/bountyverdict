@@ -1,4 +1,5 @@
 const LIGHTNING_BOUNTIES_URL = "https://app.lightningbounties.com/";
+const LIGHTNING_BOUNTIES_REWARDS_URL = new URL("api/rewards/", LIGHTNING_BOUNTIES_URL);
 const LIGHTNING_BOUNTIES_MAX_RESPONSE_BYTES = 1_000_000;
 const LIGHTNING_BOUNTIES_MAX_SCRIPTS = 256;
 const LIGHTNING_BOUNTIES_MAX_RECORDS = 100;
@@ -29,8 +30,16 @@ export type LightningBountiesEvidence = {
 
 type NormalizedRecord = {
   id: string;
-  evidence: LightningBountiesEvidence;
+  listing: LightningBountiesListing;
   fingerprint: string;
+};
+
+export type LightningBountiesListing = {
+  platform_issue_id: string;
+  state: "OPEN" | "AWARDED";
+  total_rewards: number;
+  total_reward_sats: number;
+  unexpired_total_rewards: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -222,26 +231,22 @@ function normalizedRecord(
 
   const state = hasWinner ? "AWARDED" : "OPEN";
   if (state === "OPEN" && record.unexpired_total_rewards === 0) return null;
-  const evidence: LightningBountiesEvidence = {
-    platform: "Lightning Bounties",
-    verification: "TRUSTED_PLATFORM_API",
+  const listing: LightningBountiesListing = {
+    platform_issue_id: record.id.toLowerCase(),
     state,
-    amount: record.unexpired_total_rewards,
-    secured_amount: record.unexpired_total_rewards - record.unlocked_total_rewards,
-    reclaimable_amount: record.unlocked_total_rewards,
-    currency: "SATS",
-    evidence_url: LIGHTNING_BOUNTIES_URL,
+    total_rewards: Number(record.total_rewards),
+    total_reward_sats: record.total_reward_sats,
+    unexpired_total_rewards: record.unexpired_total_rewards,
   };
   return {
     id: record.id.toLowerCase(),
-    evidence,
+    listing,
     fingerprint: JSON.stringify({
       route: `${route.owner}/${route.repo}#${route.number}`.toLowerCase(),
       repository_id: record.repository_id.toLowerCase(),
       state,
-      amount: evidence.amount,
-      secured_amount: evidence.secured_amount,
-      reclaimable_amount: evidence.reclaimable_amount,
+      unexpired_total_rewards: listing.unexpired_total_rewards,
+      unlocked_total_rewards: record.unlocked_total_rewards,
       total_rewards: record.total_rewards,
       total_reward_sats: record.total_reward_sats,
       winner_id: typeof record.winner_id === "string" ? record.winner_id.toLowerCase() : null,
@@ -250,11 +255,11 @@ function normalizedRecord(
   };
 }
 
-export function parseLightningBountiesPage(
+export function parseLightningBountiesListingPage(
   html: unknown,
   githubIssueId: number,
   routes: readonly LightningBountiesIssueRoute[],
-): LightningBountiesEvidence | null {
+): LightningBountiesListing | null {
   if (typeof html !== "string" || html.length < 1 || html.length > LIGHTNING_BOUNTIES_MAX_RESPONSE_BYTES ||
       !Number.isSafeInteger(githubIssueId) || githubIssueId < 1 || !validRoutes(routes)) return null;
   const chunks = rscChunks(html);
@@ -272,27 +277,130 @@ export function parseLightningBountiesPage(
     matches.set(normalized.id, normalized);
   }
   if (matches.size !== 1) return null;
-  return [...matches.values()][0].evidence;
+  return [...matches.values()][0].listing;
+}
+
+type Timestamp = number | null | "INVALID";
+
+function optionalTimestamp(value: unknown): Timestamp {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value)) return "INVALID";
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : "INVALID";
+}
+
+function requiredTimestamp(value: unknown): number | null {
+  const parsed = optionalTimestamp(value);
+  return typeof parsed === "number" ? parsed : null;
+}
+
+export function parseLightningBountiesRewards(
+  payload: unknown,
+  listing: LightningBountiesListing,
+  now: Date,
+): LightningBountiesEvidence | null {
+  if (!Array.isArray(payload) || payload.length < 1 || payload.length > LIGHTNING_BOUNTIES_MAX_RECORDS ||
+      !isRecord(listing) || !UUID.test(listing.platform_issue_id) ||
+      (listing.state !== "OPEN" && listing.state !== "AWARDED") ||
+      !Number.isSafeInteger(listing.total_rewards) || listing.total_rewards < 1 ||
+      listing.total_rewards > LIGHTNING_BOUNTIES_MAX_RECORDS ||
+      !isSafeNonNegativeInteger(listing.total_reward_sats) || listing.total_reward_sats < 1 ||
+      !isSafeNonNegativeInteger(listing.unexpired_total_rewards) ||
+      listing.unexpired_total_rewards > listing.total_reward_sats ||
+      !(now instanceof Date) || !Number.isFinite(now.getTime()) ||
+      payload.length !== listing.total_rewards) return null;
+
+  const seen = new Set<string>();
+  let total = 0;
+  let unexpired = 0;
+  let secured = 0;
+  let reclaimable = 0;
+  for (const value of payload) {
+    if (!isRecord(value) || typeof value.id !== "string" || !UUID.test(value.id) ||
+        typeof value.issue_id !== "string" ||
+        value.issue_id.toLowerCase() !== listing.platform_issue_id ||
+        !isSafeNonNegativeInteger(value.reward_sats) || value.reward_sats < 1 ||
+        requiredTimestamp(value.created_at) === null || requiredTimestamp(value.modified_at) === null ||
+        !isRecord(value.issue_data) || typeof value.issue_data.id !== "string" ||
+        value.issue_data.id.toLowerCase() !== listing.platform_issue_id ||
+        typeof value.issue_data.is_closed !== "boolean" ||
+        value.issue_data.is_closed !== (listing.state === "AWARDED")) return null;
+    const id = value.id.toLowerCase();
+    if (seen.has(id)) return null;
+    seen.add(id);
+
+    const unlocksAt = optionalTimestamp(value.unlocks_at);
+    const expiresAt = optionalTimestamp(value.expires_at);
+    if (unlocksAt === "INVALID" || expiresAt === "INVALID" ||
+        (typeof expiresAt === "number" && expiresAt > now.getTime())) return null;
+
+    total += value.reward_sats;
+    if (!Number.isSafeInteger(total)) return null;
+    if (expiresAt !== null) continue;
+    unexpired += value.reward_sats;
+    if (typeof unlocksAt === "number" && unlocksAt > now.getTime()) secured += value.reward_sats;
+    else reclaimable += value.reward_sats;
+    if (![unexpired, secured, reclaimable].every(Number.isSafeInteger)) return null;
+  }
+  if (total !== listing.total_reward_sats || unexpired !== listing.unexpired_total_rewards ||
+      secured + reclaimable !== unexpired || (listing.state === "OPEN" && unexpired === 0)) return null;
+
+  return {
+    platform: "Lightning Bounties",
+    verification: "TRUSTED_PLATFORM_API",
+    state: listing.state,
+    amount: unexpired,
+    secured_amount: secured,
+    reclaimable_amount: reclaimable,
+    currency: "SATS",
+    evidence_url: LIGHTNING_BOUNTIES_URL,
+  };
 }
 
 export async function fetchLightningBountiesEvidence(
   githubIssueId: number,
   routes: readonly LightningBountiesIssueRoute[],
   fetchImpl: FetchLike = fetch,
+  now: Date = new Date(),
 ): Promise<LightningBountiesEvidence | null> {
   try {
-    const response = await fetchImpl(LIGHTNING_BOUNTIES_URL, {
+    const pageResponse = await fetchImpl(LIGHTNING_BOUNTIES_URL, {
       headers: { Accept: "text/html", "User-Agent": "BountyVerdict-Agent/1.0" },
       redirect: "error",
       signal: AbortSignal.timeout(5_000),
     });
-    if (!response.ok ||
-        !(response.headers.get("content-type") || "").toLowerCase().startsWith("text/html")) return null;
-    const declaredLength = response.headers.get("content-length");
+    if (!pageResponse.ok ||
+        !(pageResponse.headers.get("content-type") || "").toLowerCase().startsWith("text/html")) return null;
+    const declaredLength = pageResponse.headers.get("content-length");
     if (declaredLength !== null &&
         (!/^\d+$/.test(declaredLength) || Number(declaredLength) > LIGHTNING_BOUNTIES_MAX_RESPONSE_BYTES)) return null;
-    const html = await response.text();
-    return parseLightningBountiesPage(html, githubIssueId, routes);
+    const html = await pageResponse.text();
+    const listing = parseLightningBountiesListingPage(html, githubIssueId, routes);
+    if (!listing) return null;
+
+    const rewardsUrl = new URL(LIGHTNING_BOUNTIES_REWARDS_URL);
+    rewardsUrl.searchParams.set("issue_id", listing.platform_issue_id);
+    rewardsUrl.searchParams.set("skip", "0");
+    rewardsUrl.searchParams.set("limit", String(LIGHTNING_BOUNTIES_MAX_RECORDS));
+    const rewardsResponse = await fetchImpl(rewardsUrl, {
+      headers: { Accept: "application/json", "User-Agent": "BountyVerdict-Agent/1.0" },
+      redirect: "error",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!rewardsResponse.ok ||
+        !(rewardsResponse.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return null;
+    const rewardsLength = rewardsResponse.headers.get("content-length");
+    if (rewardsLength !== null &&
+        (!/^\d+$/.test(rewardsLength) || Number(rewardsLength) > LIGHTNING_BOUNTIES_MAX_RESPONSE_BYTES)) return null;
+    const rewardsText = await rewardsResponse.text();
+    if (rewardsText.length < 1 || rewardsText.length > LIGHTNING_BOUNTIES_MAX_RESPONSE_BYTES) return null;
+    let rewards: unknown;
+    try {
+      rewards = JSON.parse(rewardsText);
+    } catch {
+      return null;
+    }
+    return parseLightningBountiesRewards(rewards, listing, now);
   } catch {
     return null;
   }

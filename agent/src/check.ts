@@ -769,6 +769,7 @@ async function checkGithubIssueInternal(
               : []),
           ],
           fetchImpl,
+          now,
         )
       : Promise.resolve(null),
     Number.isSafeInteger(issueResponse.data?.id) && Number(issueResponse.data.id) > 0 &&

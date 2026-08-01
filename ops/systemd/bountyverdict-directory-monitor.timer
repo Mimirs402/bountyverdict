@@ -1,9 +1,10 @@
 [Unit]
-Description=Run the audited BountyVerdict directory retrieval window every six hours
+Description=Run the audited BountyVerdict directory retrieval after a clean funnel window
 
 [Timer]
-OnCalendar=*-*-* 05,11,17,23:15:00
-RandomizedDelaySec=30s
+OnActiveSec=25h
+OnUnitActiveSec=48h
+RandomizedDelaySec=5min
 Unit=bountyverdict-directory-monitor.service
 
 [Install]

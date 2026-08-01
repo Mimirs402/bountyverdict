@@ -1,17 +1,22 @@
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { promisify } from "node:util";
 import {
   BOUNTYHUB_API,
   BOUNTYHUB_MAX_GITHUB_ISSUES,
+  BOUNTYHUB_MAX_GITHUB_PULL_REQUESTS,
   BOUNTYHUB_MAX_PAGES,
   BOUNTYHUB_PAGE_SIZE,
   analyzeBountyHubInventory,
   bountyHubDetailListings,
   bountyHubGithubIssueReferences,
+  bountyHubGithubPullRequestReferences,
   parseBountyHubDetail,
   parseBountyHubGithubIssue,
+  parseBountyHubGithubPullRequest,
   parseBountyHubPage,
   type BountyHubListing,
 } from "../src/bountyhub-watch.ts";
@@ -28,17 +33,38 @@ const statePath = `${stateRoot}/bountyhub-watch.json`;
 const triggerPath = `${stateRoot}/opportunity-trigger.json`;
 const producerLockPath = `${stateRoot}/opportunity-trigger-producer.lock`;
 const userAgent = "MimirsLab-BountyOpportunityMonitor/1.0 (admin@mimirslab.com; bounded daily read)";
+const execFileAsync = promisify(execFile);
 
-async function publicJson(url: URL, source = "BountyHub"): Promise<unknown> {
+async function businessGithubToken(): Promise<string> {
+  const configured = process.env.BOUNTYVERDICT_GITHUB_TOKEN?.trim();
+  const token = configured || (await execFileAsync(
+    "/usr/bin/gh",
+    ["auth", "token", "--user", "Mimirs402"],
+    { timeout: 10_000, maxBuffer: 4_096 },
+  )).stdout.trim();
+  if (token.length < 20 || token.length > 1_024 || /\s/.test(token)) {
+    throw new Error("Business GitHub read credential is unavailable or malformed.");
+  }
+  return token;
+}
+
+async function publicJson(
+  url: URL,
+  source = "BountyHub",
+  allowNotFound = false,
+  githubToken?: string,
+): Promise<unknown> {
   const headers: Record<string, string> = { Accept: "application/json", "User-Agent": userAgent };
   if (url.hostname === "api.github.com") {
     headers.Accept = "application/vnd.github+json";
     headers["X-GitHub-Api-Version"] = "2022-11-28";
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
   }
   const response = await fetch(url, {
     headers,
     signal: AbortSignal.timeout(30_000),
   });
+  if (allowNotFound && response.status === 404) return null;
   if (!response.ok) throw new Error(`${source} returned HTTP ${response.status}.`);
   const body = await response.text();
   if (body.length > 8_000_000) throw new Error(`${source} response exceeds the bounded size limit.`);
@@ -88,7 +114,7 @@ async function fetchListings(): Promise<{ listings: BountyHubListing[]; pages: n
 
 const checkedAt = new Date().toISOString();
 const previous = await readBoundedJson(statePath, 2_000_000);
-if (previous && previous.schema_version !== 1 && previous.schema_version !== 2) {
+if (previous && previous.schema_version !== 1 && previous.schema_version !== 2 && previous.schema_version !== 3) {
   throw new Error("BountyHub watch state is incompatible.");
 }
 const inventory = await fetchListings();
@@ -104,15 +130,30 @@ for (let index = 0; index < detailListings.length; index += 4) {
     parseBountyHubDetail(await publicJson(new URL(`/api/bounties/${listing.id}`, BOUNTYHUB_API)), listing)
   )));
 }
+const githubToken = await businessGithubToken();
 const githubIssues = [];
 for (let index = 0; index < issueReferences.length; index += 4) {
   const batch = issueReferences.slice(index, index + 4);
   githubIssues.push(...await Promise.all(batch.map(async (reference) => {
     const url = new URL(`/repos/${reference.repository}/issues/${reference.issue_number}`, "https://api.github.com");
-    return parseBountyHubGithubIssue(await publicJson(url, "GitHub"), reference);
+    return parseBountyHubGithubIssue(await publicJson(url, "GitHub", false, githubToken), reference);
   })));
 }
-const analysis = analyzeBountyHubInventory(inventory.listings, details, githubIssues);
+const pullRequestReferences = bountyHubGithubPullRequestReferences(inventory.listings, details, githubIssues);
+if (pullRequestReferences.length > BOUNTYHUB_MAX_GITHUB_PULL_REQUESTS) {
+  throw new Error("BountyHub canonical GitHub pull request inventory exceeds its safety bound.");
+}
+const githubPullRequests = [];
+for (let index = 0; index < pullRequestReferences.length; index += 4) {
+  const batch = pullRequestReferences.slice(index, index + 4);
+  githubPullRequests.push(...await Promise.all(batch.map(async (reference) =>
+    parseBountyHubGithubPullRequest(
+      await publicJson(new URL(reference.pull_request_api_url), "GitHub", true, githubToken),
+      reference,
+    )
+  )));
+}
+const analysis = analyzeBountyHubInventory(inventory.listings, details, githubIssues, githubPullRequests);
 const priorRemembered = parseRememberedOpportunityFingerprints(previous?.triggered_opportunity_fingerprints);
 const releaseProducerLock = await acquireExclusiveRun(producerLockPath, { staleAfterMs: 10 * 60 * 1_000 });
 let pendingTriggerId: string | null = null;
@@ -132,7 +173,7 @@ try {
 }
 
 const state = {
-  schema_version: 2,
+  schema_version: 3,
   checked_at: checkedAt,
   source: "BountyHub bounded public JSON API",
   collection_url: `${BOUNTYHUB_API}/api/bounties?page=1&limit=${BOUNTYHUB_PAGE_SIZE}`,
@@ -146,6 +187,8 @@ const state = {
   details_fetched: details.length,
   canonical_github_issues_fetched: githubIssues.length,
   canonical_closed_issue_count: githubIssues.filter((issue) => issue.state === "closed").length,
+  canonical_github_pull_requests_checked: githubPullRequests.length,
+  canonical_github_pull_requests_unavailable: githubPullRequests.filter((pullRequest) => !pullRequest.available).length,
   evaluated_issue_count: analysis.evaluations.length,
   admitted_candidate_count: analysis.candidates.length,
   evaluations: analysis.evaluations,
@@ -163,6 +206,8 @@ console.log(JSON.stringify({
   details_fetched: details.length,
   canonical_github_issues_fetched: githubIssues.length,
   canonical_closed_issue_count: state.canonical_closed_issue_count,
+  canonical_github_pull_requests_checked: state.canonical_github_pull_requests_checked,
+  canonical_github_pull_requests_unavailable: state.canonical_github_pull_requests_unavailable,
   evaluated_issue_count: analysis.evaluations.length,
   admitted_candidate_count: analysis.candidates.length,
   emitted_new_trigger: opportunityEvent.trigger !== null,

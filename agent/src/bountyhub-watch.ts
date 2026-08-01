@@ -8,7 +8,8 @@ export const BOUNTYHUB_MINIMUM_CONSERVATIVE_NET_USD = 100;
 export const BOUNTYHUB_MAX_ACTIVE_CLAIMS = 2;
 export const BOUNTYHUB_MAX_PAGES = 5;
 export const BOUNTYHUB_PAGE_SIZE = 100;
-export const BOUNTYHUB_MAX_GITHUB_ISSUES = 20;
+export const BOUNTYHUB_MAX_GITHUB_ISSUES = 10;
+export const BOUNTYHUB_MAX_GITHUB_PULL_REQUESTS = 45;
 
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const repositoryPattern = /^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/;
@@ -31,6 +32,9 @@ export type BountyHubListing = {
 
 export type BountyHubClaim = {
   id: string;
+  pull_request_number: number;
+  pull_request_api_url: string;
+  pull_request_url: string;
   active: boolean;
   merged: boolean;
 };
@@ -54,6 +58,21 @@ export type BountyHubGithubIssue = BountyHubIssueReference & {
   updated_at: string;
 };
 
+export type BountyHubPullRequestReference = {
+  task_id: string;
+  claim_id: string;
+  pull_request_number: number;
+  pull_request_api_url: string;
+  pull_request_url: string;
+};
+
+export type BountyHubGithubPullRequest = BountyHubPullRequestReference & {
+  available: boolean;
+  state: "open" | "closed" | null;
+  merged: boolean | null;
+  updated_at: string | null;
+};
+
 export type BountyHubIssueEvaluation = {
   task_id: string;
   issue_url: string;
@@ -61,8 +80,11 @@ export type BountyHubIssueEvaluation = {
   prepaid_gross_usd: string;
   conservative_net_usd: string;
   paid_listing_ids: string[];
+  platform_active_claim_count: number | null;
   active_claim_count: number | null;
+  canonical_open_claim_count_lower_bound: number;
   merged_claim_present: boolean | null;
+  canonical_claim_evidence_complete: boolean;
   github_issue_state: "open" | "closed" | null;
   github_issue_locked: boolean | null;
   admitted: boolean;
@@ -159,9 +181,40 @@ export function parseBountyHubDetail(value: unknown, expected: BountyHubListing)
   const claims = detail.claims.map((value, index): BountyHubClaim => {
     const claim = record(value, `BountyHub claim ${index + 1}`);
     const id = boundedString(claim.id, `BountyHub claim ${index + 1} ID`, 36);
-    if (!uuidPattern.test(id)) throw new Error(`BountyHub claim ${index + 1} ID is invalid.`);
+    const pullRequestNumber = Number(claim.pullRequestNumber);
+    const pullRequestApiUrl = boundedString(
+      claim.pullRequestURL,
+      `BountyHub claim ${index + 1} pull request API URL`,
+    );
+    const pullRequestUrl = boundedString(
+      claim.pullRequestWebURL,
+      `BountyHub claim ${index + 1} pull request URL`,
+    );
+    if (!uuidPattern.test(id) || !Number.isSafeInteger(pullRequestNumber) ||
+      pullRequestNumber < 1 || pullRequestNumber > 9_999_999_999) {
+      throw new Error(`BountyHub claim ${index + 1} ID or pull request number is invalid.`);
+    }
+    let api;
+    let web;
+    try {
+      api = new URL(pullRequestApiUrl);
+      web = new URL(pullRequestUrl);
+    } catch {
+      throw new Error(`BountyHub claim ${index + 1} pull request identity is invalid.`);
+    }
+    const apiMatch = api.pathname.match(/^\/repos\/([-A-Za-z0-9_.]+)\/([-A-Za-z0-9_.]+)\/pulls\/([1-9][0-9]*)$/);
+    const webMatch = web.pathname.match(/^\/([-A-Za-z0-9_.]+)\/([-A-Za-z0-9_.]+)\/pull\/([1-9][0-9]*)$/);
+    if (api.protocol !== "https:" || api.hostname !== "api.github.com" || api.search || api.hash ||
+      web.protocol !== "https:" || web.hostname !== "github.com" || web.search || web.hash ||
+      !apiMatch || !webMatch || apiMatch[1] !== webMatch[1] || apiMatch[2] !== webMatch[2] ||
+      Number(apiMatch[3]) !== pullRequestNumber || Number(webMatch[3]) !== pullRequestNumber) {
+      throw new Error(`BountyHub claim ${index + 1} pull request identity is invalid.`);
+    }
     return {
       id,
+      pull_request_number: pullRequestNumber,
+      pull_request_api_url: pullRequestApiUrl,
+      pull_request_url: pullRequestUrl,
       active: claim.deletedAt === null && claim.rejectedAt === null &&
         (claim.isOpen === true || claim.pullRequestIsmerged === true),
       merged: claim.deletedAt === null && claim.rejectedAt === null && claim.pullRequestIsmerged === true,
@@ -252,16 +305,91 @@ export function parseBountyHubGithubIssue(
   };
 }
 
+export function bountyHubGithubPullRequestReferences(
+  listings: readonly BountyHubListing[],
+  details: readonly BountyHubDetail[],
+  githubIssues: readonly BountyHubGithubIssue[],
+): BountyHubPullRequestReference[] {
+  const detailById = new Map(details.map((detail) => [detail.listing.id, detail]));
+  const issueByTask = new Map(githubIssues.map((issue) => [issue.task_id, issue]));
+  const byClaim = new Map<string, BountyHubPullRequestReference>();
+  for (const group of groups(listings)) {
+    if (grossCents(group) < BOUNTYHUB_MINIMUM_GROSS_USD * 100) continue;
+    const issue = issueByTask.get(group.task_id);
+    if (!issue || issue.state !== "open" || issue.locked) continue;
+    const requiredDetails = group.listings.map((listing) => detailById.get(listing.id));
+    if (requiredDetails.some((detail) => detail === undefined)) continue;
+    for (const detail of requiredDetails as BountyHubDetail[]) {
+      for (const claim of detail.claims) {
+        if (!claim.active) continue;
+        const reference = {
+          task_id: group.task_id,
+          claim_id: claim.id,
+          pull_request_number: claim.pull_request_number,
+          pull_request_api_url: claim.pull_request_api_url,
+          pull_request_url: claim.pull_request_url,
+        };
+        const prior = byClaim.get(claim.id);
+        if (prior && JSON.stringify(prior) !== JSON.stringify(reference)) {
+          throw new Error("BountyHub duplicate claim identity is inconsistent.");
+        }
+        byClaim.set(claim.id, reference);
+      }
+    }
+  }
+  const references = [...byClaim.values()].sort((left, right) => left.claim_id.localeCompare(right.claim_id));
+  if (references.length > BOUNTYHUB_MAX_GITHUB_PULL_REQUESTS) {
+    throw new Error(
+      `BountyHub active claim inventory exceeds the ${BOUNTYHUB_MAX_GITHUB_PULL_REQUESTS}-pull-request safety bound.`,
+    );
+  }
+  return references;
+}
+
+export function parseBountyHubGithubPullRequest(
+  value: unknown,
+  expected: BountyHubPullRequestReference,
+): BountyHubGithubPullRequest {
+  if (value === null) {
+    return { ...expected, available: false, state: null, merged: null, updated_at: null };
+  }
+  const pullRequest = record(value, "BountyHub canonical GitHub pull request");
+  const state = boundedString(pullRequest.state, "BountyHub canonical GitHub pull request state", 20).toLowerCase();
+  if (state !== "open" && state !== "closed") {
+    throw new Error("BountyHub canonical GitHub pull request state is unsupported.");
+  }
+  if (pullRequest.html_url !== expected.pull_request_url || pullRequest.url !== expected.pull_request_api_url ||
+    Number(pullRequest.number) !== expected.pull_request_number || typeof pullRequest.merged !== "boolean" ||
+    (state === "open" && pullRequest.merged)) {
+    throw new Error("BountyHub canonical GitHub pull request identity is inconsistent.");
+  }
+  return {
+    ...expected,
+    available: true,
+    state,
+    merged: pullRequest.merged,
+    updated_at: timestamp(pullRequest.updated_at, "BountyHub canonical GitHub pull request update time"),
+  };
+}
+
 export function analyzeBountyHubInventory(
   listings: readonly BountyHubListing[],
   details: readonly BountyHubDetail[],
   githubIssues: readonly BountyHubGithubIssue[],
+  githubPullRequests: readonly BountyHubGithubPullRequest[],
 ): { evaluations: BountyHubIssueEvaluation[]; candidates: GithubBountyHubOpportunityCandidate[] } {
   const detailById = new Map(details.map((detail) => [detail.listing.id, detail]));
   const githubIssueByTask = new Map<string, BountyHubGithubIssue>();
   for (const issue of githubIssues) {
     if (githubIssueByTask.has(issue.task_id)) throw new Error("BountyHub canonical GitHub issue evidence is duplicated.");
     githubIssueByTask.set(issue.task_id, issue);
+  }
+  const githubPullRequestByClaim = new Map<string, BountyHubGithubPullRequest>();
+  for (const pullRequest of githubPullRequests) {
+    if (githubPullRequestByClaim.has(pullRequest.claim_id)) {
+      throw new Error("BountyHub canonical GitHub pull request evidence is duplicated.");
+    }
+    githubPullRequestByClaim.set(pullRequest.claim_id, pullRequest);
   }
   const evaluations: BountyHubIssueEvaluation[] = [];
   const candidates: GithubBountyHubOpportunityCandidate[] = [];
@@ -271,18 +399,48 @@ export function analyzeBountyHubInventory(
     const paidListingIds = group.listings.map(({ id }) => id).sort();
     const requiredDetails = paidListingIds.map((id) => detailById.get(id));
     const detailsComplete = requiredDetails.every((detail) => detail !== undefined);
-    const activeClaimIds = new Set<string>();
-    let mergedClaimPresent = false;
+    const platformActiveClaims = new Map<string, BountyHubClaim>();
     if (detailsComplete) {
       for (const detail of requiredDetails as BountyHubDetail[]) {
         for (const claim of detail.claims) {
-          if (claim.active) activeClaimIds.add(claim.id);
-          if (claim.merged) mergedClaimPresent = true;
+          if (!claim.active) continue;
+          const prior = platformActiveClaims.get(claim.id);
+          if (prior && JSON.stringify(prior) !== JSON.stringify(claim)) {
+            throw new Error("BountyHub duplicate active claim identity is inconsistent.");
+          }
+          platformActiveClaims.set(claim.id, claim);
         }
       }
     }
-    const activeClaims = detailsComplete ? activeClaimIds.size : null;
     const githubIssue = githubIssueByTask.get(group.task_id);
+    const requiresCanonicalClaims = gross >= BOUNTYHUB_MINIMUM_GROSS_USD * 100 && detailsComplete &&
+      githubIssue?.state === "open" && !githubIssue.locked;
+    const canonicalPullRequests = requiresCanonicalClaims
+      ? [...platformActiveClaims.values()].map((claim) => {
+          const evidence = githubPullRequestByClaim.get(claim.id);
+          if (evidence && (evidence.task_id !== group.task_id ||
+            evidence.pull_request_number !== claim.pull_request_number ||
+            evidence.pull_request_api_url !== claim.pull_request_api_url ||
+            evidence.pull_request_url !== claim.pull_request_url)) {
+            throw new Error("BountyHub canonical GitHub pull request evidence does not match its claim.");
+          }
+          return evidence;
+        })
+      : [];
+    const canonicalClaimEvidenceComplete = requiresCanonicalClaims &&
+      canonicalPullRequests.every((pullRequest) => pullRequest?.available === true);
+    const canonicalActiveClaimIds = new Set<string>();
+    const canonicalActivePullRequestUrls = new Set<string>();
+    let mergedClaimPresent = false;
+    for (const pullRequest of canonicalPullRequests) {
+      if (!pullRequest?.available) continue;
+      if (pullRequest.state === "open" || pullRequest.merged) {
+        canonicalActiveClaimIds.add(pullRequest.claim_id);
+        canonicalActivePullRequestUrls.add(pullRequest.pull_request_url);
+      }
+      if (pullRequest.merged) mergedClaimPresent = true;
+    }
+    const activeClaims = canonicalClaimEvidenceComplete ? canonicalActivePullRequestUrls.size : null;
     const excludedReason = gross < BOUNTYHUB_MINIMUM_GROSS_USD * 100
       ? "prepaid_gross_below_fee_reserved_gate"
       : !detailsComplete
@@ -295,8 +453,10 @@ export function analyzeBountyHubInventory(
               ? "github_issue_locked"
               : mergedClaimPresent
                 ? "merged_claim_present"
-                : activeClaimIds.size > BOUNTYHUB_MAX_ACTIVE_CLAIMS
+                : canonicalActivePullRequestUrls.size > BOUNTYHUB_MAX_ACTIVE_CLAIMS
                   ? "active_competition_above_gate"
+                  : !canonicalClaimEvidenceComplete
+                    ? "github_claim_evidence_incomplete"
                   : conservativeNet < BOUNTYHUB_MINIMUM_CONSERVATIVE_NET_USD * 100
                     ? "conservative_net_below_gate"
                     : null;
@@ -307,8 +467,11 @@ export function analyzeBountyHubInventory(
       prepaid_gross_usd: money(gross),
       conservative_net_usd: money(conservativeNet),
       paid_listing_ids: paidListingIds,
+      platform_active_claim_count: detailsComplete ? platformActiveClaims.size : null,
       active_claim_count: activeClaims,
-      merged_claim_present: detailsComplete ? mergedClaimPresent : null,
+      canonical_open_claim_count_lower_bound: canonicalActivePullRequestUrls.size,
+      merged_claim_present: requiresCanonicalClaims ? mergedClaimPresent : null,
+      canonical_claim_evidence_complete: canonicalClaimEvidenceComplete,
       github_issue_state: githubIssue?.state ?? null,
       github_issue_locked: githubIssue?.locked ?? null,
       admitted: excludedReason === null,
@@ -324,7 +487,9 @@ export function analyzeBountyHubInventory(
       prepaid_gross_usd: evaluation.prepaid_gross_usd,
       conservative_net_usd: evaluation.conservative_net_usd,
       paid_listing_ids: paidListingIds,
-      active_claim_ids: [...activeClaimIds].sort(),
+      platform_active_claim_ids: [...platformActiveClaims.keys()].sort(),
+      active_claim_ids: [...canonicalActiveClaimIds].sort(),
+      active_pull_request_urls: [...canonicalActivePullRequestUrls].sort(),
       details: groupDetails.map(({ listing }) => ({
         id: listing.id,
         amount_usd: money(listing.amount_cents),
@@ -336,6 +501,13 @@ export function analyzeBountyHubInventory(
         locked: githubIssue!.locked,
         updated_at: githubIssue!.updated_at,
       },
+      github_pull_requests: (canonicalPullRequests as BountyHubGithubPullRequest[]).map((pullRequest) => ({
+        claim_id: pullRequest.claim_id,
+        pull_request_url: pullRequest.pull_request_url,
+        state: pullRequest.state,
+        merged: pullRequest.merged,
+        updated_at: pullRequest.updated_at,
+      })).sort((left, right) => left.claim_id.localeCompare(right.claim_id)),
     };
     candidates.push({
       market: "github_bountyhub",
@@ -345,7 +517,7 @@ export function analyzeBountyHubInventory(
       gross_reward_usd: evaluation.prepaid_gross_usd,
       conservative_net_reward_usd: evaluation.conservative_net_usd,
       fee_reserve_percent: BOUNTYHUB_FEE_RESERVE_PERCENT,
-      submission_count: activeClaimIds.size,
+      submission_count: canonicalActivePullRequestUrls.size,
       created_at: createdAt,
       updated_at: updatedAt,
       issue_url: group.issue_url,

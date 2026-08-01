@@ -2100,6 +2100,31 @@ test("official repository policy surfaces an AI disclosure requirement", () => {
   assert.ok(output.signals.some((item) => item.label === "AI-use disclosure required"));
 });
 
+test("repository bounty policy blocks autonomous claims without mislabeling offline AI assistance", () => {
+  const policyDocuments = [{
+    body: [
+      "## Bug Bounty Program - AI Tool Restrictions",
+      "Use of automation or AI agents to claim or request assignment of bug bounty issues is strictly prohibited.",
+      "This restriction targets automated posting and claiming behavior, not offline AI assistance by human contributors.",
+      "AI tools may assist development when a human personally reviews and posts the work.",
+    ].join("\n"),
+    html_url: "https://github.com/tenstorrent/tt-metal/blob/main/CONTRIBUTING.md",
+  }];
+  const output = analyzeBounty({ issue: healthyIssue, repository: healthyRepo, policyDocuments, now });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.equal(output.aiPolicyBlocks.length, 0);
+  assert.deepEqual(output.taskAutonomyBlockers, [{
+    category: "AI_AGENT_EXCLUDED",
+    source: "repository_policy",
+    evidenceUrl: policyDocuments[0].html_url,
+  }]);
+  assert.ok(output.signals.some((item) =>
+    item.label === "Task blocks autonomous agent execution" && item.hardStop &&
+    item.evidenceUrl === policyDocuments[0].html_url
+  ));
+});
+
 test("Gitea-style disclosed AI contributions are not blocked by a no-AI reply rule", () => {
   const policyDocuments = [{
     body: [

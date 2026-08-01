@@ -45,7 +45,7 @@ export interface AgentVerdict {
     agent_execution: "BLOCKED" | "CAPABILITY_REVIEW_REQUIRED" | "NO_EXPLICIT_BLOCKER_FOUND";
     blockers: Array<{
       category: "HUMAN_ELIGIBILITY_OR_IDENTITY" | "SYNCHRONOUS_HUMAN_PARTICIPATION" | "AI_AGENT_EXCLUDED";
-      source: "issue_body" | "maintainer_comment";
+      source: "issue_body" | "maintainer_comment" | "repository_policy";
       evidence_url: string;
     }>;
     capability_requirements: Array<
@@ -1015,7 +1015,7 @@ async function checkGithubIssueInternal(
       "A marketplace listing can outlive its GitHub issue; deleted issues fail with ISSUE_DELETED instead of receiving a verdict.",
       "The check reads the first comment page plus up to two newest comment pages, and up to four bounded timeline pages; coverage reports any truncation.",
       "Checks four contribution paths and up to five bounded issue pages for repository-wide bounty policies; truncated policy coverage prevents VIABLE.",
-      "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions; absence of a blocker is not proof that autonomous completion is possible.",
+      "Task-requirement detection checks the issue body and maintainer-authored comments for explicit human-identity, synchronous-participation, and AI-agent exclusions, and repository policy documents for explicit automated bounty claim or assignment bans; absence of a blocker is not proof that autonomous completion is possible.",
     ],
   };
 }

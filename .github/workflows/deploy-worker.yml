@@ -743,3 +743,10 @@ jobs:
             auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
             git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" push origin HEAD:main
           fi
+
+  publish_registry:
+    needs: [deploy, publish]
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp.yml

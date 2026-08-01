@@ -16,6 +16,10 @@ test("every third-party GitHub Action is pinned to its reviewed immutable commit
     const actions = [...source.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)].map((match) => match[1]);
     assert.ok(actions.length > 0, `${workflow} must retain at least one reviewed action`);
     for (const action of actions) {
+      if (action.startsWith("./.github/workflows/")) {
+        assert.equal(action, "./.github/workflows/publish-mcp.yml");
+        continue;
+      }
       const separator = action.lastIndexOf("@");
       assert.ok(separator > 0, `${workflow}: ${action} must include a ref`);
       const name = action.slice(0, separator);
@@ -23,6 +27,18 @@ test("every third-party GitHub Action is pinned to its reviewed immutable commit
       assert.equal(ref, approvedActions.get(name), `${workflow}: ${name} must use its reviewed immutable commit`);
     }
   }
+});
+
+test("a verified production activation automatically publishes its immutable MCP Registry version", async () => {
+  const [deploy, publisher] = await Promise.all([
+    readFile(new URL("../.github/workflows/deploy-worker.yml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/publish-mcp.yml", import.meta.url), "utf8"),
+  ]);
+  assert.match(publisher, /on:\n\s+workflow_call:\n\s+workflow_dispatch:/);
+  assert.match(
+    deploy,
+    /publish_registry:\n\s+needs: \[deploy, publish\]\n\s+permissions:\n\s+contents: read\n\s+id-token: write\n\s+uses: \.\/\.github\/workflows\/publish-mcp\.yml/,
+  );
 });
 
 test("the MCP Registry publisher is version- and digest-pinned", async () => {

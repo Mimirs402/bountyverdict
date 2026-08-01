@@ -1,6 +1,7 @@
 name: Publish remote MCP server
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 permissions:

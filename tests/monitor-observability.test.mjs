@@ -284,7 +284,10 @@ test("directory monitoring tracks the exact SkillsMD submission and public insta
 test("distribution monitoring treats Payan demand state as a funnel and receipts as settlement attribution", async () => {
   const distribution = await readFile(distributionUrl, "utf8");
   assert.match(distribution, /async function payanDemandStatus/);
-  assert.match(distribution, /exact_fit_request_bids_and_fulfillment_state_not_settlement_or_revenue_by_itself/);
+  assert.match(distribution, /exact_fit_request_observation_and_optional_bid_fulfillment_state_not_settlement_or_revenue_by_itself/);
+  assert.match(distribution, /mode: mutationsEnabled \? "bid_and_fulfill" : "read_only_observer"/);
+  assert.match(distribution, /state\.last_run\.bid_enabled !== state\.last_run\.fulfill_enabled/);
+  assert.doesNotMatch(distribution, /Payan demand capture is not enabled for bids and fulfillment/);
   assert.match(distribution, /delivered_request_sales/);
   assert.match(distribution, /\["direct", "escrow_release"\]/);
   assert.match(distribution, /Payan exact-fit demand capture/);

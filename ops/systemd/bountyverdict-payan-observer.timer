@@ -1,0 +1,12 @@
+[Unit]
+Description=Observe Payan exact-fit demand without bids or fulfillment
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=bountyverdict-payan-observer.service
+
+[Install]
+WantedBy=timers.target

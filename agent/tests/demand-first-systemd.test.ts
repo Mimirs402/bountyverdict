@@ -26,3 +26,17 @@ test("retired Payan and Clawlancer services fail closed even on direct start", a
     assert.match(override, /^ExecCondition=\/usr\/bin\/false$/m);
   }
 });
+
+test("Payan demand-first monitoring is read-only and cannot bid or fulfill", async () => {
+  const [service, timer] = await Promise.all([
+    unit("bountyverdict-payan-observer.service"),
+    unit("bountyverdict-payan-observer.timer"),
+  ]);
+  assert.match(service, /^Environment=PAYAN_BID=NO$/m);
+  assert.match(service, /^Environment=PAYAN_FULFILL=NO$/m);
+  assert.match(service, /^ProtectHome=read-only$/m);
+  assert.match(service, /^ReadWritePaths=%h\/\.local\/state\/bountyverdict$/m);
+  assert.match(service, /^ExecStart=.*scripts\/payan-demand\.ts$/m);
+  assert.match(timer, /^OnUnitActiveSec=10min$/m);
+  assert.match(timer, /^Unit=bountyverdict-payan-observer\.service$/m);
+});

@@ -5,6 +5,7 @@ export const DEMAND_WATCH_SOURCE_KEYS = Object.freeze([
   "moltjobs",
   "openjobs",
   "clankonomy",
+  "zeroxwork",
   "taskmarket_inventory",
   "taskmarket_tracked",
 ] as const);

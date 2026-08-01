@@ -54,6 +54,16 @@ const clankonomyCandidate: OpportunityCandidate = {
   task_snapshot_sha256: null,
 };
 
+const zeroxWorkCandidate: OpportunityCandidate = {
+  ...candidate,
+  market: "zeroxwork",
+  task_id: "700",
+  gross_reward_usdc: "110",
+  net_reward_usdc: "104.5",
+  requester: "0x3333333333333333333333333333333333333333",
+  task_snapshot_sha256: null,
+};
+
 test("opportunity event loop emits a deterministic guarded trigger only once per task", () => {
   const first = buildOpportunityTrigger([candidate], undefined, "2026-07-21T12:00:00.000Z");
   assert.ok(first.trigger);
@@ -300,4 +310,36 @@ test("Clankonomy candidates retain the guarded read-only assessment contract", (
   }, trigger);
   assert.equal(assessment.decision, "READY_FOR_LOCAL_PREPARATION");
   assert.match(buildOpportunityAgentPrompt(trigger), /api\.clankonomy\.com/);
+});
+
+test("0xWork candidates retain local-only assessment and decimal task identity", () => {
+  const { trigger, remembered_opportunity_fingerprints } = buildOpportunityTrigger(
+    [zeroxWorkCandidate],
+    [],
+    "2026-07-21T12:00:00.000Z",
+  );
+  assert.ok(trigger);
+  assert.deepEqual(remembered_opportunity_fingerprints, [
+    `zeroxwork:${zeroxWorkCandidate.task_id}:${zeroxWorkCandidate.escrow_tx_hash}`,
+  ]);
+  const detailUrl = `https://api.0xwork.org/tasks/${zeroxWorkCandidate.task_id}`;
+  const chainUrl = `https://basescan.org/tx/${zeroxWorkCandidate.escrow_tx_hash}`;
+  const assessment = parseOpportunityAssessment({
+    schema_version: 1,
+    trigger_id: trigger.trigger_id,
+    decision: "NEEDS_CAPABILITY",
+    candidates: [{
+      task_id: zeroxWorkCandidate.task_id,
+      decision: "NEEDS_CAPABILITY",
+      reason: "Business wallet registration and stake readiness require review before any external action.",
+      evidence_urls: [detailUrl, chainUrl],
+      capability_requirements: ["ACCOUNT_OR_REGISTRATION"],
+    }],
+    product_learning: [],
+  }, trigger);
+  assert.equal(assessment.decision, "NEEDS_CAPABILITY");
+  assert.match(buildOpportunityAgentPrompt(trigger), /api\.0xwork\.org/);
+  assert.throws(() => buildOpportunityTrigger([
+    { ...zeroxWorkCandidate, task_id: "0" },
+  ], [], "2026-07-21T12:00:00.000Z"), /task ID is invalid/);
 });

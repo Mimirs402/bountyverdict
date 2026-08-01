@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 const bytes32Pattern = /^0x[a-f0-9]{64}$/i;
 const addressPattern = /^0x[a-f0-9]{40}$/i;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const decimalTaskIdPattern = /^[1-9][0-9]{0,9}$/;
 const githubIssueIdPattern = /^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+#[1-9][0-9]{0,9}$/;
 const decimalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/;
 const maximumRememberedTasks = 500;
@@ -21,15 +22,18 @@ const publicEvidenceHosts = new Set([
   "base-sepolia.blockscout.com",
   "api.moltjobs.io",
   "api.clankonomy.com",
+  "api.0xwork.org",
+  "0xwork.org",
+  "www.0xwork.org",
   "api.bountyhub.dev",
   "api.arena42.ai",
   "arena42.ai",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v7";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v8";
 
 export type EscrowOpportunityCandidate = {
-  market: "taskmarket" | "moltjobs" | "clankonomy" | "arena42";
+  market: "taskmarket" | "moltjobs" | "clankonomy" | "arena42" | "zeroxwork";
   task_id: string;
   title: string;
   mode: "bounty" | "competitive_job" | "competition";
@@ -370,7 +374,7 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
       };
     }
     if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs" && candidate.market !== "clankonomy" &&
-      candidate.market !== "arena42") {
+      candidate.market !== "arena42" && candidate.market !== "zeroxwork") {
       throw new Error("Opportunity candidate has unsupported workflow flags.");
     }
     const market = candidate.market;
@@ -386,7 +390,7 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         candidate.task_id,
         "Opportunity task ID",
         66,
-        market === "taskmarket" ? bytes32Pattern : uuidPattern,
+        market === "taskmarket" ? bytes32Pattern : market === "zeroxwork" ? decimalTaskIdPattern : uuidPattern,
       ),
       title: string(candidate.title, "Opportunity title", 500),
       mode,
@@ -430,7 +434,7 @@ export function parseRememberedOpportunityFingerprints(value: unknown): string[]
     throw new Error("Remembered opportunity fingerprints are malformed.");
   }
   const legacyPattern = /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i;
-  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|(?:moltjobs|clankonomy|arena42):[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
+  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|(?:moltjobs|clankonomy|arena42):[a-f0-9-]{36}|zeroxwork:[1-9][0-9]{0,9}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
   const fingerprints = value.map((item) => {
     const parsed = string(item, "Remembered opportunity fingerprint", 400);
     if (!legacyPattern.test(parsed) && !crossMarketPattern.test(parsed)) {
@@ -456,7 +460,7 @@ export function buildOpportunityTrigger(
     ? `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.listing_snapshot_sha256}`
     : `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.escrow_tx_hash.toLowerCase()}`;
   const migratedRemembered = remembered.map((entry) => {
-    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("clankonomy:") || entry.startsWith("arena42:") || entry.startsWith("github_algora:") ||
+    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("clankonomy:") || entry.startsWith("arena42:") || entry.startsWith("zeroxwork:") || entry.startsWith("github_algora:") ||
       entry.startsWith("github_bountyhub:")) {
       return entry;
     }
@@ -596,7 +600,9 @@ export function parseOpportunityAssessment(value: unknown, trigger: OpportunityT
       220,
       triggerCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : triggerCandidate.market === "moltjobs" || triggerCandidate.market === "clankonomy" || triggerCandidate.market === "arena42"
+        : triggerCandidate.market === "zeroxwork"
+          ? decimalTaskIdPattern
+          : triggerCandidate.market === "moltjobs" || triggerCandidate.market === "clankonomy" || triggerCandidate.market === "arena42"
           ? uuidPattern
           : githubIssueIdPattern,
     );
@@ -686,7 +692,9 @@ export function parseOpportunityPreparationResult(
       220,
       expectedCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : expectedCandidate.market === "moltjobs" || expectedCandidate.market === "clankonomy" || expectedCandidate.market === "arena42"
+        : expectedCandidate.market === "zeroxwork"
+          ? decimalTaskIdPattern
+          : expectedCandidate.market === "moltjobs" || expectedCandidate.market === "clankonomy" || expectedCandidate.market === "arena42"
           ? uuidPattern
           : githubIssueIdPattern,
     ).toLowerCase() !== taskId.toLowerCase()) {
@@ -793,6 +801,12 @@ function canonicalOpportunityEvidenceUrls(candidate: OpportunityCandidate): stri
     return [
       `https://api.arena42.ai/api/competitions/${candidate.task_id}`,
       `https://arena42.ai/competition/${candidate.task_id}`,
+      `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
+    ];
+  }
+  if (candidate.market === "zeroxwork") {
+    return [
+      `https://api.0xwork.org/tasks/${candidate.task_id}`,
       `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
     ];
   }

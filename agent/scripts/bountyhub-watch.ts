@@ -4,11 +4,14 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import {
   BOUNTYHUB_API,
+  BOUNTYHUB_MAX_GITHUB_ISSUES,
   BOUNTYHUB_MAX_PAGES,
   BOUNTYHUB_PAGE_SIZE,
   analyzeBountyHubInventory,
   bountyHubDetailListings,
+  bountyHubGithubIssueReferences,
   parseBountyHubDetail,
+  parseBountyHubGithubIssue,
   parseBountyHubPage,
   type BountyHubListing,
 } from "../src/bountyhub-watch.ts";
@@ -26,14 +29,19 @@ const triggerPath = `${stateRoot}/opportunity-trigger.json`;
 const producerLockPath = `${stateRoot}/opportunity-trigger-producer.lock`;
 const userAgent = "MimirsLab-BountyOpportunityMonitor/1.0 (admin@mimirslab.com; bounded daily read)";
 
-async function publicJson(url: URL): Promise<unknown> {
+async function publicJson(url: URL, source = "BountyHub"): Promise<unknown> {
+  const headers: Record<string, string> = { Accept: "application/json", "User-Agent": userAgent };
+  if (url.hostname === "api.github.com") {
+    headers.Accept = "application/vnd.github+json";
+    headers["X-GitHub-Api-Version"] = "2022-11-28";
+  }
   const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": userAgent },
+    headers,
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw new Error(`BountyHub returned HTTP ${response.status}.`);
+  if (!response.ok) throw new Error(`${source} returned HTTP ${response.status}.`);
   const body = await response.text();
-  if (body.length > 8_000_000) throw new Error("BountyHub response exceeds the bounded size limit.");
+  if (body.length > 8_000_000) throw new Error(`${source} response exceeds the bounded size limit.`);
   return JSON.parse(body) as unknown;
 }
 
@@ -80,9 +88,15 @@ async function fetchListings(): Promise<{ listings: BountyHubListing[]; pages: n
 
 const checkedAt = new Date().toISOString();
 const previous = await readBoundedJson(statePath, 2_000_000);
-if (previous && previous.schema_version !== 1) throw new Error("BountyHub watch state is incompatible.");
+if (previous && previous.schema_version !== 1 && previous.schema_version !== 2) {
+  throw new Error("BountyHub watch state is incompatible.");
+}
 const inventory = await fetchListings();
 const detailListings = bountyHubDetailListings(inventory.listings);
+const issueReferences = bountyHubGithubIssueReferences(inventory.listings);
+if (issueReferences.length > BOUNTYHUB_MAX_GITHUB_ISSUES) {
+  throw new Error("BountyHub canonical GitHub issue inventory exceeds its safety bound.");
+}
 const details = [];
 for (let index = 0; index < detailListings.length; index += 4) {
   const batch = detailListings.slice(index, index + 4);
@@ -90,7 +104,15 @@ for (let index = 0; index < detailListings.length; index += 4) {
     parseBountyHubDetail(await publicJson(new URL(`/api/bounties/${listing.id}`, BOUNTYHUB_API)), listing)
   )));
 }
-const analysis = analyzeBountyHubInventory(inventory.listings, details);
+const githubIssues = [];
+for (let index = 0; index < issueReferences.length; index += 4) {
+  const batch = issueReferences.slice(index, index + 4);
+  githubIssues.push(...await Promise.all(batch.map(async (reference) => {
+    const url = new URL(`/repos/${reference.repository}/issues/${reference.issue_number}`, "https://api.github.com");
+    return parseBountyHubGithubIssue(await publicJson(url, "GitHub"), reference);
+  })));
+}
+const analysis = analyzeBountyHubInventory(inventory.listings, details, githubIssues);
 const priorRemembered = parseRememberedOpportunityFingerprints(previous?.triggered_opportunity_fingerprints);
 const releaseProducerLock = await acquireExclusiveRun(producerLockPath, { staleAfterMs: 10 * 60 * 1_000 });
 let pendingTriggerId: string | null = null;
@@ -110,7 +132,7 @@ try {
 }
 
 const state = {
-  schema_version: 1,
+  schema_version: 2,
   checked_at: checkedAt,
   source: "BountyHub bounded public JSON API",
   collection_url: `${BOUNTYHUB_API}/api/bounties?page=1&limit=${BOUNTYHUB_PAGE_SIZE}`,
@@ -122,6 +144,8 @@ const state = {
   inventory_count: inventory.listings.length,
   paid_open_listing_count: inventory.listings.filter((listing) => listing.open && listing.payment_status === "PAID").length,
   details_fetched: details.length,
+  canonical_github_issues_fetched: githubIssues.length,
+  canonical_closed_issue_count: githubIssues.filter((issue) => issue.state === "closed").length,
   evaluated_issue_count: analysis.evaluations.length,
   admitted_candidate_count: analysis.candidates.length,
   evaluations: analysis.evaluations,
@@ -137,6 +161,8 @@ console.log(JSON.stringify({
   inventory_count: inventory.listings.length,
   paid_open_listing_count: state.paid_open_listing_count,
   details_fetched: details.length,
+  canonical_github_issues_fetched: githubIssues.length,
+  canonical_closed_issue_count: state.canonical_closed_issue_count,
   evaluated_issue_count: analysis.evaluations.length,
   admitted_candidate_count: analysis.candidates.length,
   emitted_new_trigger: opportunityEvent.trigger !== null,

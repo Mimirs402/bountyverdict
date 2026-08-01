@@ -8,6 +8,7 @@ export const BOUNTYHUB_MINIMUM_CONSERVATIVE_NET_USD = 100;
 export const BOUNTYHUB_MAX_ACTIVE_CLAIMS = 2;
 export const BOUNTYHUB_MAX_PAGES = 5;
 export const BOUNTYHUB_PAGE_SIZE = 100;
+export const BOUNTYHUB_MAX_GITHUB_ISSUES = 20;
 
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const repositoryPattern = /^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/;
@@ -39,6 +40,20 @@ export type BountyHubDetail = {
   claims: BountyHubClaim[];
 };
 
+export type BountyHubIssueReference = {
+  task_id: string;
+  issue_url: string;
+  repository: string;
+  issue_number: number;
+};
+
+export type BountyHubGithubIssue = BountyHubIssueReference & {
+  state: "open" | "closed";
+  state_reason: string | null;
+  locked: boolean;
+  updated_at: string;
+};
+
 export type BountyHubIssueEvaluation = {
   task_id: string;
   issue_url: string;
@@ -48,6 +63,8 @@ export type BountyHubIssueEvaluation = {
   paid_listing_ids: string[];
   active_claim_count: number | null;
   merged_claim_present: boolean | null;
+  github_issue_state: "open" | "closed" | null;
+  github_issue_locked: boolean | null;
   admitted: boolean;
   excluded_reason: string | null;
 };
@@ -188,11 +205,64 @@ export function bountyHubDetailListings(listings: readonly BountyHubListing[]): 
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
+export function bountyHubGithubIssueReferences(
+  listings: readonly BountyHubListing[],
+): BountyHubIssueReference[] {
+  const references = groups(listings)
+    .filter((group) => grossCents(group) >= BOUNTYHUB_MINIMUM_GROSS_USD * 100)
+    .map((group) => {
+      const [repository, issueNumber] = group.task_id.split("#");
+      return {
+        task_id: group.task_id,
+        issue_url: group.issue_url,
+        repository,
+        issue_number: Number(issueNumber),
+      };
+    });
+  if (references.length > BOUNTYHUB_MAX_GITHUB_ISSUES) {
+    throw new Error(`BountyHub high-value issue inventory exceeds the ${BOUNTYHUB_MAX_GITHUB_ISSUES}-issue safety bound.`);
+  }
+  return references;
+}
+
+export function parseBountyHubGithubIssue(
+  value: unknown,
+  expected: BountyHubIssueReference,
+): BountyHubGithubIssue {
+  const issue = record(value, "BountyHub canonical GitHub issue");
+  const state = boundedString(issue.state, "BountyHub canonical GitHub issue state", 20).toLowerCase();
+  if (state !== "open" && state !== "closed") {
+    throw new Error("BountyHub canonical GitHub issue state is unsupported.");
+  }
+  if (issue.html_url !== expected.issue_url || Number(issue.number) !== expected.issue_number ||
+    issue.repository_url !== `https://api.github.com/repos/${expected.repository}` ||
+    Object.hasOwn(issue, "pull_request") || typeof issue.locked !== "boolean") {
+    throw new Error("BountyHub canonical GitHub issue identity is inconsistent.");
+  }
+  const stateReason = issue.state_reason;
+  if (stateReason !== null && typeof stateReason !== "string") {
+    throw new Error("BountyHub canonical GitHub issue state reason is invalid.");
+  }
+  return {
+    ...expected,
+    state,
+    state_reason: stateReason,
+    locked: issue.locked,
+    updated_at: timestamp(issue.updated_at, "BountyHub canonical GitHub issue update time"),
+  };
+}
+
 export function analyzeBountyHubInventory(
   listings: readonly BountyHubListing[],
   details: readonly BountyHubDetail[],
+  githubIssues: readonly BountyHubGithubIssue[],
 ): { evaluations: BountyHubIssueEvaluation[]; candidates: GithubBountyHubOpportunityCandidate[] } {
   const detailById = new Map(details.map((detail) => [detail.listing.id, detail]));
+  const githubIssueByTask = new Map<string, BountyHubGithubIssue>();
+  for (const issue of githubIssues) {
+    if (githubIssueByTask.has(issue.task_id)) throw new Error("BountyHub canonical GitHub issue evidence is duplicated.");
+    githubIssueByTask.set(issue.task_id, issue);
+  }
   const evaluations: BountyHubIssueEvaluation[] = [];
   const candidates: GithubBountyHubOpportunityCandidate[] = [];
   for (const group of groups(listings)) {
@@ -212,17 +282,24 @@ export function analyzeBountyHubInventory(
       }
     }
     const activeClaims = detailsComplete ? activeClaimIds.size : null;
+    const githubIssue = githubIssueByTask.get(group.task_id);
     const excludedReason = gross < BOUNTYHUB_MINIMUM_GROSS_USD * 100
       ? "prepaid_gross_below_fee_reserved_gate"
       : !detailsComplete
         ? "claim_evidence_incomplete"
-        : mergedClaimPresent
-          ? "merged_claim_present"
-          : activeClaimIds.size > BOUNTYHUB_MAX_ACTIVE_CLAIMS
-            ? "active_competition_above_gate"
-            : conservativeNet < BOUNTYHUB_MINIMUM_CONSERVATIVE_NET_USD * 100
-              ? "conservative_net_below_gate"
-              : null;
+        : !githubIssue
+          ? "github_issue_evidence_incomplete"
+          : githubIssue.state !== "open"
+            ? "github_issue_closed"
+            : githubIssue.locked
+              ? "github_issue_locked"
+              : mergedClaimPresent
+                ? "merged_claim_present"
+                : activeClaimIds.size > BOUNTYHUB_MAX_ACTIVE_CLAIMS
+                  ? "active_competition_above_gate"
+                  : conservativeNet < BOUNTYHUB_MINIMUM_CONSERVATIVE_NET_USD * 100
+                    ? "conservative_net_below_gate"
+                    : null;
     const evaluation: BountyHubIssueEvaluation = {
       task_id: group.task_id,
       issue_url: group.issue_url,
@@ -232,6 +309,8 @@ export function analyzeBountyHubInventory(
       paid_listing_ids: paidListingIds,
       active_claim_count: activeClaims,
       merged_claim_present: detailsComplete ? mergedClaimPresent : null,
+      github_issue_state: githubIssue?.state ?? null,
+      github_issue_locked: githubIssue?.locked ?? null,
       admitted: excludedReason === null,
       excluded_reason: excludedReason,
     };
@@ -251,6 +330,12 @@ export function analyzeBountyHubInventory(
         amount_usd: money(listing.amount_cents),
         updated_at: listing.updated_at,
       })).sort((left, right) => left.id.localeCompare(right.id)),
+      github_issue: {
+        state: githubIssue!.state,
+        state_reason: githubIssue!.state_reason,
+        locked: githubIssue!.locked,
+        updated_at: githubIssue!.updated_at,
+      },
     };
     candidates.push({
       market: "github_bountyhub",
@@ -268,7 +353,7 @@ export function analyzeBountyHubInventory(
       listing_snapshot_sha256: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
       requires_agent_fit_review: true,
       selection_basis:
-        "open GitHub issue; prepaid BountyHub listings only; 20% fee reserve leaves >=100 USD; <=2 active deduplicated claims; requires canonical fee and acceptance review",
+        "canonical open and unlocked GitHub issue; prepaid BountyHub listings only; 20% fee reserve leaves >=100 USD; <=2 active deduplicated claims; requires canonical fee and acceptance review",
     });
   }
   return {

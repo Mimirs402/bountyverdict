@@ -127,6 +127,7 @@ process.stdout.write("fake workflow complete\\n");
       argument.includes('"api.taskmarket.dev"="allow"') &&
       argument.includes('"api.moltjobs.io"="allow"') &&
       argument.includes('"api.clankonomy.com"="allow"') &&
+      argument.includes('"api.0xwork.org"="allow"') &&
       argument.includes('"github.com"="allow"')
     ));
     assert.ok(!invocation.env_keys.includes("SHOULD_NOT_LEAK_TO_CODEX"));

@@ -53,6 +53,15 @@ import {
   parseClankonomyDetail,
   type ClankonomyOnchainEvidence,
 } from "../src/clankonomy-demand.ts";
+import {
+  analyzeZeroxWork,
+  parseZeroxWorkPage,
+  zeroxWorkOpportunityTaskIds,
+  ZEROXWORK_API,
+  ZEROXWORK_TASK_POOL,
+  type ZeroxWorkOnchainEvidence,
+  type ZeroxWorkTask,
+} from "../src/zeroxwork-demand.ts";
 import { decodeFunctionResult, encodeFunctionData, parseAbi } from "viem";
 
 const MOLTJOBS_API = "https://api.moltjobs.io/v1/jobs";
@@ -243,6 +252,35 @@ async function baseSettlementReceipt(transactionHash: string): Promise<Taskmarke
   }
 }
 
+async function strictBaseRpcResult(method: string, params: unknown[], label: string): Promise<unknown> {
+  const response = await fetch(BASE_MAINNET_RPC, {
+    method: "POST",
+    redirect: "error",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "User-Agent": "bountyverdict-read-only-demand-watch/1.0",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+    throw new Error(`${label} query failed.`);
+  }
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maximumResponseBytes) {
+    throw new Error(`${label} response exceeded the byte cap.`);
+  }
+  const body = await response.text();
+  if (new TextEncoder().encode(body).length > maximumResponseBytes) {
+    throw new Error(`${label} response exceeded the byte cap.`);
+  }
+  const payload = JSON.parse(body) as JsonRecord;
+  if (payload.jsonrpc !== "2.0" || payload.id !== 1 || !("result" in payload) || payload.result === null ||
+    payload.result === undefined) throw new Error(`${label} result is unavailable.`);
+  return payload.result;
+}
+
 async function baseTaskmarketFundingProof(
   transactionHash: string,
   taskId: string,
@@ -357,6 +395,13 @@ const clankonomyBountyAbi = parseAbi([
   "function getBounty(uint256 bountyId) view returns ((address poster,address token,uint256 amount,uint256 deadline,bytes32 evalHash,string metadataURI,uint8 numWinners,uint8 status))",
 ]);
 
+const zeroxWorkTaskPoolAbi = parseAbi([
+  "function getTask(uint256 taskId) view returns ((address poster,address worker,string description,uint256 bountyAmount,uint256 stakeAmount,uint256 posterStakeAmount,uint256 deadline,uint256 disputeDeadline,uint256 disputeTimestamp,uint256 submitTimestamp,string proofHash,uint8 state,uint8 revisionCount,address cancelRequestedBy,uint48 postedTimestamp,uint48 claimedTimestamp,uint48 completedTimestamp,uint48 cancelledTimestamp))",
+  "function getFeeBps(address poster) view returns (uint256)",
+  "function paused() view returns (bool)",
+  "function taskPaused(uint256 taskId) view returns (bool)",
+]);
+
 async function fetchClankonomyContractLogs(contract: string): Promise<unknown[]> {
   const items: unknown[] = [];
   const cursors = new Set<string>();
@@ -466,6 +511,106 @@ async function fetchClankonomy(): Promise<Record<string, unknown>> {
   return analyzeClankonomy({ active_bounties: active, details, onchain_evidence: onchainEvidence, now_ms: checkedAtMs });
 }
 
+async function fetchZeroxWorkOpen(): Promise<ZeroxWorkTask[]> {
+  const tasks: ZeroxWorkTask[] = [];
+  const ids = new Set<number>();
+  let expectedTotal: number | null = null;
+  let expectedValue: string | null = null;
+  for (let offset = 0; offset < 500; offset += 100) {
+    const url = new URL("/tasks", ZEROXWORK_API);
+    url.searchParams.set("status", "Open");
+    url.searchParams.set("limit", "100");
+    url.searchParams.set("offset", String(offset));
+    const page = parseZeroxWorkPage(await publicJson(url, "0xWork"));
+    if (page.offset !== offset || (expectedTotal !== null && page.total !== expectedTotal) ||
+      (expectedValue !== null && page.total_value !== expectedValue)) {
+      throw new Error("0xWork pagination changed during the bounded scan.");
+    }
+    expectedTotal ??= page.total;
+    expectedValue ??= page.total_value;
+    for (const task of page.tasks) {
+      if (ids.has(task.id)) throw new Error("0xWork repeated a task across pages.");
+      ids.add(task.id);
+      tasks.push(task);
+    }
+    if (tasks.length === page.total) return tasks;
+    if (page.tasks.length !== 100) throw new Error("0xWork pagination ended before its declared total.");
+  }
+  throw new Error("0xWork pagination exceeded the bounded five-page audit.");
+}
+
+async function fetchZeroxWork(): Promise<Record<string, unknown>> {
+  const open = await fetchZeroxWorkOpen();
+  const preliminaryIds = zeroxWorkOpportunityTaskIds(open, checkedAtMs);
+  const taskById = new Map(open.map((task) => [task.id, task]));
+  const onchainEvidence = await Promise.all(preliminaryIds.map(async (id): Promise<ZeroxWorkOnchainEvidence> => {
+    const task = taskById.get(id);
+    if (!task?.transactionHash || task.chainTaskId === null) {
+      throw new Error("0xWork preliminary task lost its onchain identity.");
+    }
+    const chainTaskId = BigInt(task.chainTaskId);
+    const [receipt, taskResult, feeResult, pausedResult, taskPausedResult] = await Promise.all([
+      baseSettlementReceipt(task.transactionHash),
+      strictBaseRpcResult("eth_call", [{
+        to: ZEROXWORK_TASK_POOL,
+        data: encodeFunctionData({ abi: zeroxWorkTaskPoolAbi, functionName: "getTask", args: [chainTaskId] }),
+      }, "latest"], "0xWork task state"),
+      strictBaseRpcResult("eth_call", [{
+        to: ZEROXWORK_TASK_POOL,
+        data: encodeFunctionData({ abi: zeroxWorkTaskPoolAbi, functionName: "getFeeBps", args: [task.posterAddress as `0x${string}`] }),
+      }, "latest"], "0xWork fee"),
+      strictBaseRpcResult("eth_call", [{
+        to: ZEROXWORK_TASK_POOL,
+        data: encodeFunctionData({ abi: zeroxWorkTaskPoolAbi, functionName: "paused" }),
+      }, "latest"], "0xWork pause state"),
+      strictBaseRpcResult("eth_call", [{
+        to: ZEROXWORK_TASK_POOL,
+        data: encodeFunctionData({ abi: zeroxWorkTaskPoolAbi, functionName: "taskPaused", args: [chainTaskId] }),
+      }, "latest"], "0xWork task pause state"),
+    ]);
+    if (receipt.receipt === null || typeof taskResult !== "string" || typeof feeResult !== "string" ||
+      typeof pausedResult !== "string" || typeof taskPausedResult !== "string") {
+      throw new Error("0xWork onchain evidence is unavailable.");
+    }
+    const decoded = decodeFunctionResult({
+      abi: zeroxWorkTaskPoolAbi,
+      functionName: "getTask",
+      data: taskResult as `0x${string}`,
+    });
+    const feeBps = decodeFunctionResult({
+      abi: zeroxWorkTaskPoolAbi,
+      functionName: "getFeeBps",
+      data: feeResult as `0x${string}`,
+    });
+    return {
+      task_id: task.id,
+      chain_task_id: task.chainTaskId,
+      transaction_hash: task.transactionHash,
+      receipt: receipt.receipt,
+      onchain_task: {
+        poster: decoded.poster,
+        worker: decoded.worker,
+        description: decoded.description,
+        bounty_amount: String(decoded.bountyAmount),
+        deadline: String(decoded.deadline),
+        state: decoded.state,
+      },
+      fee_bps: Number(feeBps),
+      protocol_paused: decodeFunctionResult({
+        abi: zeroxWorkTaskPoolAbi,
+        functionName: "paused",
+        data: pausedResult as `0x${string}`,
+      }),
+      task_paused: decodeFunctionResult({
+        abi: zeroxWorkTaskPoolAbi,
+        functionName: "taskPaused",
+        data: taskPausedResult as `0x${string}`,
+      }),
+    };
+  }));
+  return analyzeZeroxWork({ open_tasks: open, onchain_evidence: onchainEvidence, now_ms: checkedAtMs });
+}
+
 async function fetchTaskmarketTracked(
   trackedSubmissions: readonly TaskmarketTrackedSpecification[],
 ): Promise<{ payloads: TaskmarketTrackedPayload[]; stats: unknown }> {
@@ -512,7 +657,7 @@ if (new Set(taskmarketTrackedSubmissions.map(({ task_id }) => task_id.toLowerCas
 }
 const trackedDecision = shouldRefreshTaskmarketTracked(previous, checkedAtMs);
 const moltOwnerPosterIds = moltJobsOwnerPosterIds();
-const [moltResult, openJobsResult, clankonomyResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
+const [moltResult, openJobsResult, clankonomyResult, zeroxWorkResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
   Promise.all([fetchMoltJobs(false), fetchMoltJobs(true)])
     .then(async ([openJobs, fundedJobs]) => {
       const detailIds = moltOwnerPosterIds === null
@@ -551,6 +696,7 @@ const [moltResult, openJobsResult, clankonomyResult, taskmarketInventoryResult, 
       return analyzeOpenJobs(openJobs, checkedAtMs);
     }),
   fetchClankonomy(),
+  fetchZeroxWork(),
   fetchTaskmarketOpen().then(async (tasks) => {
     const preliminary = new Map(tasks.map((task) => [task.escrowTxHash.toLowerCase(), task]));
     const fundingReceipts = await Promise.all(taskmarketOpportunityFundingTransactionHashes(tasks, checkedAtMs).map((hash) => {
@@ -592,6 +738,14 @@ const clankonomy = resolveSource({
   key: "clankonomy",
   label: "Clankonomy",
   result: clankonomyResult,
+  previous,
+  checkedAt,
+  statuses,
+});
+const zeroxwork = resolveSource({
+  key: "zeroxwork",
+  label: "0xWork",
+  result: zeroxWorkResult,
   previous,
   checkedAt,
   statuses,
@@ -638,6 +792,8 @@ const moltJobsInventoryFresh = statuses.moltjobs.error === null &&
   statuses.moltjobs.last_good_at === checkedAt;
 const clankonomyInventoryFresh = statuses.clankonomy.error === null &&
   statuses.clankonomy.last_good_at === checkedAt;
+const zeroxWorkInventoryFresh = statuses.zeroxwork.error === null &&
+  statuses.zeroxwork.last_good_at === checkedAt;
 const eligibleOpportunityCandidates = [
   ...(taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
@@ -647,6 +803,9 @@ const eligibleOpportunityCandidates = [
     : []),
   ...(clankonomyInventoryFresh
     ? (clankonomy as JsonRecord).fresh_low_competition_candidates
+    : []),
+  ...(zeroxWorkInventoryFresh
+    ? (zeroxwork as JsonRecord).fresh_low_competition_candidates
     : []),
 ].sort((left, right) => {
   const scoreDifference = Number(right.opportunity_score_usdc_per_current_entry) -
@@ -686,24 +845,28 @@ const state = {
   source_status: statuses,
   opportunity_event_loop: {
     marker_version: OPPORTUNITY_MARKER_VERSION,
-    inventory_fresh: taskmarketInventoryFresh && moltJobsInventoryFresh && clankonomyInventoryFresh,
+    inventory_fresh: taskmarketInventoryFresh && moltJobsInventoryFresh && clankonomyInventoryFresh &&
+      zeroxWorkInventoryFresh,
     inventory_fresh_by_market: {
       taskmarket: taskmarketInventoryFresh,
       moltjobs: moltJobsInventoryFresh,
       openjobs: statuses.openjobs.error === null && statuses.openjobs.last_good_at === checkedAt,
       clankonomy: clankonomyInventoryFresh,
+      zeroxwork: zeroxWorkInventoryFresh,
     },
     observed_candidates: {
       taskmarket: (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count,
       moltjobs: (moltjobs as JsonRecord).fresh_low_competition_candidate_count,
       openjobs: 0,
       clankonomy: (clankonomy as JsonRecord).fresh_low_competition_candidate_count,
+      zeroxwork: (zeroxwork as JsonRecord).fresh_low_competition_candidate_count,
     },
     eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
     pending_trigger_id: pendingTriggerId,
-    suppressed_reason: !taskmarketInventoryFresh && !moltJobsInventoryFresh && !clankonomyInventoryFresh
+    suppressed_reason: !taskmarketInventoryFresh && !moltJobsInventoryFresh && !clankonomyInventoryFresh &&
+      !zeroxWorkInventoryFresh
       ? "eligible_market_inventories_not_fresh"
       : pendingTriggerId
         ? "pending_opportunity_workflow"
@@ -717,6 +880,7 @@ const state = {
     moltjobs,
     openjobs,
     clankonomy,
+    zeroxwork,
     taskmarket: {
       ...(taskmarketInventory as JsonRecord),
       tracked_worker: taskmarketTracked,
@@ -748,6 +912,7 @@ console.log(JSON.stringify({
     moltjobs: (moltjobs as JsonRecord).exact_candidate_count,
     openjobs: (openjobs as JsonRecord).exact_candidate_count,
     clankonomy: (clankonomy as JsonRecord).exact_candidate_count,
+    zeroxwork: (zeroxwork as JsonRecord).exact_candidate_count,
     taskmarket: (taskmarketInventory as JsonRecord).exact_candidate_count,
   },
   opportunity_event_loop: {
@@ -755,6 +920,7 @@ console.log(JSON.stringify({
       taskmarket: taskmarketInventoryFresh,
       moltjobs: moltJobsInventoryFresh,
       clankonomy: clankonomyInventoryFresh,
+      zeroxwork: zeroxWorkInventoryFresh,
     },
     eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,

@@ -1032,6 +1032,9 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(watcher, /method: "eth_getTransactionReceipt"/);
   assert.doesNotMatch(watcher, /method: "(?:eth_sendRawTransaction|eth_sendTransaction)"/);
   assert.match(watcher, /Promise\.allSettled/);
+  assert.match(watcher, /fetchZeroxWork\(\)/);
+  assert.match(watcher, /ZEROXWORK_TASK_POOL/);
+  assert.match(watcher, /zeroxWorkInventoryFresh/);
   assert.match(watcher, /shouldRefreshTaskmarketTracked/);
   assert.match(watcher, /errors: degradedSources/);
   assert.match(watcher, /degraded_sources: degradedSources/);
@@ -1063,6 +1066,8 @@ test("public demand monitoring is read-only and Taskmarket accounting requires B
   assert.match(distribution, /settled_worker_earnings_usdc/);
   assert.match(distribution, /API award rows, or expiry alone remain zero purchases and zero revenue/);
   assert.match(distribution, /Public funded-demand watcher/);
+  assert.match(distribution, /0xWork.*chain-verified open/);
+  assert.match(distribution, /state\.sources\?\.zeroxwork/);
   assert.match(distribution, /trackedSnapshotAt = sourceStatus\.taskmarket_tracked\.last_good_at/);
   assert.match(distribution, /state\.errors !== degradedSources/);
   assert.doesNotMatch(service, /EnvironmentFile/);

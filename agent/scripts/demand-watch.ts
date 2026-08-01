@@ -44,10 +44,21 @@ import {
 } from "../src/opportunity-agent-workflow.ts";
 import { acquireExclusiveRun } from "../src/exclusive-run.ts";
 import { coordinateOpportunityTrigger } from "../src/opportunity-trigger-coordination.ts";
+import {
+  analyzeClankonomy,
+  clankonomyOpportunityDetailIds,
+  CLANKONOMY_API,
+  CLANKONOMY_BOUNTY_CREATED_TOPIC,
+  parseClankonomyActive,
+  parseClankonomyDetail,
+  type ClankonomyOnchainEvidence,
+} from "../src/clankonomy-demand.ts";
+import { decodeFunctionResult, encodeFunctionData, parseAbi } from "viem";
 
 const MOLTJOBS_API = "https://api.moltjobs.io/v1/jobs";
 const OPENJOBS_API = "https://openjobs.bot/api/v1/jobs";
 const BASE_MAINNET_RPC = "https://mainnet.base.org";
+const BASE_BLOCKSCOUT = "https://base.blockscout.com";
 const stateFile = process.env.DEMAND_WATCH_STATE_FILE ||
   `${homedir()}/.local/state/bountyverdict/demand-watch.json`;
 const opportunityTriggerFile = process.env.BOUNTY_OPPORTUNITY_TRIGGER_FILE ||
@@ -342,6 +353,119 @@ async function fetchTaskmarketOpen(): Promise<TaskmarketTask[]> {
   throw new Error("Taskmarket pagination exceeded the bounded five-page audit.");
 }
 
+const clankonomyBountyAbi = parseAbi([
+  "function getBounty(uint256 bountyId) view returns ((address poster,address token,uint256 amount,uint256 deadline,bytes32 evalHash,string metadataURI,uint8 numWinners,uint8 status))",
+]);
+
+async function fetchClankonomyContractLogs(contract: string): Promise<unknown[]> {
+  const items: unknown[] = [];
+  const cursors = new Set<string>();
+  let nextPageParams: JsonRecord | null = null;
+  for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+    const url = new URL(`/api/v2/addresses/${contract}/logs`, BASE_BLOCKSCOUT);
+    for (const [key, value] of Object.entries(nextPageParams || {})) {
+      if (typeof value !== "string" && typeof value !== "number") {
+        throw new Error("Clankonomy Blockscout pagination cursor is malformed.");
+      }
+      url.searchParams.set(key, String(value));
+    }
+    const payload = await publicJson(url, "Base Blockscout Clankonomy logs");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+      !Array.isArray((payload as JsonRecord).items)) {
+      throw new Error("Clankonomy Blockscout log feed is malformed.");
+    }
+    items.push(...(payload as JsonRecord).items);
+    const cursor = (payload as JsonRecord).next_page_params;
+    if (cursor === null || cursor === undefined) return items;
+    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+      throw new Error("Clankonomy Blockscout pagination cursor is malformed.");
+    }
+    const fingerprint = JSON.stringify(cursor);
+    if (cursors.has(fingerprint)) throw new Error("Clankonomy Blockscout repeated a pagination cursor.");
+    cursors.add(fingerprint);
+    nextPageParams = cursor as JsonRecord;
+  }
+  throw new Error("Clankonomy Blockscout pagination exceeded the bounded five-page audit.");
+}
+
+async function fetchClankonomy(): Promise<Record<string, unknown>> {
+  const url = new URL("/bounties", CLANKONOMY_API);
+  url.searchParams.set("status", "active");
+  url.searchParams.set("limit", "100");
+  const active = parseClankonomyActive(await publicJson(url, "Clankonomy"));
+  if (active.length === 100) {
+    throw new Error("Clankonomy reached its public cap while exposing no usable pagination; inventory is incomplete.");
+  }
+  const detailIds = clankonomyOpportunityDetailIds(active, checkedAtMs);
+  const details = await Promise.all(detailIds.map(async (id) =>
+    parseClankonomyDetail(await publicJson(new URL(`/bounties/${encodeURIComponent(id)}`, CLANKONOMY_API), "Clankonomy detail"))
+  ));
+  const logsByContract = new Map<string, unknown[]>();
+  for (const contract of new Set(details.map(({ contractAddress }) => contractAddress))) {
+    logsByContract.set(contract, await fetchClankonomyContractLogs(contract));
+  }
+  const onchainEvidence = await Promise.all(details.map(async (detail): Promise<ClankonomyOnchainEvidence> => {
+    const logs = logsByContract.get(detail.contractAddress);
+    if (!logs) throw new Error("Clankonomy Blockscout log feed is unavailable.");
+    const idTopic = `0x${detail.chainBountyId.toString(16).padStart(64, "0")}`;
+    const matches = logs.filter((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      const log = value as JsonRecord;
+      return Array.isArray(log.topics) && log.topics[0]?.toString().toLowerCase() === CLANKONOMY_BOUNTY_CREATED_TOPIC &&
+        log.topics[1]?.toString().toLowerCase() === idTopic && typeof log.transaction_hash === "string";
+    }) as JsonRecord[];
+    if (matches.length !== 1) throw new Error("Clankonomy funding event is missing or ambiguous.");
+    const transactionHash = String(matches[0].transaction_hash);
+    const [receipt, callPayload] = await Promise.all([
+      baseSettlementReceipt(transactionHash),
+      (async () => {
+        const response = await fetch(BASE_MAINNET_RPC, {
+          method: "POST",
+          redirect: "error",
+          headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "bountyverdict-read-only-demand-watch/1.0" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_call",
+            params: [{
+              to: detail.contractAddress,
+              data: encodeFunctionData({ abi: clankonomyBountyAbi, functionName: "getBounty", args: [BigInt(detail.chainBountyId)] }),
+            }, "latest"],
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("application/json")) {
+          throw new Error("Clankonomy onchain state query failed.");
+        }
+        return response.json() as Promise<JsonRecord>;
+      })(),
+    ]);
+    if (receipt.receipt === null || callPayload.jsonrpc !== "2.0" || callPayload.id !== 1 ||
+      typeof callPayload.result !== "string") throw new Error("Clankonomy onchain evidence is unavailable.");
+    const decoded = decodeFunctionResult({
+      abi: clankonomyBountyAbi,
+      functionName: "getBounty",
+      data: callPayload.result as `0x${string}`,
+    });
+    return {
+      bounty_id: detail.id,
+      contract_address: detail.contractAddress,
+      chain_bounty_id: detail.chainBountyId,
+      transaction_hash: transactionHash,
+      receipt: receipt.receipt,
+      onchain_bounty: {
+        poster: decoded.poster,
+        token: decoded.token,
+        amount: String(decoded.amount),
+        deadline: String(decoded.deadline),
+        num_winners: decoded.numWinners,
+        status: decoded.status,
+      },
+    };
+  }));
+  return analyzeClankonomy({ active_bounties: active, details, onchain_evidence: onchainEvidence, now_ms: checkedAtMs });
+}
+
 async function fetchTaskmarketTracked(
   trackedSubmissions: readonly TaskmarketTrackedSpecification[],
 ): Promise<{ payloads: TaskmarketTrackedPayload[]; stats: unknown }> {
@@ -388,7 +512,7 @@ if (new Set(taskmarketTrackedSubmissions.map(({ task_id }) => task_id.toLowerCas
 }
 const trackedDecision = shouldRefreshTaskmarketTracked(previous, checkedAtMs);
 const moltOwnerPosterIds = moltJobsOwnerPosterIds();
-const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
+const [moltResult, openJobsResult, clankonomyResult, taskmarketInventoryResult, taskmarketTrackedResult] = await Promise.allSettled([
   Promise.all([fetchMoltJobs(false), fetchMoltJobs(true)])
     .then(async ([openJobs, fundedJobs]) => {
       const detailIds = moltOwnerPosterIds === null
@@ -426,6 +550,7 @@ const [moltResult, openJobsResult, taskmarketInventoryResult, taskmarketTrackedR
       }
       return analyzeOpenJobs(openJobs, checkedAtMs);
     }),
+  fetchClankonomy(),
   fetchTaskmarketOpen().then(async (tasks) => {
     const preliminary = new Map(tasks.map((task) => [task.escrowTxHash.toLowerCase(), task]));
     const fundingReceipts = await Promise.all(taskmarketOpportunityFundingTransactionHashes(tasks, checkedAtMs).map((hash) => {
@@ -459,6 +584,14 @@ const openjobs = resolveSource({
   key: "openjobs",
   label: "OpenJobs",
   result: openJobsResult,
+  previous,
+  checkedAt,
+  statuses,
+});
+const clankonomy = resolveSource({
+  key: "clankonomy",
+  label: "Clankonomy",
+  result: clankonomyResult,
   previous,
   checkedAt,
   statuses,
@@ -503,12 +636,17 @@ const taskmarketInventoryFresh = statuses.taskmarket_inventory.error === null &&
   statuses.taskmarket_inventory.last_good_at === checkedAt;
 const moltJobsInventoryFresh = statuses.moltjobs.error === null &&
   statuses.moltjobs.last_good_at === checkedAt;
+const clankonomyInventoryFresh = statuses.clankonomy.error === null &&
+  statuses.clankonomy.last_good_at === checkedAt;
 const eligibleOpportunityCandidates = [
   ...(taskmarketInventoryFresh
     ? (taskmarketInventory as JsonRecord).fresh_low_competition_candidates
     : []),
   ...(moltJobsInventoryFresh
     ? (moltjobs as JsonRecord).fresh_low_competition_candidates
+    : []),
+  ...(clankonomyInventoryFresh
+    ? (clankonomy as JsonRecord).fresh_low_competition_candidates
     : []),
 ].sort((left, right) => {
   const scoreDifference = Number(right.opportunity_score_usdc_per_current_entry) -
@@ -548,22 +686,24 @@ const state = {
   source_status: statuses,
   opportunity_event_loop: {
     marker_version: OPPORTUNITY_MARKER_VERSION,
-    inventory_fresh: taskmarketInventoryFresh && moltJobsInventoryFresh,
+    inventory_fresh: taskmarketInventoryFresh && moltJobsInventoryFresh && clankonomyInventoryFresh,
     inventory_fresh_by_market: {
       taskmarket: taskmarketInventoryFresh,
       moltjobs: moltJobsInventoryFresh,
       openjobs: statuses.openjobs.error === null && statuses.openjobs.last_good_at === checkedAt,
+      clankonomy: clankonomyInventoryFresh,
     },
     observed_candidates: {
       taskmarket: (taskmarketInventory as JsonRecord).fresh_low_competition_candidate_count,
       moltjobs: (moltjobs as JsonRecord).fresh_low_competition_candidate_count,
       openjobs: 0,
+      clankonomy: (clankonomy as JsonRecord).fresh_low_competition_candidate_count,
     },
     eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,
     trigger_id: opportunityEvent.trigger?.trigger_id || null,
     pending_trigger_id: pendingTriggerId,
-    suppressed_reason: !taskmarketInventoryFresh && !moltJobsInventoryFresh
+    suppressed_reason: !taskmarketInventoryFresh && !moltJobsInventoryFresh && !clankonomyInventoryFresh
       ? "eligible_market_inventories_not_fresh"
       : pendingTriggerId
         ? "pending_opportunity_workflow"
@@ -576,6 +716,7 @@ const state = {
   sources: {
     moltjobs,
     openjobs,
+    clankonomy,
     taskmarket: {
       ...(taskmarketInventory as JsonRecord),
       tracked_worker: taskmarketTracked,
@@ -606,12 +747,14 @@ console.log(JSON.stringify({
   exact_candidates: {
     moltjobs: (moltjobs as JsonRecord).exact_candidate_count,
     openjobs: (openjobs as JsonRecord).exact_candidate_count,
+    clankonomy: (clankonomy as JsonRecord).exact_candidate_count,
     taskmarket: (taskmarketInventory as JsonRecord).exact_candidate_count,
   },
   opportunity_event_loop: {
     inventory_fresh_by_market: {
       taskmarket: taskmarketInventoryFresh,
       moltjobs: moltJobsInventoryFresh,
+      clankonomy: clankonomyInventoryFresh,
     },
     eligible_candidates: eligibleOpportunityCandidates.length,
     emitted_new_trigger: opportunityEvent.trigger !== null,

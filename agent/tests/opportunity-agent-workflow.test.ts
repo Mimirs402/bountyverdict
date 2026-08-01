@@ -43,6 +43,17 @@ const moltCandidate: OpportunityCandidate = {
   task_snapshot_sha256: null,
 };
 
+const clankonomyCandidate: OpportunityCandidate = {
+  ...candidate,
+  market: "clankonomy",
+  task_id: "33333333-3333-4333-8333-333333333333",
+  mode: "bounty",
+  gross_reward_usdc: "110",
+  net_reward_usdc: "107.25",
+  requester: "0x2222222222222222222222222222222222222222",
+  task_snapshot_sha256: null,
+};
+
 test("opportunity event loop emits a deterministic guarded trigger only once per task", () => {
   const first = buildOpportunityTrigger([candidate], undefined, "2026-07-21T12:00:00.000Z");
   assert.ok(first.trigger);
@@ -267,4 +278,26 @@ test("MoltJobs candidates require both public detail and public escrow evidence 
     ...assessment,
     candidates: [{ ...assessment.candidates[0], evidence_urls: [detailUrl] }],
   }, trigger), /lacks canonical marketplace evidence/);
+});
+
+test("Clankonomy candidates retain the guarded read-only assessment contract", () => {
+  const { trigger } = buildOpportunityTrigger([clankonomyCandidate], [], "2026-07-21T12:00:00.000Z");
+  assert.ok(trigger);
+  const detailUrl = `https://api.clankonomy.com/bounties/${clankonomyCandidate.task_id}`;
+  const chainUrl = `https://basescan.org/tx/${clankonomyCandidate.escrow_tx_hash}`;
+  const assessment = parseOpportunityAssessment({
+    schema_version: 1,
+    trigger_id: trigger.trigger_id,
+    decision: "READY_FOR_LOCAL_PREPARATION",
+    candidates: [{
+      task_id: clankonomyCandidate.task_id,
+      decision: "READY_FOR_LOCAL_PREPARATION",
+      reason: "The API and exact Base receipt agree.",
+      evidence_urls: [detailUrl, chainUrl],
+      capability_requirements: [],
+    }],
+    product_learning: [],
+  }, trigger);
+  assert.equal(assessment.decision, "READY_FOR_LOCAL_PREPARATION");
+  assert.match(buildOpportunityAgentPrompt(trigger), /api\.clankonomy\.com/);
 });

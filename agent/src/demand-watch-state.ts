@@ -4,6 +4,7 @@ export const TASKMARKET_TRACKED_RETRY_INTERVAL_MS = 30 * 60 * 1_000;
 export const DEMAND_WATCH_SOURCE_KEYS = Object.freeze([
   "moltjobs",
   "openjobs",
+  "clankonomy",
   "taskmarket_inventory",
   "taskmarket_tracked",
 ] as const);

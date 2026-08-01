@@ -20,13 +20,14 @@ const publicEvidenceHosts = new Set([
   "base.blockscout.com",
   "base-sepolia.blockscout.com",
   "api.moltjobs.io",
+  "api.clankonomy.com",
   "api.bountyhub.dev",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v5";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v6";
 
 export type EscrowOpportunityCandidate = {
-  market: "taskmarket" | "moltjobs";
+  market: "taskmarket" | "moltjobs" | "clankonomy";
   task_id: string;
   title: string;
   mode: "bounty" | "competitive_job";
@@ -366,11 +367,11 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         selection_basis: string(candidate.selection_basis, "Opportunity selection basis", 500),
       };
     }
-    if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs") {
+    if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs" && candidate.market !== "clankonomy") {
       throw new Error("Opportunity candidate has unsupported workflow flags.");
     }
     const market = candidate.market;
-    const mode = market === "taskmarket" ? "bounty" : "competitive_job";
+    const mode = market === "moltjobs" ? "competitive_job" : "bounty";
     if (candidate.mode !== mode) throw new Error("Opportunity candidate has an unsupported market mode.");
     const hoursRemaining = Number(candidate.hours_remaining);
     if (!Number.isFinite(hoursRemaining) || hoursRemaining < 0 || hoursRemaining > 24 * 366) {
@@ -397,13 +398,13 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         candidate.requester,
         "Opportunity requester",
         64,
-        market === "taskmarket" ? addressPattern : uuidPattern,
+        market === "moltjobs" ? uuidPattern : addressPattern,
       ),
       task_snapshot_sha256: market === "taskmarket"
         ? string(candidate.task_snapshot_sha256, "Opportunity task snapshot", 64, /^[a-f0-9]{64}$/)
         : candidate.task_snapshot_sha256 === null
           ? null
-          : (() => { throw new Error("MoltJobs opportunity task snapshot must be null."); })(),
+          : (() => { throw new Error("Non-Taskmarket opportunity task snapshot must be null."); })(),
       opportunity_score_usdc_per_current_entry: string(
         candidate.opportunity_score_usdc_per_current_entry,
         "Opportunity score",
@@ -426,7 +427,7 @@ export function parseRememberedOpportunityFingerprints(value: unknown): string[]
     throw new Error("Remembered opportunity fingerprints are malformed.");
   }
   const legacyPattern = /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i;
-  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|moltjobs:[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
+  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|(?:moltjobs|clankonomy):[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
   const fingerprints = value.map((item) => {
     const parsed = string(item, "Remembered opportunity fingerprint", 400);
     if (!legacyPattern.test(parsed) && !crossMarketPattern.test(parsed)) {
@@ -452,7 +453,7 @@ export function buildOpportunityTrigger(
     ? `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.listing_snapshot_sha256}`
     : `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.escrow_tx_hash.toLowerCase()}`;
   const migratedRemembered = remembered.map((entry) => {
-    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("github_algora:") ||
+    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("clankonomy:") || entry.startsWith("github_algora:") ||
       entry.startsWith("github_bountyhub:")) {
       return entry;
     }
@@ -592,7 +593,7 @@ export function parseOpportunityAssessment(value: unknown, trigger: OpportunityT
       220,
       triggerCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : triggerCandidate.market === "moltjobs"
+        : triggerCandidate.market === "moltjobs" || triggerCandidate.market === "clankonomy"
           ? uuidPattern
           : githubIssueIdPattern,
     );
@@ -682,7 +683,7 @@ export function parseOpportunityPreparationResult(
       220,
       expectedCandidate.market === "taskmarket"
         ? bytes32Pattern
-        : expectedCandidate.market === "moltjobs"
+        : expectedCandidate.market === "moltjobs" || expectedCandidate.market === "clankonomy"
           ? uuidPattern
           : githubIssueIdPattern,
     ).toLowerCase() !== taskId.toLowerCase()) {
@@ -778,6 +779,12 @@ function canonicalOpportunityEvidenceUrls(candidate: OpportunityCandidate): stri
   }
   if (candidate.market === "github_bountyhub") {
     return [candidate.issue_url, ...candidate.listing_evidence_urls];
+  }
+  if (candidate.market === "clankonomy") {
+    return [
+      `https://api.clankonomy.com/bounties/${candidate.task_id}`,
+      `https://basescan.org/tx/${candidate.escrow_tx_hash}`,
+    ];
   }
   return [
     `https://api.moltjobs.io/v1/jobs/${candidate.task_id}/public`,

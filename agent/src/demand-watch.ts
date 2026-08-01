@@ -175,9 +175,13 @@ function boundedObject(value: unknown, label: string): Record<string, unknown> {
   return value;
 }
 
-function parseMoltJob(value: unknown): MoltJob {
+function parseMoltJob(value: unknown): MoltJob | null {
   if (!isObject(value)) throw new Error("MoltJobs job is malformed.");
-  if (value.status !== "OPEN" || value.paymentProvider !== "ON_CHAIN_USDC") {
+  if (value.status !== "OPEN") {
+    throw new Error("MoltJobs open feed contains an unsupported status or payment provider.");
+  }
+  if (value.paymentProvider === "STRIPE") return null;
+  if (value.paymentProvider !== "ON_CHAIN_USDC") {
     throw new Error("MoltJobs open feed contains an unsupported status or payment provider.");
   }
   const escrowTxHash = nullableString(value.escrowTxHash, "MoltJobs escrow transaction", 66);
@@ -216,9 +220,16 @@ export function parseMoltJobsPage(value: unknown): MoltJobsPage {
   if (cursor !== null && (typeof cursor !== "string" || !cursor || cursor.length > 1_000)) {
     throw new Error("MoltJobs cursor is invalid.");
   }
-  const data = value.data.map(parseMoltJob);
-  const ids = new Set(data.map(({ id }) => id));
-  if (ids.size !== data.length) throw new Error("MoltJobs page duplicated a job.");
+  const data: MoltJob[] = [];
+  const ids = new Set<string>();
+  for (const raw of value.data) {
+    if (!isObject(raw)) throw new Error("MoltJobs job is malformed.");
+    const id = uuid(raw.id, "MoltJobs job ID");
+    if (ids.has(id)) throw new Error("MoltJobs page duplicated a job.");
+    ids.add(id);
+    const parsed = parseMoltJob(raw);
+    if (parsed) data.push(parsed);
+  }
   return { data, next_cursor: cursor };
 }
 

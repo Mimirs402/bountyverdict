@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   analyzeBountyHubInventory,
   bountyHubDetailListings,
+  bountyHubGithubIssueReferences,
   parseBountyHubDetail,
+  parseBountyHubGithubIssue,
   parseBountyHubPage,
 } from "../src/bountyhub-watch.ts";
 import {
@@ -61,6 +63,22 @@ function claim(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
+function githubIssue(
+  reference: ReturnType<typeof bountyHubGithubIssueReferences>[number],
+  overrides: Record<string, unknown> = {},
+) {
+  return parseBountyHubGithubIssue({
+    html_url: reference.issue_url,
+    repository_url: `https://api.github.com/repos/${reference.repository}`,
+    number: reference.issue_number,
+    state: "open",
+    state_reason: null,
+    locked: false,
+    updated_at: "2026-08-01T08:00:00.000Z",
+    ...overrides,
+  }, reference);
+}
+
 test("BountyHub parser bounds pages and verifies detail identity", () => {
   const first = listing();
   const parsed = parseBountyHubPage({ data: [first], hasNextPage: false });
@@ -86,7 +104,8 @@ test("BountyHub analysis aggregates prepaid sponsors and deduplicates active cla
       claims: [claim(ids[3]), claim(ids[4], { rejectedAt: "2026-07-31T12:00:00.000Z" })],
     }, parsed[1]),
   ];
-  const result = analyzeBountyHubInventory(parsed, details);
+  const issue = githubIssue(bountyHubGithubIssueReferences(parsed)[0]);
+  const result = analyzeBountyHubInventory(parsed, details, [issue]);
   assert.equal(result.evaluations.length, 1);
   assert.deepEqual(result.evaluations[0], {
     task_id: "acme/widget#7",
@@ -97,6 +116,8 @@ test("BountyHub analysis aggregates prepaid sponsors and deduplicates active cla
     paid_listing_ids: [ids[0], ids[1]],
     active_claim_count: 1,
     merged_claim_present: false,
+    github_issue_state: "open",
+    github_issue_locked: false,
     admitted: true,
     excluded_reason: null,
   });
@@ -117,12 +138,13 @@ test("BountyHub analysis aggregates prepaid sponsors and deduplicates active cla
 test("BountyHub analysis fails closed on incomplete or excessive competition evidence", () => {
   const row = listing({ amount: "125.00" });
   const parsed = parseBountyHubPage({ data: [row], hasNextPage: false }).listings;
-  assert.equal(analyzeBountyHubInventory(parsed, []).evaluations[0].excluded_reason, "claim_evidence_incomplete");
+  const issue = githubIssue(bountyHubGithubIssueReferences(parsed)[0]);
+  assert.equal(analyzeBountyHubInventory(parsed, [], [issue]).evaluations[0].excluded_reason, "claim_evidence_incomplete");
   const detail = parseBountyHubDetail({
     ...row,
     claims: [claim(ids[1]), claim(ids[2]), claim(ids[3])],
   }, parsed[0]);
-  const crowded = analyzeBountyHubInventory(parsed, [detail]);
+  const crowded = analyzeBountyHubInventory(parsed, [detail], [issue]);
   assert.equal(crowded.candidates.length, 0);
   assert.equal(crowded.evaluations[0].excluded_reason, "active_competition_above_gate");
 
@@ -130,7 +152,28 @@ test("BountyHub analysis fails closed on incomplete or excessive competition evi
     ...row,
     claims: [claim(ids[1], { isOpen: false, pullRequestIsmerged: true })],
   }, parsed[0]);
-  const terminal = analyzeBountyHubInventory(parsed, [merged]);
+  const terminal = analyzeBountyHubInventory(parsed, [merged], [issue]);
   assert.equal(terminal.candidates.length, 0);
   assert.equal(terminal.evaluations[0].excluded_reason, "merged_claim_present");
+});
+
+test("BountyHub analysis rejects a stale listing when canonical GitHub says the issue is closed", () => {
+  const row = listing({ amount: "250.00", issueNumber: 207 });
+  const parsed = parseBountyHubPage({ data: [row], hasNextPage: false }).listings;
+  const detail = parseBountyHubDetail({ ...row, claims: [] }, parsed[0]);
+  const reference = bountyHubGithubIssueReferences(parsed)[0];
+  const closed = githubIssue(reference, {
+    state: "closed",
+    state_reason: "completed",
+    updated_at: "2026-05-23T09:48:45.000Z",
+  });
+  const result = analyzeBountyHubInventory(parsed, [detail], [closed]);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(result.evaluations[0].github_issue_state, "closed");
+  assert.equal(result.evaluations[0].excluded_reason, "github_issue_closed");
+
+  const missing = analyzeBountyHubInventory(parsed, [detail], []);
+  assert.equal(missing.evaluations[0].excluded_reason, "github_issue_evidence_incomplete");
+  assert.throws(() => githubIssue(reference, { pull_request: { url: "https://api.github.com/repos/acme/widget/pulls/207" } }),
+    /identity is inconsistent/);
 });

@@ -1355,7 +1355,7 @@ test("the normal distribution timer is report-only and retains explicit accounti
   assert.match(service, /Environment=REPORT_ONLY=YES/);
   assert.match(service, /Environment=REVENUE_WALLET=0x4aa55988fA032FBbB8DDEf496b0f194FEc62D614/);
   assert.match(service, /Environment=START_BLOCK=48876000/);
-  assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.012/);
+  assert.match(service, /Environment=TRACKED_COSTS_USDC=1\.057/);
   assert.doesNotMatch(service, /run-audited-monitor/);
 });
 

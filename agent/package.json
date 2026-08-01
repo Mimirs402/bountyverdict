@@ -46,6 +46,7 @@
     "review:daily": "node --experimental-strip-types scripts/daily-review.ts",
     "github:digest": "node --experimental-strip-types scripts/github-digest.ts",
     "algora:scout": "node --experimental-strip-types scripts/algora-scout.ts",
+    "bountyhub:watch": "node --experimental-strip-types scripts/bountyhub-watch.ts",
     "the402:register": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/the402-register.ts",
     "canary:production": "node --experimental-strip-types scripts/functional-canary.ts",
     "settlement:provision": "node --env-file-if-exists=.dev.vars --experimental-strip-types scripts/provision-settlement-buyer.ts",

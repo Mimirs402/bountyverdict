@@ -188,29 +188,80 @@ function withBountyHub(base: typeof fetch, record: Record<string, unknown>): typ
 }
 
 function withIssueHunt(base: typeof fetch, pageOverrides: Record<string, unknown> = {}): typeof fetch {
+  const repositoryObjectId = "4d82dd50a64b4b0068bae8f4";
+  const issueObjectId = "5d82dd50a64b4b0068bae8f3";
+  const pullRequestObjectId = "5d8371ed874954009a39fe83";
+  const rewardObjectId = "7d8371ed874954009a39fe83";
+  const issueOverride = typeof pageOverrides.issue === "object" && pageOverrides.issue !== null &&
+      !Array.isArray(pageOverrides.issue)
+    ? pageOverrides.issue as Record<string, unknown>
+    : {};
+  const mergedIssue = {
+    _id: issueObjectId,
+    repositoryOwnerName: "acme",
+    repositoryName: "widget",
+    repositoryGithubId: "123456",
+    number: 4,
+    status: "funded",
+    depositAmount: 4000,
+    rewardedAt: "2026-07-01T12:00:00.006Z",
+    ...issueOverride,
+  };
+  const { issue: _issue, ...remainingOverrides } = pageOverrides;
   const pageProps = {
-    repository: { ownerName: "acme", name: "widget", githubId: "123456" },
-    issue: {
-      repositoryOwnerName: "acme",
-      repositoryName: "widget",
-      repositoryGithubId: "123456",
-      number: 4,
-      status: "funded",
-      depositAmount: 4000,
+    repository: {
+      _id: repositoryObjectId,
+      ownerName: "acme",
+      name: "widget",
+      githubId: "123456",
     },
+    issue: mergedIssue,
     deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "4000", cancelled: false }],
     anonymousDeposits: [],
     organizationGithubIdBalanceAmountEntries: [],
     pullRequests: [{
-      _id: "5d8371ed874954009a39fe83",
+      _id: pullRequestObjectId,
       cancelled: false,
       url: "https://github.com/acme/widget/pull/12",
       repositoryOwnerName: "acme",
       repositoryName: "widget",
       number: 12,
+      ...(mergedIssue.status === "rewarded" ? { reward: rewardObjectId } : {}),
     }],
+    ...(mergedIssue.status === "rewarded" ? {
+      reward: {
+        _id: rewardObjectId,
+        repository: repositoryObjectId,
+        issue: issueObjectId,
+        pullRequest: pullRequestObjectId,
+        repositoryPercentge: 20,
+        feePercentage: 10,
+        amount: "4000",
+        feeAmount: "400",
+        repositoryRewardAmount: "800",
+        userRewardAmount: "2800",
+        createdAt: "2026-07-01T12:00:00.000Z",
+      },
+      events: [{
+        __t: "RewardEvent",
+        type: "Reward",
+        _id: "8d8371ed874954009a39fe83",
+        createdAt: "2026-07-01T12:00:00.050Z",
+        rewardId: rewardObjectId,
+        repositoryId: repositoryObjectId,
+        repositoryOwnerName: "acme",
+        repositoryName: "widget",
+        repositoryGithubId: "123456",
+        issueId: issueObjectId,
+        issueNumber: 4,
+        amount: "4000",
+        feeAmount: "400",
+        repositoryRewardAmount: "800",
+        userRewardAmount: "2800",
+      }],
+    } : {}),
     depositRequests: [],
-    ...pageOverrides,
+    ...remainingOverrides,
   };
   const nextData = {
     props: {
@@ -476,7 +527,7 @@ test("BountyHub claim and terminal states fail closed", async () => {
   }
 });
 
-test("verifies funded IssueHunt evidence and hard-stops submitted outputs", async () => {
+test("does not treat public IssueHunt funded SSR accounting as collectible reward evidence", async () => {
   const issueHuntIssue = {
     ...issue,
     labels: [{ name: "Funded on Issuehunt" }],
@@ -488,14 +539,132 @@ test("verifies funded IssueHunt evidence and hard-stops submitted outputs", asyn
     new Date("2026-07-20T12:00:00Z"),
   );
 
-  assert.equal(result.reward.state, "LISTED");
+  assert.equal(result.reward.state, "UNVERIFIED");
+  assert.equal(result.reward.verification, "UNVERIFIED");
+  assert.equal(result.reward.platform, "IssueHunt");
+  assert.equal(result.reward.amount, null);
+  assert.equal(result.reward.evidence_url, "https://oss.issuehunt.io/r/acme/widget/issues/4");
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "IssueHunt funding is not currently collectible evidence" && signal.hard_stop &&
+    signal.evidence_url === "https://oss.issuehunt.io/terms"
+  ));
+  assert.ok(result.limitations.some((item) => item.includes("Public IssueHunt funded/ready pages")));
+});
+
+test("an independently trusted platform reward can supersede an unverified IssueHunt reference", async () => {
+  const issueWithBothReferences = {
+    ...issue,
+    labels: [{ name: "Funded on Issuehunt" }],
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(withBountyHub(
+      githubMock([], null, issueWithBothReferences),
+      bountyHubRecord(),
+    )),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.platform, "BountyHub");
+  assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.verdict, "AVOID");
+  assert.equal(result.score, 0);
+  assert.ok(!result.signals.some((signal) =>
+    signal.label === "IssueHunt funding is not currently collectible evidence"
+  ));
+  assert.ok(result.signals.some((signal) =>
+    signal.label === "Bounty platform reports submitted outputs" && signal.hard_stop &&
+    signal.evidence_url === "https://github.com/acme/widget/pull/12"
+  ));
+});
+
+test("an untrusted IssueHunt URL cannot manufacture a hard stop without bound platform evidence", async () => {
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    githubMock([{
+      body: "Try https://issuehunt.io/r/attacker/fake/issues/4",
+      author_association: "NONE",
+      user: { login: "attacker" },
+    }]),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.verdict, "VIABLE");
+  assert.notEqual(result.reward.platform, "IssueHunt");
+  assert.ok(!result.signals.some((signal) =>
+    signal.label === "IssueHunt funding is not currently collectible evidence" ||
+    signal.label === "Bounty platform reports submitted outputs"
+  ));
+});
+
+test("active IssueHunt evidence cannot clobber a terminal maintainer outcome", async () => {
+  const fundedLabel = [{ name: "Funded on Issuehunt" }];
+  const paidIssue = {
+    ...issue,
+    title: "Frantic bounty #118: Vendor UX dogfood",
+    body: "Frantic bounty #118\n\nWorker price: $100\nSlots: 1 (filled)\nStatus: delivered\n" +
+      "Claim: https://gofrantic.com/bounties/118\n\nFrantic is the source of truth.",
+    labels: [...fundedLabel, { name: "delivered" }],
+  };
+  const paid = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(githubMock([{
+      body: "Frantic paid one accepted claim.",
+      author_association: "OWNER",
+      user: { login: "maintainer" },
+    }], null, paidIssue)),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(paid.reward.state, "PAID_OR_AWARDED");
+  assert.notEqual(paid.reward.platform, "IssueHunt");
+
+  const withdrawn = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(githubMock([], null, {
+      ...issue,
+      labels: fundedLabel,
+      body: "This $100 bounty has been withdrawn and will not be paid. The issue remains open for history.",
+    })),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+  assert.equal(withdrawn.reward.state, "WITHDRAWN");
+  assert.notEqual(withdrawn.reward.platform, "IssueHunt");
+});
+
+test("retains terminal IssueHunt rewarded records as trusted hard stops", async () => {
+  const issueHuntIssue = {
+    ...issue,
+    labels: [{ name: "Funded on Issuehunt" }],
+  };
+  const result = await checkGithubIssue(
+    "https://github.com/acme/widget/issues/4",
+    {},
+    withIssueHunt(githubMock([], null, issueHuntIssue), {
+      issue: {
+        repositoryOwnerName: "acme",
+        repositoryName: "widget",
+        repositoryGithubId: "123456",
+        number: 4,
+        status: "rewarded",
+        depositAmount: 4000,
+      },
+    }),
+    new Date("2026-07-20T12:00:00Z"),
+  );
+
+  assert.equal(result.reward.state, "PAID_OR_AWARDED");
   assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
   assert.equal(result.reward.platform, "IssueHunt");
   assert.equal(result.reward.amount, 40);
   assert.equal(result.verdict, "AVOID");
   assert.ok(result.signals.some((signal) =>
-    signal.label === "Bounty platform reports submitted outputs" && signal.hard_stop &&
-    signal.evidence_url === "https://github.com/acme/widget/pull/12"
+    signal.label === "Bounty platform reports reward awarded" && signal.hard_stop
   ));
 });
 
@@ -2291,23 +2460,74 @@ test("legacy Algora login or wrong issue route alone cannot authenticate a platf
   assert.notEqual(wrongRoute.reward.verification, "TRUSTED_PLATFORM_API");
 });
 
-function transferredIssueHuntPage(repositoryGithubId: string): string {
+function transferredIssueHuntPage(repositoryGithubId: string, status = "funded"): string {
+  const repositoryObjectId = "4d82dd50a64b4b0068bae8f4";
+  const issueObjectId = "5d82dd50a64b4b0068bae8f3";
+  const pullRequestObjectId = "5d8371ed874954009a39fe83";
+  const rewardObjectId = "7d8371ed874954009a39fe83";
   const nextData = {
     props: {
       pageProps: {
-        repository: { ownerName: "acme", name: "widget", githubId: repositoryGithubId },
+        repository: {
+          _id: repositoryObjectId,
+          ownerName: "acme",
+          name: "widget",
+          githubId: repositoryGithubId,
+        },
         issue: {
+          _id: issueObjectId,
           repositoryOwnerName: "acme",
           repositoryName: "widget",
           repositoryGithubId,
           number: 4,
-          status: "funded",
+          status,
           depositAmount: 3000,
+          rewardedAt: "2026-07-01T12:00:00.006Z",
         },
         deposits: [{ _id: "5d82dd50a64b4b0068bae8f4", amount: "3000", cancelled: false }],
         anonymousDeposits: [],
         organizationGithubIdBalanceAmountEntries: [],
-        pullRequests: [],
+        pullRequests: status === "rewarded" ? [{
+          _id: pullRequestObjectId,
+          cancelled: false,
+          url: "https://github.com/acme/widget/pull/12",
+          repositoryOwnerName: "acme",
+          repositoryName: "widget",
+          number: 12,
+          reward: rewardObjectId,
+        }] : [],
+        ...(status === "rewarded" ? {
+          reward: {
+            _id: rewardObjectId,
+            repository: repositoryObjectId,
+            issue: issueObjectId,
+            pullRequest: pullRequestObjectId,
+            repositoryPercentge: 20,
+            feePercentage: 10,
+            amount: "3000",
+            feeAmount: "300",
+            repositoryRewardAmount: "600",
+            userRewardAmount: "2100",
+            createdAt: "2026-07-01T12:00:00.000Z",
+          },
+          events: [{
+            __t: "RewardEvent",
+            type: "Reward",
+            _id: "8d8371ed874954009a39fe83",
+            createdAt: "2026-07-01T12:00:00.050Z",
+            rewardId: rewardObjectId,
+            repositoryId: repositoryObjectId,
+            repositoryOwnerName: "acme",
+            repositoryName: "widget",
+            repositoryGithubId,
+            issueId: issueObjectId,
+            issueNumber: 4,
+            amount: "3000",
+            feeAmount: "300",
+            repositoryRewardAmount: "600",
+            userRewardAmount: "2100",
+          }],
+        } : {}),
       },
       route: {
         pathname: "/issues/show",
@@ -2321,7 +2541,11 @@ function transferredIssueHuntPage(repositoryGithubId: string): string {
   return `<script>__NEXT_DATA__ = ${JSON.stringify(nextData)};__NEXT_LOADED_PAGES__ = []</script>`;
 }
 
-function transferredIssueHuntMock(repositoryGithubId: string, requested: string[]): typeof fetch {
+function transferredIssueHuntMock(
+  repositoryGithubId: string,
+  requested: string[],
+  status = "funded",
+): typeof fetch {
   const transferredIssue = {
     ...issue,
     comments: 0,
@@ -2359,7 +2583,7 @@ function transferredIssueHuntMock(repositoryGithubId: string, requested: string[
       return new Response("not found", { status: 404, headers: { "content-type": "text/html" } });
     }
     if (url.origin === "https://oss.issuehunt.io" && url.pathname === "/r/acme/widget/issues/4") {
-      return new Response(transferredIssueHuntPage(repositoryGithubId), {
+      return new Response(transferredIssueHuntPage(repositoryGithubId, status), {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
@@ -2367,30 +2591,31 @@ function transferredIssueHuntMock(repositoryGithubId: string, requested: string[
   }) as typeof fetch;
 }
 
-test("a transferred repository can use a legacy IssueHunt route bound to its canonical GitHub ID", async () => {
+test("a transferred repository can retain terminal rewarded evidence from a bound legacy IssueHunt route", async () => {
   const requested: string[] = [];
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
     {},
-    transferredIssueHuntMock("222182830", requested),
+    transferredIssueHuntMock("222182830", requested, "rewarded"),
     new Date("2026-07-20T12:00:00Z"),
   );
 
   assert.equal(result.issue.transferred, true);
   assert.equal(result.reward.platform, "IssueHunt");
   assert.equal(result.reward.verification, "TRUSTED_PLATFORM_API");
+  assert.equal(result.reward.state, "PAID_OR_AWARDED");
   assert.equal(result.reward.amount, 30);
   assert.equal(result.reward.evidence_url, "https://oss.issuehunt.io/r/acme/widget/issues/4");
   assert.ok(requested.indexOf("https://oss.issuehunt.io/r/newco/gadget/issues/4") <
     requested.indexOf("https://oss.issuehunt.io/r/acme/widget/issues/4"));
 });
 
-test("a transferred repository rejects a legacy IssueHunt record for a different GitHub ID", async () => {
+test("a transferred repository rejects terminal legacy IssueHunt evidence for a different GitHub ID", async () => {
   const requested: string[] = [];
   const result = await checkGithubIssue(
     "https://github.com/acme/widget/issues/4",
     {},
-    transferredIssueHuntMock("999999", requested),
+    transferredIssueHuntMock("999999", requested, "rewarded"),
     new Date("2026-07-20T12:00:00Z"),
   );
 
@@ -2400,7 +2625,7 @@ test("a transferred repository rejects a legacy IssueHunt record for a different
   assert.equal(requested.filter((url) => url.startsWith("https://oss.issuehunt.io/")).length, 2);
 });
 
-test("a canonical issue URL follows its exact legacy IssueHunt reference after a repository transfer", async () => {
+test("a canonical issue URL follows but does not trust a legacy active IssueHunt record", async () => {
   const requested: string[] = [];
   const result = await checkGithubIssue(
     "https://github.com/newco/gadget/issues/4",
@@ -2411,8 +2636,8 @@ test("a canonical issue URL follows its exact legacy IssueHunt reference after a
 
   assert.equal(result.issue.transferred, false);
   assert.equal(result.reward.platform, "IssueHunt");
-  assert.equal(result.reward.amount, 30);
-  assert.equal(result.reward.evidence_url, "https://oss.issuehunt.io/r/acme/widget/issues/4");
+  assert.equal(result.reward.verification, "UNVERIFIED");
+  assert.equal(result.reward.amount, null);
   assert.deepEqual(
     requested.filter((url) => url.startsWith("https://oss.issuehunt.io/")),
     [

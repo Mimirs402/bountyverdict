@@ -20,9 +20,10 @@ const publicEvidenceHosts = new Set([
   "base.blockscout.com",
   "base-sepolia.blockscout.com",
   "api.moltjobs.io",
+  "api.bountyhub.dev",
 ]);
 
-export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v4";
+export const OPPORTUNITY_MARKER_VERSION = "cross-market-fresh-low-competition-v5";
 
 export type EscrowOpportunityCandidate = {
   market: "taskmarket" | "moltjobs";
@@ -59,7 +60,32 @@ export type GithubAlgoraOpportunityCandidate = {
   selection_basis: string;
 };
 
-export type OpportunityCandidate = EscrowOpportunityCandidate | GithubAlgoraOpportunityCandidate;
+export type GithubBountyHubOpportunityCandidate = {
+  market: "github_bountyhub";
+  task_id: string;
+  title: string;
+  mode: "bounty";
+  gross_reward_usd: string;
+  conservative_net_reward_usd: string;
+  fee_reserve_percent: 20;
+  submission_count: number;
+  created_at: string;
+  updated_at: string;
+  issue_url: string;
+  listing_evidence_urls: string[];
+  listing_snapshot_sha256: string;
+  requires_agent_fit_review: true;
+  selection_basis: string;
+};
+
+export type OpportunityCandidate = EscrowOpportunityCandidate | GithubAlgoraOpportunityCandidate |
+  GithubBountyHubOpportunityCandidate;
+
+function isGithubOpportunityCandidate(
+  candidate: OpportunityCandidate,
+): candidate is GithubAlgoraOpportunityCandidate | GithubBountyHubOpportunityCandidate {
+  return candidate.market === "github_algora" || candidate.market === "github_bountyhub";
+}
 
 export type OpportunityTrigger = {
   schema_version: 2;
@@ -283,6 +309,63 @@ export function parseOpportunityCandidates(value: unknown): OpportunityCandidate
         selection_basis: string(candidate.selection_basis, "Opportunity selection basis", 500),
       };
     }
+    if (candidate.market === "github_bountyhub") {
+      if (candidate.mode !== "bounty" || candidate.fee_reserve_percent !== 20) {
+        throw new Error("GitHub BountyHub candidate has unsupported workflow flags.");
+      }
+      const taskId = string(candidate.task_id, "Opportunity task ID", 220, githubIssueIdPattern);
+      const issueUrl = string(candidate.issue_url, "GitHub BountyHub issue URL", 1_000);
+      const [repository, issueNumber] = taskId.split("#");
+      if (issueUrl !== `https://github.com/${repository}/issues/${issueNumber}`) {
+        throw new Error("GitHub BountyHub issue identity is inconsistent.");
+      }
+      const listingEvidenceUrls = boundedStringArray(
+        candidate.listing_evidence_urls,
+        "GitHub BountyHub listing evidence URL",
+        20,
+        1_000,
+      );
+      if (listingEvidenceUrls.length === 0 || new Set(listingEvidenceUrls).size !== listingEvidenceUrls.length ||
+        listingEvidenceUrls.some((value) => {
+          try {
+            const evidence = new URL(value);
+            return evidence.protocol !== "https:" || Boolean(evidence.username || evidence.password) ||
+              evidence.hostname !== "api.bountyhub.dev" ||
+              !/^\/api\/bounties\/[a-f0-9-]{36}$/.test(evidence.pathname);
+          } catch {
+            return true;
+          }
+        })) {
+        throw new Error("GitHub BountyHub funding evidence URLs are invalid.");
+      }
+      return {
+        market: "github_bountyhub",
+        task_id: taskId,
+        title: string(candidate.title, "Opportunity title", 500),
+        mode: "bounty",
+        gross_reward_usd: string(candidate.gross_reward_usd, "Opportunity gross reward", 32, decimalPattern),
+        conservative_net_reward_usd: string(
+          candidate.conservative_net_reward_usd,
+          "Opportunity conservative net reward",
+          32,
+          decimalPattern,
+        ),
+        fee_reserve_percent: 20,
+        submission_count: safeCount(candidate.submission_count, "Opportunity submission count", 2),
+        created_at: timestamp(candidate.created_at, "Opportunity creation time"),
+        updated_at: timestamp(candidate.updated_at, "Opportunity update time"),
+        issue_url: issueUrl,
+        listing_evidence_urls: listingEvidenceUrls,
+        listing_snapshot_sha256: string(
+          candidate.listing_snapshot_sha256,
+          "GitHub BountyHub listing snapshot",
+          64,
+          /^[a-f0-9]{64}$/,
+        ),
+        requires_agent_fit_review: true,
+        selection_basis: string(candidate.selection_basis, "Opportunity selection basis", 500),
+      };
+    }
     if (candidate.market !== "taskmarket" && candidate.market !== "moltjobs") {
       throw new Error("Opportunity candidate has unsupported workflow flags.");
     }
@@ -343,7 +426,7 @@ export function parseRememberedOpportunityFingerprints(value: unknown): string[]
     throw new Error("Remembered opportunity fingerprints are malformed.");
   }
   const legacyPattern = /^(?:0x[a-f0-9]{64})(?::0x[a-f0-9]{64})?$/i;
-  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|moltjobs:[a-f0-9-]{36}):0x[a-f0-9]{64}|github_algora:[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
+  const crossMarketPattern = /^(?:(?:taskmarket:0x[a-f0-9]{64}|moltjobs:[a-f0-9-]{36}):0x[a-f0-9]{64}|github_(?:algora|bountyhub):[-a-z0-9_.]+\/[-a-z0-9_.]+#[1-9][0-9]{0,9}:[a-f0-9]{64})$/i;
   const fingerprints = value.map((item) => {
     const parsed = string(item, "Remembered opportunity fingerprint", 400);
     if (!legacyPattern.test(parsed) && !crossMarketPattern.test(parsed)) {
@@ -365,11 +448,12 @@ export function buildOpportunityTrigger(
   const candidates = parseOpportunityCandidates(candidatesValue);
   const remembered = parseRememberedOpportunityFingerprints(rememberedFingerprintsValue);
   const rememberedSet = new Set(remembered);
-  const candidateFingerprint = (candidate: OpportunityCandidate) => candidate.market === "github_algora"
+  const candidateFingerprint = (candidate: OpportunityCandidate) => isGithubOpportunityCandidate(candidate)
     ? `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.listing_snapshot_sha256}`
     : `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.escrow_tx_hash.toLowerCase()}`;
   const migratedRemembered = remembered.map((entry) => {
-    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("github_algora:")) {
+    if (entry.startsWith("taskmarket:") || entry.startsWith("moltjobs:") || entry.startsWith("github_algora:") ||
+      entry.startsWith("github_bountyhub:")) {
       return entry;
     }
     const [legacyTaskId] = entry.split(":");
@@ -380,7 +464,7 @@ export function buildOpportunityTrigger(
   });
   const fresh = candidates
     .filter((candidate) => {
-      if (candidate.market === "github_algora") return !rememberedSet.has(candidateFingerprint(candidate));
+      if (isGithubOpportunityCandidate(candidate)) return !rememberedSet.has(candidateFingerprint(candidate));
       const legacyTask = candidate.task_id.toLowerCase();
       const legacyFingerprint = `${legacyTask}:${candidate.escrow_tx_hash.toLowerCase()}`;
       return !rememberedSet.has(candidateFingerprint(candidate)) &&
@@ -429,7 +513,7 @@ function opportunityTriggerId(candidates: OpportunityCandidate[]): string {
 }
 
 function candidateFingerprintForId(candidate: OpportunityCandidate): string {
-  return candidate.market === "github_algora"
+  return isGithubOpportunityCandidate(candidate)
     ? `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.listing_snapshot_sha256}`
     : `${candidate.market}:${candidate.task_id.toLowerCase()}:${candidate.escrow_tx_hash.toLowerCase()}`;
 }
@@ -692,6 +776,9 @@ function canonicalOpportunityEvidenceUrls(candidate: OpportunityCandidate): stri
   if (candidate.market === "github_algora") {
     return [candidate.issue_url, candidate.listing_evidence_url];
   }
+  if (candidate.market === "github_bountyhub") {
+    return [candidate.issue_url, ...candidate.listing_evidence_urls];
+  }
   return [
     `https://api.moltjobs.io/v1/jobs/${candidate.task_id}/public`,
     `https://api.moltjobs.io/v1/public/jobs/${candidate.task_id}`,
@@ -706,6 +793,20 @@ function candidatePromptFacts(candidate: OpportunityCandidate): Record<string, u
       task_id: candidate.task_id,
       canonical_evidence_urls: canonicalOpportunityEvidenceUrls(candidate),
       reward_amount_usd: candidate.reward_amount_usd,
+      current_submission_count: candidate.submission_count,
+      created_at: candidate.created_at,
+      updated_at: candidate.updated_at,
+      listing_snapshot_sha256: candidate.listing_snapshot_sha256,
+    };
+  }
+  if (candidate.market === "github_bountyhub") {
+    return {
+      market: candidate.market,
+      task_id: candidate.task_id,
+      canonical_evidence_urls: canonicalOpportunityEvidenceUrls(candidate),
+      gross_reward_usd: candidate.gross_reward_usd,
+      conservative_net_reward_usd: candidate.conservative_net_reward_usd,
+      fee_reserve_percent: candidate.fee_reserve_percent,
       current_submission_count: candidate.submission_count,
       created_at: candidate.created_at,
       updated_at: candidate.updated_at,

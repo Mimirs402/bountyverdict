@@ -137,6 +137,25 @@ test("MoltJobs page validates decimal and paired onchain escrow evidence", () =>
   }), /budget is invalid/);
 });
 
+test("MoltJobs excludes the known Stripe lane without accepting unknown providers", () => {
+  const stripe = rawMolt({
+    id: "99999999-9999-4999-8999-999999999999",
+    paymentProvider: "STRIPE",
+    paymentStatus: "PENDING_AUTH",
+    escrowTxHash: null,
+    escrowJobId: null,
+  });
+  const page = parseMoltJobsPage({ data: [stripe, rawMolt()], meta: { nextCursor: null } });
+  assert.equal(page.data.length, 1);
+  assert.equal(page.data[0].paymentProvider, "ON_CHAIN_USDC");
+  assert.throws(() => parseMoltJobsPage({
+    data: [rawMolt({ paymentProvider: "UNKNOWN" })], meta: { nextCursor: null },
+  }), /unsupported status or payment provider/);
+  assert.throws(() => parseMoltJobsPage({
+    data: [stripe, { ...stripe }], meta: { nextCursor: null },
+  }), /duplicated a job/);
+});
+
 test("MoltJobs accounting excludes an expired unfunded headline budget", () => {
   const expired = molt(rawMolt({
     id: "55555555-5555-4555-8555-555555555555",

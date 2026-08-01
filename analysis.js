@@ -68,6 +68,17 @@ const AI_POLICY_NON_BLOCKING_SCOPE_PATTERNS = [
   /(?:do not|don['’]?t|must not|may not)\s+use\s+(?:ai|an? llm|chatgpt|generative ai)(?:\s+tools?)?\s+to\s+(?:reply|respond|answer)\s+(?:to\s+)?(?:questions?|comments?|review feedback)\b/i,
 ];
 
+const AUTOMATED_BOUNTY_PARTICIPATION_BLOCK_PATTERNS = [
+  /\b(?:use of\s+)?(?:automation|ai[ -]agents?|automated systems?)\b.{0,120}\b(?:claim(?:ing)?|request(?:ing)? assignment|assignment requests?|bounty claims?)\b.{0,100}\b(?:strictly\s+)?(?:prohibited|forbidden|not allowed)\b/i,
+  /\b(?:claim(?:ing)?|request(?:ing)? assignment|assignment requests?|bounty claims?)\b.{0,120}\b(?:using|by|from)\b.{0,60}\b(?:automation|ai[ -]agents?|automated systems?)\b.{0,100}\b(?:prohibited|forbidden|not allowed)\b/i,
+];
+
+function policyBlocksAutomatedBountyParticipation(value) {
+  return AUTOMATED_BOUNTY_PARTICIPATION_BLOCK_PATTERNS.some((pattern) =>
+    pattern.test(String(value ?? ""))
+  );
+}
+
 const AI_POLICY_ALLOW_PATTERNS = [
   /\b(?:ai|llm|chatgpt|generative ai)(?:[ -](?:assistance|assisted)|\s+(?:tools?|usage|assistance))?\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
   /\b(?:ai|llm|chatgpt|generative ai)[ -](?:generated|assisted)\s+(?:contributions?|pull requests?|patches?|code)\s+(?:is|are)\s+(?:explicitly\s+)?(?:allowed|permitted|welcome)\b/i,
@@ -261,6 +272,7 @@ const TASK_AUTONOMY_BLOCKER_CATEGORIES = [
       /\bgo away\b.{0,80}\b(?:ai|llm|chatgpt).{0,80}\b(?:prompt engineers?|agents?)\b/i,
       /\b(?:ai|llm|chatgpt)(?:[ -](?:powered|driven))?[ -]agents?\b.{0,100}\b(?:prohibited|forbidden|not allowed|ineligible|may not|must not)\b.{0,100}\b(?:participat|contribut|submit|enter|apply|compete)\w*\b/i,
       /\b(?:prohibited|forbidden|not allowed|ineligible|may not|must not)\b.{0,100}\b(?:ai|llm|chatgpt)(?:[ -](?:powered|driven))?[ -]agents?\b.{0,100}\b(?:participat|contribut|submit|enter|apply|compete)\w*\b/i,
+      ...AUTOMATED_BOUNTY_PARTICIPATION_BLOCK_PATTERNS,
     ],
   },
 ];
@@ -1371,9 +1383,16 @@ export function analyzeBounty({ issue, repository, comments = [], timeline = [],
     mandatoryExternalPrerequisites(body).includes("gated platform validation")
   );
   const taskAutonomyBlockers = TASK_AUTONOMY_BLOCKER_CATEGORIES.flatMap(({ category }) => {
-    const source = authoritativePrerequisiteSources.find(({ body }) =>
+    const taskSource = authoritativePrerequisiteSources.find(({ body }) =>
       taskAutonomyBlockerCategories(body).includes(category)
     );
+    const policySource = category === "AI_AGENT_EXCLUDED"
+      ? policyDocuments.find(({ body }) => policyBlocksAutomatedBountyParticipation(body))
+      : null;
+    const source = taskSource ?? (policySource ? {
+      ...policySource,
+      source: "repository_policy",
+    } : null);
     return source ? [{
       category,
       source: source.source,

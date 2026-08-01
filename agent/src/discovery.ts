@@ -217,7 +217,7 @@ export const outputSchema = {
                   "AI_AGENT_EXCLUDED",
                 ],
               },
-              source: { type: "string", enum: ["issue_body", "maintainer_comment"] },
+              source: { type: "string", enum: ["issue_body", "maintainer_comment", "repository_policy"] },
               evidence_url: { type: "string" },
             },
             required: ["category", "source", "evidence_url"],

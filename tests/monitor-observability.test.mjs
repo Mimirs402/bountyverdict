@@ -6,6 +6,7 @@ const distributionUrl = new URL("../agent/scripts/distribution-monitor.ts", impo
 const recoveryRestoreUrl = new URL("../agent/scripts/restore-recovery-experiment-checkpoint.ts", import.meta.url);
 const auditedRunnerUrl = new URL("../agent/scripts/run-audited-monitor.ts", import.meta.url);
 const directoryMonitorUrl = new URL("../agent/scripts/directory-monitor.ts", import.meta.url);
+const agent402IndexUrl = new URL("../agent/src/agent402-index.ts", import.meta.url);
 const agentToolsCloudUrl = new URL("../agent/src/agent-tools-cloud.ts", import.meta.url);
 const acquisitionUrl = new URL("../agent/src/acquisition.ts", import.meta.url);
 const demandWatchUrl = new URL("../agent/scripts/demand-watch.ts", import.meta.url);
@@ -440,20 +441,25 @@ test("marketplace retrieval uses a blind-agent task holdout instead of seller-sh
 });
 
 test("Agent402 monitoring is passive and exposes catalog over-indexing without fake demand", async () => {
-  const [directory, distribution] = await Promise.all([
+  const [directory, distribution, indexReader] = await Promise.all([
     readFile(directoryMonitorUrl, "utf8"),
     readFile(distributionUrl, "utf8"),
+    readFile(agent402IndexUrl, "utf8"),
   ]);
   const start = directory.indexOf("async function agent402Status");
   const end = directory.indexOf("async function githubPrStatus", start);
   assert.ok(start >= 0 && end > start);
   const monitor = directory.slice(start, end);
-  assert.match(monitor, /fetch\(`\$\{agent402Api\}\/index`/);
+  assert.match(monitor, /readAgent402SellerIndex/);
   assert.doesNotMatch(monitor, /\/route|query_benchmark|found_queries|top_three_queries/);
   assert.match(monitor, /expected_paid_tool_count: expectedAgent402PaidTools/);
   assert.match(monitor, /overindexed_non_paid_operations/);
   assert.match(monitor, /semantic_query_monitoring: "disabled"/);
   assert.match(monitor, /not impressions or demand/);
+  assert.match(indexReader, /fetchFn\(url/);
+  assert.match(indexReader, /AGENT402_INDEX_PAGE_LIMIT = 250/);
+  assert.match(indexReader, /AGENT402_INDEX_MAX_PAGES = 50/);
+  assert.doesNotMatch(indexReader, /\/route|query_benchmark|found_queries|top_three_queries/);
   assert.match(distribution, /passive cached index health only/);
   assert.match(distribution, /semantic owner-query monitoring disabled/);
 });

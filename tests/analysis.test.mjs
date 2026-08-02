@@ -2579,6 +2579,82 @@ test("ordinary redacted reproduction details are not unsafe task instructions", 
   }
 });
 
+test("a no-live-write safety boundary is not mistaken for a credential disclosure request", () => {
+  const safeBoundary = "The integration will gate the exact normalized owner, repository, pull request, commit, path, line/side, and comment body immediately before the injected/dry-run provider seam, with no live GitHub write or production credential.";
+  const output = analyzeBounty({
+    issue: healthyIssue,
+    repository: healthyRepo,
+    comments: [{
+      body: safeBoundary,
+      author_association: "OWNER",
+      html_url: "https://github.com/acme/widget/issues/4#issuecomment-safe-boundary",
+    }],
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Unsafe task instructions"));
+});
+
+test("a credential absence and an unrelated fixture commit are not disclosure instructions", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: `${healthyIssue.body}\nNo production credential is required; commit only the fixture.`,
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.ok(!output.signals.some((item) => item.label === "Unsafe task instructions"));
+});
+
+test("a safety prohibition cannot mask a later credential disclosure request", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: `${healthyIssue.body}\nDo not post secrets; then send your private key in the issue comment.`,
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unsafe task instructions" && item.hardStop && /credential values/i.test(item.detail)
+  ));
+});
+
+test("an operation absence cannot mask a later credential disclosure request", () => {
+  const output = analyzeBounty({
+    issue: {
+      ...healthyIssue,
+      body: `${healthyIssue.body}\nUse no live GitHub write or production credential; then publish the API key in the issue comment.`,
+    },
+    repository: healthyRepo,
+    now,
+  });
+
+  assert.equal(output.verdict, "AVOID");
+  assert.ok(output.signals.some((item) =>
+    item.label === "Unsafe task instructions" && item.hardStop && /credential values/i.test(item.detail)
+  ));
+});
+
+test("direct commit and write requests for secret values remain unsafe", () => {
+  for (const instruction of ["Commit the production credential.", "Write the access token."]) {
+    const output = analyzeBounty({
+      issue: { ...healthyIssue, body: `${healthyIssue.body}\n${instruction}` },
+      repository: healthyRepo,
+      now,
+    });
+
+    assert.equal(output.verdict, "AVOID", instruction);
+    assert.ok(output.signals.some((item) =>
+      item.label === "Unsafe task instructions" && item.hardStop && /credential values/i.test(item.detail)
+    ), instruction);
+  }
+});
+
 test("public credential-value requests remain unsafe task instructions", () => {
   const output = analyzeBounty({
     issue: {

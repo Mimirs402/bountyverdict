@@ -143,8 +143,8 @@ function policyRequestsSensitiveAgentContext(value) {
 }
 
 const SENSITIVE_DISCLOSURE_ACTION = /\b(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)\b/i;
-const SENSITIVE_DISCLOSURE_GUARD = /\b(?:(?:do not|don['’]?t|never|must not)\s+(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)|(?:redact|omit|mask)\b|(?:placeholder|names? only|not (?:the )?values?))[^.\n]{0,120}\b(?:secrets?|credentials?|passwords?|tokens?|keys?|prompts?|instructions?|context|environment variables?)\b/i;
-const SENSITIVE_OUTPUT_DENIAL = /\b(?:cannot|can['’]?t|could not|don['’]?t|do not|no way)\b[^.\n]{0,100}\b(?:return|print|write|show)\b[^.\n]{0,80}\b(?:secrets?|credentials?|passwords?|tokens?|keys?)\b/i;
+const SENSITIVE_DISCLOSURE_GUARD = /\b(?:(?:do not|don['’]?t|never|must not)\s+(?:provide|publish|post|paste|include|copy|reveal|disclose|expose|print|dump|return|attach|commit|write|submit|share|send|upload|record|show)|(?:redact|omit|mask)\b|(?:placeholder|names? only|not (?:the )?values?))[^.\n]{0,120}?\b(?:secrets?|credentials?|passwords?|tokens?|keys?|prompts?|instructions?|context|environment variables?)\b/i;
+const SENSITIVE_OUTPUT_DENIAL = /\b(?:cannot|can['’]?t|could not|don['’]?t|do not|no way)\b[^.\n]{0,100}?\b(?:return|print|write|show)\b[^.\n]{0,80}?\b(?:secrets?|credentials?|passwords?|tokens?|keys?)\b/i;
 const HIDDEN_AGENT_CONTEXT_PATTERNS = [
   /\b(?:verbatim|exact|full|complete|unabridged|unredacted)\s+(?:copy\s+of\s+)?(?:all\s+)?(?:system|developer|hidden|initialization|agent|model|session)?[ -]?(?:instructions?|guidelines?|prompts?|context|messages?)\b/i,
   /\b(?:instructions?|guidelines?|prompts?|context)\b[^.\n]{0,120}\b(?:before|prior to)\b[^.\n]{0,40}\b(?:first|initial)\b[^.\n]{0,24}\b(?:human|user)\s+message\b/i,
@@ -152,7 +152,8 @@ const HIDDEN_AGENT_CONTEXT_PATTERNS = [
   /\b(?:init_context|initialization context|initialization text|tool_access|session_config|tool access|session configuration)\b/i,
 ];
 const SECRET_VALUE_PATTERN = /\b(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variable values?)\b|(?:^|\s)\.env\s+(?:file|contents?)\b/i;
-const SECRET_EXPOSURE_ACTION = /\b(?:publish|post|paste|reveal|disclose|expose|print|dump|return|attach|commit|share|send|upload|show)\b/i;
+const SECRET_EXPOSURE_ACTION = /\b(?:publish|post|paste|reveal|disclose|expose|print|dump|return|attach|share|send|upload|show)\b/i;
+const DIRECT_SECRET_WRITE_ACTION = /\b(?:commit|write)\s+(?:(?:the|a|an|your|our|my|raw|actual|real|exact|full|unredacted|production)\s+){0,4}(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variable values?)\b/i;
 const EXPLICIT_SECRET_VALUE_PATTERN = /\b(?:raw|actual|real|exact|full|unredacted)\s+(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?)\b|\b(?:passwords?|secrets?|credentials?|api[ -]?keys?|access tokens?|private keys?|seed phrases?|environment variables?)\s+(?:values?|contents?|material)\b/i;
 const PUBLIC_SECRET_DESTINATION = /\b(?:in|into|on|to)\s+(?:the\s+|an?\s+|your\s+)?(?:pull request|pr\b|issue comment|public (?:issue|comment|log|artifact)|repository|commit|build log|artifact)\b/i;
 const PRIVATE_MACHINE_PATH_PATTERN = /\b(?:absolute|exact|full|unredacted)\b[^.\n]{0,80}\b(?:home (?:path|directory)|working (?:path|directory)|current working directory|shell history|hostname|machine username)\b/i;
@@ -163,17 +164,24 @@ function sensitiveTaskDisclosure(value) {
     .map((chunk) => chunk.trim())
     .filter(Boolean);
   for (const chunk of chunks) {
-    if (SENSITIVE_DISCLOSURE_GUARD.test(chunk)) continue;
-    if (SENSITIVE_OUTPUT_DENIAL.test(chunk)) continue;
-    const requestsDisclosure = SENSITIVE_DISCLOSURE_ACTION.test(chunk) || /\b(?:must|required to|required contributor comment)\b/i.test(chunk);
-    if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(chunk))) {
+    // Remove the guarded phrase rather than discarding the whole sentence. A
+    // safe prohibition and an unsafe request can otherwise hide in the same
+    // sentence. Ambiguous verbs such as `commit` and `write` are classified
+    // separately only when they directly govern a secret-bearing object.
+    const assessable = chunk
+      .replace(SENSITIVE_DISCLOSURE_GUARD, "")
+      .replace(SENSITIVE_OUTPUT_DENIAL, "")
+      .trim();
+    if (!assessable) continue;
+    const requestsDisclosure = SENSITIVE_DISCLOSURE_ACTION.test(assessable) || /\b(?:must|required to|required contributor comment)\b/i.test(assessable);
+    if (requestsDisclosure && HIDDEN_AGENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(assessable))) {
       return "hidden agent instructions or context";
     }
-    if (requestsDisclosure && SECRET_VALUE_PATTERN.test(chunk) &&
-        (SECRET_EXPOSURE_ACTION.test(chunk) || EXPLICIT_SECRET_VALUE_PATTERN.test(chunk) || PUBLIC_SECRET_DESTINATION.test(chunk))) {
+    if (requestsDisclosure && SECRET_VALUE_PATTERN.test(assessable) &&
+        (SECRET_EXPOSURE_ACTION.test(assessable) || DIRECT_SECRET_WRITE_ACTION.test(assessable) || EXPLICIT_SECRET_VALUE_PATTERN.test(assessable) || PUBLIC_SECRET_DESTINATION.test(assessable))) {
       return "secret or credential values";
     }
-    if (requestsDisclosure && PRIVATE_MACHINE_PATH_PATTERN.test(chunk)) {
+    if (requestsDisclosure && PRIVATE_MACHINE_PATH_PATTERN.test(assessable)) {
       return "private machine paths or state";
     }
   }

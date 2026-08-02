@@ -86,8 +86,8 @@ test("Kiro Power exposes only the secret-free production MCP contract", async ()
 
 test("agent manifest is honest and links inspectable products", async () => {
   const manifest = await readJson("../agent-manifest.json");
-  assert.equal(manifest.release_version, "1.1.25");
-  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.25$/);
+  assert.equal(manifest.release_version, "1.1.26");
+  assert.match(manifest.release_url, /\/releases\/tag\/v1\.1\.26$/);
   assert.ok(["awaiting_production", "active"].includes(manifest.status));
   if (manifest.status === "awaiting_production") assert.equal(manifest.production_api, null);
   if (manifest.status === "active") assert.match(manifest.production_api, /^https:\/\//);
@@ -105,7 +105,7 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.ok(manifest.products.every((product) => product.reusable === true));
   assert.equal(manifest.reliability.result_guidance_field, "service_reuse");
   assert.equal(manifest.reliability.scheduled_functional_canaries, true);
-  assert.equal(manifest.mcp.server_version, "1.1.25");
+  assert.equal(manifest.mcp.server_version, "1.1.26");
   assert.equal(manifest.mcp.total_tools, 7);
   assert.deepEqual(manifest.mcp.free_tools, ["choose_github_agent_decision"]);
   assert.equal(manifest.mcp.paid_tools, 6);
@@ -165,6 +165,54 @@ test("agent manifest is honest and links inspectable products", async () => {
   assert.equal(mcp.bounds.invokes_tools, false);
   assert.equal(mcp.reuse_guidance, mcpReuseGuidance);
   assert.deepEqual(mcp.verdicts, ["UNCHANGED", "SAFE_ADDITIVE", "REVIEW", "INCONCLUSIVE", "BREAKING", "SECURITY_REGRESSION"]);
+});
+
+test("LobeHub publish manifest pins the business listing and current release", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../lhm.plugin.json", import.meta.url), "utf8"));
+  const packageManifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+  assert.equal(manifest.identifier, "mimirs402-bountyverdict");
+  assert.equal(manifest.version, packageManifest.version);
+  assert.equal(manifest.author, "Mimir's Lab");
+  assert.equal(manifest.authorUrl, "https://github.com/Mimirs402");
+  assert.equal(manifest.homepage, "https://mimirs402.github.io/bountyverdict/");
+  assert.equal(
+    manifest.cloudEndpoint,
+    "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=lobehub",
+  );
+  assert.match(manifest.description, /Choose the right GitHub agent decision for free/);
+  assert.deepEqual(manifest.tools.map((tool) => tool.name), [
+    "choose_github_agent_decision",
+    "check_github_bounty",
+    "rank_github_bounties",
+    "audit_agent_harness",
+    "diagnose_github_actions_run",
+    "classify_github_actions_flake",
+    "check_mcp_tool_drift",
+  ]);
+  for (const tool of manifest.tools) {
+    assert.match(tool.description, /\S/);
+    assert.equal(tool.inputSchema.type, "object");
+    assert.equal(tool.inputSchema.additionalProperties, false);
+  }
+  assert.deepEqual(manifest.tools.find((tool) => tool.name === "check_github_bounty").inputSchema.required, ["issue_url"]);
+  assert.deepEqual(manifest.tools.find((tool) => tool.name === "diagnose_github_actions_run").inputSchema.required, ["run_url"]);
+  assert.deepEqual(manifest.tools.find((tool) => tool.name === "check_mcp_tool_drift").inputSchema.required, [
+    "contract_version",
+    "subject",
+    "annotation_source_trust",
+    "baseline",
+    "current",
+  ]);
+  assert.deepEqual(new Set(manifest.tags), new Set([
+    "github",
+    "bounties",
+    "developer-tools",
+    "continuous-integration",
+    "coding-agents",
+    "mcp",
+    "x402",
+  ]));
 });
 
 test("umbrella routing skill selects one product and preserves payment safety", async () => {
@@ -307,8 +355,8 @@ test("agent landing page exposes all seven self-serve products", async () => {
   assert.match(page, /choose_github_agent_decision/);
   assert.match(page, /SkillVerdict remains available through its dedicated skill and API, but is intentionally excluded from MCP/);
   assert.match(page, /registry\.modelcontextprotocol\.io\/v0\.1\/servers\/io\.github\.Mimirs402%2Fbountyverdict\/versions\/latest/);
-  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.25/);
-  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.25/);
+  assert.match(page, /gh skill preview Mimirs402\/bountyverdict route-github-agent-checks@v1\.1\.26/);
+  assert.match(page, /gh skill install Mimirs402\/bountyverdict route-github-agent-checks --pin v1\.1\.26/);
   assert.match(page, /copilot plugin install Mimirs402\/bountyverdict/);
   assert.match(page, /npx awal@2\.12\.0 x402 details/);
   assert.match(page, /npx awal@2\.12\.0 x402 pay/);

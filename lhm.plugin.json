@@ -1,0 +1,458 @@
+{
+  "author": "Mimir's Lab",
+  "authorUrl": "https://github.com/Mimirs402",
+  "category": "development",
+  "cloudEndpoint": "https://bountyverdict-agent-production.mimirslab.workers.dev/mcp?source=lobehub",
+  "description": "Choose the right GitHub agent decision for free, then check bounty claimability, rank bounty candidates, audit repository instructions, diagnose GitHub Actions failures, classify flaky runs, or gate MCP tool-schema changes with bounded live evidence.",
+  "homepage": "https://mimirs402.github.io/bountyverdict/",
+  "icon": "https://mimirs402.github.io/bountyverdict/favicon.svg",
+  "identifier": "mimirs402-bountyverdict",
+  "name": "BountyVerdict Agent Decision Tools",
+  "tags": [
+    "github",
+    "bounties",
+    "developer-tools",
+    "continuous-integration",
+    "coding-agents",
+    "mcp",
+    "x402"
+  ],
+  "version": "1.1.26",
+  "tools": [
+    {
+      "name": "choose_github_agent_decision",
+      "description": "Call with no arguments for a free six-tool catalog, or choose the economical next call for a GitHub bounty, coding-agent instructions, failed Actions run, retry decision, or MCP tools change. Returns exact prices, samples, required fields, and unsigned-quote semantics without inspecting the target.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "task": {
+            "description": "Optional exact task. Omit all arguments for the six-tool catalog. one_bounty = claimability of one issue; bounty_portfolio = economical handling of 2-10 issues; repository_agent_instructions = pre-coding instruction audit; github_actions_root_cause = why a run failed; github_actions_retry_decision = retry once versus fix; mcp_tools_change = compatibility of complete tools/list snapshots.",
+            "type": "string",
+            "enum": [
+              "one_bounty",
+              "bounty_portfolio",
+              "repository_agent_instructions",
+              "github_actions_root_cause",
+              "github_actions_retry_decision",
+              "mcp_tools_change"
+            ]
+          },
+          "candidate_count": {
+            "description": "Required only for bounty_portfolio: exact number of distinct issue URLs.",
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 10
+          },
+          "needs_ranked_response": {
+            "description": "For bounty_portfolio only. True when one ranked, partial-failure-aware response is worth the premium; otherwise 2-7 route to cheaper repeated single checks.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_github_bounty",
+      "description": "Is this public GitHub issue bounty still claimable, or is someone already working on it? Checks current status, reward evidence, competing work, and maintainer signals; returns AVOID, CAUTION, or VIABLE. For 2-7 issues, repeated single checks cost less unless one ranked response is worth the premium; use rank_github_bounties for 8-10. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/sample. Exact authorization cap: 0.05 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "issue_url": {
+            "type": "string",
+            "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/issues\\/[1-9]\\d*\\/?$",
+            "description": "Canonical public GitHub issue URL, for example https://github.com/owner/repository/issues/123. No query string, fragment, pull request, or non-GitHub host."
+          }
+        },
+        "required": [
+          "issue_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rank_github_bounties",
+      "description": "Which public GitHub bounty should I work on next? Compares 2-10 issue URLs, chooses the strongest non-AVOID candidate or recommends none, and returns cited evidence plus partial failures. Its $0.40 price equals eight $0.05 single checks and is cheaper per candidate at 9-10; repeated check_github_bounty calls cost less for 2-7 when ranked orchestration is unnecessary. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/portfolio/sample. Exact authorization cap: 0.40 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "issue_urls": {
+            "minItems": 2,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/issues\\/[1-9]\\d*\\/?$",
+              "description": "Canonical public GitHub issue URL, for example https://github.com/owner/repository/issues/123. No query string, fragment, pull request, or non-GitHub host."
+            },
+            "description": "Two to ten distinct canonical public GitHub issue URLs. Duplicate issue URLs are rejected before payment."
+          }
+        },
+        "required": [
+          "issue_urls"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "audit_agent_harness",
+      "description": "Can a coding agent safely work in this public repository without missing project instructions? Audits AGENTS.md, CLAUDE.md, and related instructions at an immutable commit; does not diagnose CI. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/harness/sample. Exact authorization cap: 0.03 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "repo_url": {
+            "type": "string",
+            "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/?$",
+            "description": "Canonical public GitHub repository URL, for example https://github.com/owner/repository. No subpath, query string, fragment, or non-GitHub host."
+          }
+        },
+        "required": [
+          "repo_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "diagnose_github_actions_run",
+      "description": "Why did this public GitHub Actions run fail, and what should I fix? Uses bounded failed-job logs and redacted evidence. Use classify_github_actions_flake only for retry-once versus fix. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/run/sample. Exact authorization cap: 0.04 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "run_url": {
+            "type": "string",
+            "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/actions\\/runs\\/[1-9]\\d*\\/?$",
+            "description": "Canonical public GitHub Actions run URL, for example https://github.com/owner/repository/actions/runs/123456. No job URL, query string, fragment, or non-GitHub host."
+          }
+        },
+        "required": [
+          "run_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "classify_github_actions_flake",
+      "description": "Is this failed GitHub Actions run flaky—should I retry it once or fix the code? Uses the current attempt and bounded history. Use diagnose_github_actions_run for root cause. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/flake/sample. Exact authorization cap: 0.07 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "run_url": {
+            "type": "string",
+            "pattern": "^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/actions\\/runs\\/[1-9]\\d*\\/?$",
+            "description": "Canonical public GitHub Actions run URL, for example https://github.com/owner/repository/actions/runs/123456. No job URL, query string, fragment, or non-GitHub host."
+          },
+          "attempt": {
+            "description": "Optional exact workflow run attempt number, starting at 1. Omit to use the run URL's latest available completed attempt.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "run_url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_mcp_tool_drift",
+      "description": "Will upgrading to this complete MCP tools/list break my agent or weaken declared safety hints? Compares caller-supplied baseline and current snapshots; never fetches or invokes tools. Inspect a representative result before paying: https://bountyverdict-agent-production.mimirslab.workers.dev/api/mcp-drift/sample. Exact authorization cap: 0.02 USDC.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "const": "mcp-drift/1"
+          },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "server_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:/@+~-]{1,256}$",
+                "description": "Non-secret stable caller-chosen server identifier, for example acme/tasks@production."
+              }
+            },
+            "required": [
+              "server_id"
+            ],
+            "additionalProperties": false,
+            "description": "Caller-chosen identity for the MCP server being compared; ownership is not verified."
+          },
+          "annotation_source_trust": {
+            "type": "string",
+            "enum": [
+              "trusted",
+              "untrusted"
+            ],
+            "description": "Whether the caller recognizes the annotation source. Annotations never become runtime-behavior proof."
+          },
+          "baseline": {
+            "type": "object",
+            "properties": {
+              "protocol_version": {
+                "type": "string",
+                "const": "2025-11-25"
+              },
+              "complete": {
+                "type": "boolean",
+                "const": true,
+                "description": "Caller assertion that every tools/list page was aggregated and nextCursor was exhausted."
+              },
+              "tools": {
+                "maxItems": 128,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+                      "description": "Stable MCP tool name."
+                    },
+                    "title": {
+                      "description": "Optional human-readable tool title.",
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "description": {
+                      "description": "Optional model-facing tool description.",
+                      "type": "string",
+                      "maxLength": 16384
+                    },
+                    "icons": {
+                      "description": "Optional MCP tool icons; retained for comparison, never fetched.",
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "inputSchema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "The tool's complete input JSON Schema."
+                    },
+                    "outputSchema": {
+                      "description": "The tool's complete output JSON Schema, when declared.",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "annotations": {
+                      "description": "Model-facing MCP safety hints. They are caller-asserted metadata, not behavioral proof.",
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "maxLength": 512
+                        },
+                        "readOnlyHint": {
+                          "type": "boolean"
+                        },
+                        "destructiveHint": {
+                          "type": "boolean"
+                        },
+                        "idempotentHint": {
+                          "type": "boolean"
+                        },
+                        "openWorldHint": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "execution": {
+                      "type": "object",
+                      "properties": {
+                        "taskSupport": {
+                          "type": "string",
+                          "enum": [
+                            "forbidden",
+                            "optional",
+                            "required"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "_meta": {
+                      "description": "Optional MCP extension metadata; bounded again by the semantic validator.",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "inputSchema"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One complete MCP tools/list tool definition."
+                },
+                "description": "The complete tools/list catalog, with at most 128 tools."
+              }
+            },
+            "required": [
+              "protocol_version",
+              "complete",
+              "tools"
+            ],
+            "additionalProperties": false,
+            "description": "Complete previously accepted tools/list snapshot."
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "protocol_version": {
+                "type": "string",
+                "const": "2025-11-25"
+              },
+              "complete": {
+                "type": "boolean",
+                "const": true,
+                "description": "Caller assertion that every tools/list page was aggregated and nextCursor was exhausted."
+              },
+              "tools": {
+                "maxItems": 128,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+                      "description": "Stable MCP tool name."
+                    },
+                    "title": {
+                      "description": "Optional human-readable tool title.",
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "description": {
+                      "description": "Optional model-facing tool description.",
+                      "type": "string",
+                      "maxLength": 16384
+                    },
+                    "icons": {
+                      "description": "Optional MCP tool icons; retained for comparison, never fetched.",
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "inputSchema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "The tool's complete input JSON Schema."
+                    },
+                    "outputSchema": {
+                      "description": "The tool's complete output JSON Schema, when declared.",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "annotations": {
+                      "description": "Model-facing MCP safety hints. They are caller-asserted metadata, not behavioral proof.",
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "maxLength": 512
+                        },
+                        "readOnlyHint": {
+                          "type": "boolean"
+                        },
+                        "destructiveHint": {
+                          "type": "boolean"
+                        },
+                        "idempotentHint": {
+                          "type": "boolean"
+                        },
+                        "openWorldHint": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "execution": {
+                      "type": "object",
+                      "properties": {
+                        "taskSupport": {
+                          "type": "string",
+                          "enum": [
+                            "forbidden",
+                            "optional",
+                            "required"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "_meta": {
+                      "description": "Optional MCP extension metadata; bounded again by the semantic validator.",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "inputSchema"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One complete MCP tools/list tool definition."
+                },
+                "description": "The complete tools/list catalog, with at most 128 tools."
+              }
+            },
+            "required": [
+              "protocol_version",
+              "complete",
+              "tools"
+            ],
+            "additionalProperties": false,
+            "description": "Complete candidate tools/list snapshot."
+          }
+        },
+        "required": [
+          "contract_version",
+          "subject",
+          "annotation_source_trust",
+          "baseline",
+          "current"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
